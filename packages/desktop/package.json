@@ -1,0 +1,20 @@
+{
+  "name": "@peekaround/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PeekAround desktop app (Electron)",
+  "main": "stage/main.js",
+  "scripts": {
+    "build": "node scripts/stage.mjs",
+    "start": "node scripts/stage.mjs --no-install && electron stage",
+    "dist": "node scripts/stage.mjs && node scripts/dist.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@peekaround/server": "*",
+    "@peekaround/shared": "*",
+    "electron": "45.2.3",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2"
+  }
+}

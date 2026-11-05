@@ -1,0 +1,291 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ───────── Design tokens ───────── */
+:root {
+  --accent: #8b5cf6;
+  --accent-2: #ec4899;
+  --accent-3: #f97316;
+  --accent-contrast: #ffffff;
+  --radius: 14px;
+  --sidebar-w: 268px;
+  --topbar-h: 60px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  color-scheme: dark;
+}
+
+:root,
+[data-theme='dark'] {
+  --bg: #09090d;
+  --bg-elev: #111118;
+  --bg-elev-2: #17171f;
+  --surface: rgb(255 255 255 / 0.04);
+  --surface-2: rgb(255 255 255 / 0.075);
+  --surface-3: rgb(255 255 255 / 0.12);
+  --border: rgb(255 255 255 / 0.08);
+  --border-strong: rgb(255 255 255 / 0.16);
+  --text: #f5f5f7;
+  --text-dim: #a3a3b0;
+  --text-faint: #6c6c7a;
+  --overlay: rgb(5 5 8 / 0.72);
+  --glass: rgb(20 20 28 / 0.62);
+  --shadow: 0 10px 40px -10px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --tile-bg: #15151d;
+  --danger: #fb7185;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg: #f4f4f7;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #fbfbfd;
+  --surface: rgb(15 15 30 / 0.04);
+  --surface-2: rgb(15 15 30 / 0.07);
+  --surface-3: rgb(15 15 30 / 0.11);
+  --border: rgb(15 15 30 / 0.09);
+  --border-strong: rgb(15 15 30 / 0.18);
+  --text: #121218;
+  --text-dim: #555564;
+  --text-faint: #8a8a98;
+  --overlay: rgb(240 240 245 / 0.8);
+  --glass: rgb(255 255 255 / 0.7);
+  --shadow: 0 10px 40px -12px rgb(20 20 40 / 0.25), 0 2px 8px -2px rgb(20 20 40 / 0.08);
+  --tile-bg: #e7e7ee;
+  --danger: #e11d48;
+  --ok: #059669;
+  --warn: #d97706;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-elev: var(--bg-elev);
+  --color-elev-2: var(--bg-elev-2);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--text);
+  --color-dim: var(--text-dim);
+  --color-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-glass: var(--glass);
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --radius-xl: calc(var(--radius) + 2px);
+  --shadow-soft: var(--shadow);
+}
+
+/* ───────── Base ───────── */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+button,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-3) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+@layer components {
+/* ───────── Utilities ───────── */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+
+.text-gradient {
+  background: linear-gradient(100deg, var(--accent), var(--accent-2) 55%, var(--accent-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.bg-accent-gradient {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+}
+
+.ring-accent {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px color-mix(in oklab, var(--accent) 25%, transparent);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.shimmer {
+  background: linear-gradient(100deg, var(--tile-bg) 30%, color-mix(in oklab, var(--tile-bg) 70%, white 8%) 50%, var(--tile-bg) 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.aurora {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(40% 35% at 20% 25%, color-mix(in oklab, var(--accent) 38%, transparent), transparent 70%),
+    radial-gradient(35% 30% at 80% 20%, color-mix(in oklab, var(--accent-2) 30%, transparent), transparent 70%),
+    radial-gradient(40% 40% at 60% 85%, color-mix(in oklab, var(--accent-3) 22%, transparent), transparent 70%);
+  filter: blur(40px);
+  animation: aurora 18s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes aurora {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate3d(3%, -2%, 0) rotate(8deg) scale(1.05);
+  }
+  100% {
+    transform: translate3d(-3%, 3%, 0) rotate(-6deg) scale(1);
+  }
+}
+
+input[type='range'].peek-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  width: 100%;
+  height: 22px;
+  cursor: pointer;
+}
+input[type='range'].peek-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--accent) var(--fill, 50%), var(--surface-3) var(--fill, 50%));
+}
+input[type='range'].peek-range::-moz-range-track {
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--accent) var(--fill, 50%), var(--surface-3) var(--fill, 50%));
+}
+input[type='range'].peek-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 99px;
+  background: #fff;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.35);
+  transition: transform 0.15s var(--ease-spring);
+}
+input[type='range'].peek-range:active::-webkit-slider-thumb {
+  transform: scale(1.25);
+}
+input[type='range'].peek-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 99px;
+  background: #fff;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.35);
+}
+
+}
+
+[data-motion='off'] *,
+[data-motion='off'] *::before,
+[data-motion='off'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* drag & drop target highlight */
+.drop-hover {
+  background: color-mix(in oklab, var(--accent) 20%, transparent) !important;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: 12px;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+/* Electron frameless window */
+.app-drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.app-no-drag,
+.app-drag button,
+.app-drag a,
+.app-drag input,
+.app-drag form {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+@keyframes tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.tile-in {
+  animation: tile-in 0.55s var(--ease-out) both;
+}
+[data-motion='reduced'] .tile-in {
+  animation-duration: 0.2s;
+}

@@ -1,0 +1,32 @@
+# PeekAround — share your folders as a gallery on your network.
+#   docker compose -f docker/docker-compose.yml up -d     → http://<server-ip>:8080
+services:
+  peekaround:
+    image: peekaround:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: peekaround
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Europe/Istanbul
+      # Owner of files PeekAround writes (uploads, edits). `id -u` / `id -g` on the host.
+      PUID: "1000"
+      PGID: "1000"
+      # Every sub folder of /media becomes its own library on first start.
+      PEEK_ROOTS: /media
+      PEEK_SPLIT_ROOTS: "true"
+      # Set to "true" for network shares (NFS/SMB) where file events don't arrive.
+      PEEK_WATCH_POLL: "false"
+      # Set to "true" to disable uploads, edits and deletes.
+      PEEK_READONLY: "false"
+    volumes:
+      # Mount as many folders as you like under /media:
+      - /path/to/Photos:/media/Photos
+      - /path/to/Videos:/media/Videos
+      # Database, thumbnails, fonts, temporary zip sessions:
+      - ./peekaround-data:/data
+    # For auto-discovery from the Android app (mDNS), use host networking instead of "ports":
+    # network_mode: host

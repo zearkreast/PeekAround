@@ -1,0 +1,214 @@
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import type { HostDirEntry, ServerInfo, Settings } from '@peekaround/shared';
+import { APP_NAME, API_VERSION } from '@peekaround/shared';
+import { lanUrls } from '../config.js';
+import { getSettings, saveSettings, type Ctx } from '../context.js';
+import { HttpError, isInside, resolveInRoot, sanitizeName, uniquePath } from '../paths.js';
+import { moveFile, requireLocal, requireWritable, type Plugin } from './util.js';
+
+export function serverInfo(ctx: Ctx): ServerInfo {
+  const desktop = ctx.cfg.mode === 'desktop';
+  const ro = ctx.cfg.readonly;
+  return {
+    name: APP_NAME,
+    version: ctx.cfg.version,
+    apiVersion: API_VERSION,
+    mode: ctx.cfg.mode,
+    hostname: os.hostname(),
+    scanning: ctx.scanner.busy,
+    caps: {
+      upload: !ro,
+      fileOps: !ro,
+      nativeFolders: desktop,
+      browseHost: !desktop && !ro,
+      videoJobs: ctx.ffmpeg.available && !ro,
+      slideshowExport: ctx.ffmpeg.available && !ro,
+      zipDownload: true,
+      trash: ro ? 'none' : ctx.cfg.hooks.trash ? 'os' : 'folder',
+      readonly: ro,
+      lanShare: desktop,
+    },
+    lan: {
+      enabled: ctx.cfg.mode === 'server' || ctx.lan.enabled,
+      urls: ctx.cfg.mode === 'server' || ctx.lan.enabled ? lanUrls(ctx.cfg.mode === 'server' ? ctx.cfg.port : ctx.lan.port) : [],
+    },
+  };
+}
+
+export const coreRoutes: Plugin = (app, ctx) => {
+  app.get('/api/info', async () => serverInfo(ctx));
+
+  app.get('/api/settings', async () => getSettings(ctx));
+  app.patch<{ Body: Partial<Settings> }>('/api/settings', async (req) => {
+    const b = req.body ?? {};
+    const patch: Partial<Settings> = {};
+    if (b.zipAction && ['ask', 'extract', 'temp'].includes(b.zipAction)) patch.zipAction = b.zipAction;
+    if (typeof b.editSuffix === 'string') patch.editSuffix = b.editSuffix.replace(/[\\/:*?"<>|]/g, '').slice(0, 32) || '_edit';
+    if (typeof b.showHidden === 'boolean') patch.showHidden = b.showHidden;
+    if (typeof b.tempSessionHours === 'number') patch.tempSessionHours = Math.max(1, Math.min(24 * 30, b.tempSessionHours));
+    const s = saveSettings(ctx, patch);
+    if (patch.showHidden !== undefined) void ctx.scanner.scanAll();
+    return s;
+  });
+
+  // ── libraries ──
+  app.get('/api/libraries', async () => ({ libraries: ctx.lib.listLibraries(), temp: ctx.lib.listTemp() }));
+
+  app.post<{ Body: { name: string; color?: string; icon?: string; folders?: string[] } }>('/api/libraries', async (req) => {
+    requireWritable(ctx);
+    const b = req.body;
+    if (b.folders?.length) requireLocal(req);
+    for (const f of b.folders ?? []) checkHostPath(ctx, f);
+    const lib = ctx.lib.createLibrary(b);
+    ctx.watcher.sync();
+    for (const f of lib.folders) void ctx.scanner.scanFolder(Number(f.id));
+    return lib;
+  });
+
+  app.patch<{ Params: { id: string }; Body: { name?: string; color?: string; icon?: string; sort?: number } }>(
+    '/api/libraries/:id',
+    async (req) => {
+      requireWritable(ctx);
+      return ctx.lib.updateLibrary(req.params.id, req.body ?? {});
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/libraries/:id', async (req) => {
+    requireWritable(ctx);
+    ctx.lib.deleteLibrary(req.params.id);
+    ctx.watcher.sync();
+    return { ok: true };
+  });
+
+  app.post<{ Params: { id: string }; Body: { path: string; name?: string } }>('/api/libraries/:id/folders', async (req) => {
+    requireWritable(ctx);
+    requireLocal(req);
+    checkHostPath(ctx, req.body.path);
+    const row = ctx.lib.addFolder(req.params.id, req.body.path, req.body.name);
+    ctx.watcher.sync();
+    void ctx.scanner.scanFolder(row.id);
+    return ctx.lib.folderRef(row);
+  });
+
+  app.patch<{ Params: { id: string }; Body: { name: string } }>('/api/folders/:id', async (req) => {
+    requireWritable(ctx);
+    ctx.lib.renameFolder(req.params.id, req.body.name);
+    return { ok: true };
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/folders/:id', async (req) => {
+    requireWritable(ctx);
+    const row = ctx.lib.folderRow(req.params.id);
+    if (row.temp) await ctx.lib.deleteTemp(row, ctx.cfg.tempDir);
+    else ctx.lib.removeFolder(req.params.id);
+    ctx.events.emit({ type: 'folders' });
+    ctx.watcher.sync();
+    return { ok: true };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/folders/:id/rescan', async (req) => {
+    void ctx.scanner.scanFolder(Number(req.params.id));
+    return { ok: true };
+  });
+
+  // ── temp sessions ──
+  app.post<{ Params: { id: string }; Body: { folderId: string; dir: string } }>('/api/temp/:id/keep', async (req) => {
+    requireWritable(ctx);
+    const temp = ctx.lib.folderRow(req.params.id);
+    if (!temp.temp) throw new HttpError(400, 'Not a temporary session');
+    const target = ctx.lib.folderRow(req.body.folderId);
+    const destParent = resolveInRoot(target.path, req.body.dir ?? '');
+    const dest = await uniquePath(destParent, temp.name || 'Archive');
+    await moveFile(temp.path, dest);
+    await ctx.lib.deleteTemp(temp, ctx.cfg.tempDir);
+    const relDir = path.relative(target.path, dest).split(path.sep).join('/');
+    await ctx.scanner.scanFolder(target.id);
+    return { folderId: String(target.id), dir: relDir };
+  });
+
+  app.post<{ Params: { id: string }; Body: { hours: number } }>('/api/temp/:id/extend', async (req) => {
+    const temp = ctx.lib.folderRow(req.params.id);
+    if (!temp.temp) throw new HttpError(400, 'Not a temporary session');
+    ctx.db.run('UPDATE folders SET expires_at = ? WHERE id = ?', Date.now() + Math.max(1, req.body.hours) * 3600_000, temp.id);
+    ctx.events.emit({ type: 'folders' });
+    return { ok: true };
+  });
+
+  // ── host directory browser (for adding folders in server mode) ──
+  app.get<{ Querystring: { path?: string } }>('/api/host/dirs', async (req) => {
+    requireLocal(req);
+    const roots = hostRoots(ctx);
+    const p = req.query.path ? path.resolve(req.query.path) : null;
+    if (!p) {
+      return { path: null, parent: null, dirs: roots.map<HostDirEntry>((r) => ({ name: r, path: r })) };
+    }
+    checkHostPath(ctx, p);
+    const entries = await fsp.readdir(p, { withFileTypes: true }).catch(() => {
+      throw new HttpError(400, 'Cannot read directory');
+    });
+    const dirs = entries
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+      .map<HostDirEntry>((e) => ({ name: e.name, path: path.join(p, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const parent = path.dirname(p);
+    const parentAllowed = parent !== p && (!ctx.cfg.hostBrowseRoots.length || ctx.cfg.hostBrowseRoots.some((r) => isInside(r, parent)));
+    return { path: p, parent: parentAllowed ? parent : null, dirs };
+  });
+
+  app.post<{ Body: { path: string; name: string } }>('/api/host/mkdir', async (req) => {
+    requireWritable(ctx);
+    requireLocal(req);
+    checkHostPath(ctx, req.body.path);
+    const p = path.join(path.resolve(req.body.path), sanitizeName(req.body.name));
+    await fsp.mkdir(p, { recursive: true });
+    return { path: p };
+  });
+
+  // ── realtime ──
+  app.get('/api/events', { websocket: true }, (socket) => {
+    socket.send(JSON.stringify({ type: 'hello', info: serverInfo(ctx) }));
+    const off = ctx.events.on((e) => {
+      if (socket.readyState === 1) socket.send(JSON.stringify(e));
+    });
+    const ping = setInterval(() => {
+      if (socket.readyState === 1) socket.ping();
+    }, 25000);
+    socket.on('close', () => {
+      off();
+      clearInterval(ping);
+    });
+  });
+
+  // ── cache ──
+  app.get('/api/cache', async () => ({ bytes: await ctx.thumbs.sizeBytes() }));
+  app.delete('/api/cache', async () => {
+    await ctx.thumbs.clear();
+    ctx.db.run('UPDATE media SET thumb_state = 0');
+    ctx.scanner.kick();
+    return { ok: true };
+  });
+};
+
+function hostRoots(ctx: Ctx): string[] {
+  if (ctx.cfg.hostBrowseRoots.length) return ctx.cfg.hostBrowseRoots.filter((r) => fs.existsSync(r));
+  if (process.platform === 'win32') {
+    const out: string[] = [];
+    for (let c = 67; c <= 90; c++) {
+      const d = `${String.fromCharCode(c)}:\\`;
+      if (fs.existsSync(d)) out.push(d);
+    }
+    return [os.homedir(), ...out];
+  }
+  return [os.homedir(), '/'];
+}
+
+function checkHostPath(ctx: Ctx, p: string) {
+  if (!p) throw new HttpError(400, 'Path required');
+  const abs = path.resolve(p);
+  if (ctx.cfg.hostBrowseRoots.length && !ctx.cfg.hostBrowseRoots.some((r) => isInside(r, abs))) {
+    throw new HttpError(403, 'Path is outside of the allowed folders');
+  }
+}

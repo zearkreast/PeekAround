@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+packages/desktop/stage
+packages/desktop/release
+packages/android/android/app/build
+packages/android/android/.gradle
+fixtures
+data
+.git
+*.log

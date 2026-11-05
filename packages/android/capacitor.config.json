@@ -1,0 +1,13 @@
+{
+  "appId": "app.peekaround",
+  "appName": "PeekAround",
+  "webDir": "../web/dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#09090d"
+  }
+}
