@@ -1,13 +1,15 @@
 import fs from 'node:fs';
+import { FS_LIMIT, HEAVY_LIMIT } from '../security.js';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { HostDirEntry, ServerInfo, Settings } from '@peekaround/shared';
-import { APP_NAME, API_VERSION } from '@peekaround/shared';
+import { APP_NAME, API_VERSION, isValidTimeZone } from '@peekaround/shared';
 import { lanUrls } from '../config.js';
 import { getSettings, saveSettings, type Ctx } from '../context.js';
-import { HttpError, isInside, resolveInRoot, sanitizeName, uniquePath } from '../paths.js';
-import { moveFile, requireLocal, requireWritable, type Plugin } from './util.js';
+import { HttpError, isInside, resolveInRoot, sanitizeName, uniquePath, resolveHostPath } from '../paths.js';
+import { moveFile, requireLocal, requireLocalFolder, requireWritable, type Plugin } from './util.js';
+import { canSeePairing, viewerOf } from '../devices/access.js';
 
 export function serverInfo(ctx: Ctx): ServerInfo {
   const desktop = ctx.cfg.mode === 'desktop';
@@ -41,23 +43,32 @@ export function serverInfo(ctx: Ctx): ServerInfo {
 export const coreRoutes: Plugin = (app, ctx) => {
   app.get('/api/info', async () => serverInfo(ctx));
 
-  app.get('/api/settings', async () => getSettings(ctx));
-  app.patch<{ Body: Partial<Settings> }>('/api/settings', async (req) => {
+  app.get('/api/settings', FS_LIMIT, async () => getSettings(ctx));
+  app.patch<{ Body: Partial<Settings> }>('/api/settings', FS_LIMIT, async (req) => {
     const b = req.body ?? {};
     const patch: Partial<Settings> = {};
     if (b.zipAction && ['ask', 'extract', 'temp'].includes(b.zipAction)) patch.zipAction = b.zipAction;
     if (typeof b.editSuffix === 'string') patch.editSuffix = b.editSuffix.replace(/[\\/:*?"<>|]/g, '').slice(0, 32) || '_edit';
     if (typeof b.showHidden === 'boolean') patch.showHidden = b.showHidden;
     if (typeof b.tempSessionHours === 'number') patch.tempSessionHours = Math.max(1, Math.min(24 * 30, b.tempSessionHours));
+    if (b.homeTimeZone !== undefined) {
+      if (!isValidTimeZone(b.homeTimeZone)) throw new HttpError(400, 'Unknown time zone');
+      patch.homeTimeZone = b.homeTimeZone;
+    }
+    if (b.mapTiles && ['carto', 'osm', 'off'].includes(b.mapTiles)) patch.mapTiles = b.mapTiles;
     const s = saveSettings(ctx, patch);
     if (patch.showHidden !== undefined) void ctx.scanner.scanAll();
     return s;
   });
 
   // ── libraries ──
-  app.get('/api/libraries', async () => ({ libraries: ctx.lib.listLibraries(), temp: ctx.lib.listTemp() }));
+  // devices: linked phones with their folders (only for viewers allowed to see them, never the asking phone itself)
+  app.get('/api/libraries', FS_LIMIT, async (req) => {
+    const v = viewerOf(ctx, req);
+    return { libraries: ctx.lib.listLibraries(), temp: ctx.lib.listTemp(), devices: v.devices ? ctx.devices.list(v.self) : [] };
+  });
 
-  app.post<{ Body: { name: string; color?: string; icon?: string; folders?: string[] } }>('/api/libraries', async (req) => {
+  app.post<{ Body: { name: string; color?: string; icon?: string; folders?: string[] } }>('/api/libraries', FS_LIMIT, async (req) => {
     requireWritable(ctx);
     const b = req.body;
     if (b.folders?.length) requireLocal(req);
@@ -69,21 +80,20 @@ export const coreRoutes: Plugin = (app, ctx) => {
   });
 
   app.patch<{ Params: { id: string }; Body: { name?: string; color?: string; icon?: string; sort?: number } }>(
-    '/api/libraries/:id',
-    async (req) => {
+    '/api/libraries/:id', FS_LIMIT, async (req) => {
       requireWritable(ctx);
       return ctx.lib.updateLibrary(req.params.id, req.body ?? {});
     },
   );
 
-  app.delete<{ Params: { id: string } }>('/api/libraries/:id', async (req) => {
+  app.delete<{ Params: { id: string } }>('/api/libraries/:id', FS_LIMIT, async (req) => {
     requireWritable(ctx);
     ctx.lib.deleteLibrary(req.params.id);
     ctx.watcher.sync();
     return { ok: true };
   });
 
-  app.post<{ Params: { id: string }; Body: { path: string; name?: string } }>('/api/libraries/:id/folders', async (req) => {
+  app.post<{ Params: { id: string }; Body: { path: string; name?: string } }>('/api/libraries/:id/folders', FS_LIMIT, async (req) => {
     requireWritable(ctx);
     requireLocal(req);
     checkHostPath(ctx, req.body.path);
@@ -93,15 +103,17 @@ export const coreRoutes: Plugin = (app, ctx) => {
     return ctx.lib.folderRef(row);
   });
 
-  app.patch<{ Params: { id: string }; Body: { name: string } }>('/api/folders/:id', async (req) => {
+  app.patch<{ Params: { id: string }; Body: { name: string } }>('/api/folders/:id', FS_LIMIT, async (req) => {
     requireWritable(ctx);
+    requireLocalFolder(ctx.lib.folderRow(req.params.id), 'Device folders are named on the phone');
     ctx.lib.renameFolder(req.params.id, req.body.name);
     return { ok: true };
   });
 
-  app.delete<{ Params: { id: string } }>('/api/folders/:id', async (req) => {
+  app.delete<{ Params: { id: string } }>('/api/folders/:id', FS_LIMIT, async (req) => {
     requireWritable(ctx);
     const row = ctx.lib.folderRow(req.params.id);
+    requireLocalFolder(row, 'Stop sharing the folder on the phone, or forget the device');
     if (row.temp) await ctx.lib.deleteTemp(row, ctx.cfg.tempDir);
     else ctx.lib.removeFolder(req.params.id);
     ctx.events.emit({ type: 'folders' });
@@ -109,17 +121,18 @@ export const coreRoutes: Plugin = (app, ctx) => {
     return { ok: true };
   });
 
-  app.post<{ Params: { id: string } }>('/api/folders/:id/rescan', async (req) => {
+  app.post<{ Params: { id: string } }>('/api/folders/:id/rescan', HEAVY_LIMIT, async (req) => {
     void ctx.scanner.scanFolder(Number(req.params.id));
     return { ok: true };
   });
 
   // ── temp sessions ──
-  app.post<{ Params: { id: string }; Body: { folderId: string; dir: string } }>('/api/temp/:id/keep', async (req) => {
+  app.post<{ Params: { id: string }; Body: { folderId: string; dir: string } }>('/api/temp/:id/keep', HEAVY_LIMIT, async (req) => {
     requireWritable(ctx);
     const temp = ctx.lib.folderRow(req.params.id);
     if (!temp.temp) throw new HttpError(400, 'Not a temporary session');
     const target = ctx.lib.folderRow(req.body.folderId);
+    requireLocalFolder(target);
     const destParent = resolveInRoot(target.path, req.body.dir ?? '');
     const dest = await uniquePath(destParent, temp.name || 'Archive');
     await moveFile(temp.path, dest);
@@ -129,23 +142,23 @@ export const coreRoutes: Plugin = (app, ctx) => {
     return { folderId: String(target.id), dir: relDir };
   });
 
-  app.post<{ Params: { id: string }; Body: { hours: number } }>('/api/temp/:id/extend', async (req) => {
+  app.post<{ Params: { id: string }; Body: { hours: number } }>('/api/temp/:id/extend', FS_LIMIT, async (req) => {
     const temp = ctx.lib.folderRow(req.params.id);
     if (!temp.temp) throw new HttpError(400, 'Not a temporary session');
-    ctx.db.run('UPDATE folders SET expires_at = ? WHERE id = ?', Date.now() + Math.max(1, req.body.hours) * 3600_000, temp.id);
+    const hours = Math.max(1, Math.min(24 * 30, Number(req.body?.hours) || 0));
+    ctx.db.run('UPDATE folders SET expires_at = ? WHERE id = ?', Date.now() + hours * 3600_000, temp.id);
     ctx.events.emit({ type: 'folders' });
     return { ok: true };
   });
 
   // ── host directory browser (for adding folders in server mode) ──
-  app.get<{ Querystring: { path?: string } }>('/api/host/dirs', async (req) => {
+  app.get<{ Querystring: { path?: string } }>('/api/host/dirs', FS_LIMIT, async (req) => {
     requireLocal(req);
     const roots = hostRoots(ctx);
-    const p = req.query.path ? path.resolve(req.query.path) : null;
-    if (!p) {
+    if (!req.query.path) {
       return { path: null, parent: null, dirs: roots.map<HostDirEntry>((r) => ({ name: r, path: r })) };
     }
-    checkHostPath(ctx, p);
+    const p = checkHostPath(ctx, req.query.path);
     const entries = await fsp.readdir(p, { withFileTypes: true }).catch(() => {
       throw new HttpError(400, 'Cannot read directory');
     });
@@ -158,19 +171,23 @@ export const coreRoutes: Plugin = (app, ctx) => {
     return { path: p, parent: parentAllowed ? parent : null, dirs };
   });
 
-  app.post<{ Body: { path: string; name: string } }>('/api/host/mkdir', async (req) => {
+  app.post<{ Body: { path: string; name: string } }>('/api/host/mkdir', FS_LIMIT, async (req) => {
     requireWritable(ctx);
     requireLocal(req);
-    checkHostPath(ctx, req.body.path);
-    const p = path.join(path.resolve(req.body.path), sanitizeName(req.body.name));
+    const base = checkHostPath(ctx, req.body.path);
+    const p = path.join(base, sanitizeName(req.body.name));
+    if (!isInside(base, p)) throw new HttpError(400, 'Invalid name');
     await fsp.mkdir(p, { recursive: true });
     return { path: p };
   });
 
   // ── realtime ──
-  app.get('/api/events', { websocket: true }, (socket) => {
+  app.get('/api/events', { websocket: true }, (socket, req) => {
     socket.send(JSON.stringify({ type: 'hello', info: serverInfo(ctx) }));
+    // pairing requests only reach clients that may approve them (desktop: the local window)
+    const pairing = canSeePairing(ctx, req);
     const off = ctx.events.on((e) => {
+      if (e.type === 'pair' && !pairing) return;
       if (socket.readyState === 1) socket.send(JSON.stringify(e));
     });
     const ping = setInterval(() => {
@@ -183,8 +200,8 @@ export const coreRoutes: Plugin = (app, ctx) => {
   });
 
   // ── cache ──
-  app.get('/api/cache', async () => ({ bytes: await ctx.thumbs.sizeBytes() }));
-  app.delete('/api/cache', async () => {
+  app.get('/api/cache', FS_LIMIT, async () => ({ bytes: await ctx.thumbs.sizeBytes() }));
+  app.delete('/api/cache', FS_LIMIT, async () => {
     await ctx.thumbs.clear();
     ctx.db.run('UPDATE media SET thumb_state = 0');
     ctx.scanner.kick();
@@ -205,10 +222,7 @@ function hostRoots(ctx: Ctx): string[] {
   return [os.homedir(), '/'];
 }
 
-function checkHostPath(ctx: Ctx, p: string) {
+function checkHostPath(ctx: Ctx, p: string): string {
   if (!p) throw new HttpError(400, 'Path required');
-  const abs = path.resolve(p);
-  if (ctx.cfg.hostBrowseRoots.length && !ctx.cfg.hostBrowseRoots.some((r) => isInside(r, abs))) {
-    throw new HttpError(403, 'Path is outside of the allowed folders');
-  }
+  return resolveHostPath(p, ctx.cfg.hostBrowseRoots);
 }

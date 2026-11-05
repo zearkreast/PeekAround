@@ -1,14 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useNavigate, useParams, useSearchParams, useLocation as useRouterLocation } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Clock3, Download, FolderOpen, Heart, ImageOff, Play, Presentation, Search, UploadCloud } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { MemoriesStrip } from '@/features/explore/MemoriesStrip';
+import { CalendarDays, Clock3, FolderOpen, Heart, ImageOff, Play, Presentation, Search, UploadCloud } from 'lucide-react';
 import type { BrowseQuery, MediaItem } from '@peekaround/shared';
 import { useBackend, useInfo } from '@/backend';
 import { useLang, useT } from '@/i18n';
 import { cn } from '@/lib/cn';
-import { durationUntil, formatMonth } from '@/lib/format';
-import { useBrowse, useLibraries } from '@/lib/queries';
+import { durationUntil } from '@/lib/format';
+import { useLibraries } from '@/lib/queries';
 import { folderHref, withView } from '@/lib/routes';
 import { useChrome } from '@/store/chrome';
 import { useLocation } from '@/store/location';
@@ -16,7 +17,10 @@ import { usePrefs } from '@/store/prefs';
 import { toast } from '@/store/toasts';
 import { useViewer } from '@/store/viewer';
 import { Button, EmptyState, Spinner } from '@/components/ui';
-import { download, useMediaActions } from './actions';
+import { useIsMobile } from '@/lib/useMedia';
+import { useMediaActions } from './actions';
+import { FolderHeaderActions } from '@/features/devices/FolderActions';
+import { useGridSource } from './grid/source';
 import { ArchiveCard, FolderCard, RootCard } from './FolderCards';
 import { FolderPicker } from './FolderPicker';
 import { MediaGrid, type MediaGridHandle } from './MediaGrid';
@@ -53,7 +57,7 @@ function TempBanner({ folderId }: { folderId: string }) {
       className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-[color-mix(in_oklab,var(--warn)_35%,transparent)] bg-[color-mix(in_oklab,var(--warn)_9%,transparent)] px-4 py-3"
     >
       <Clock3 className="size-5 shrink-0 text-warn" />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[min(calc(100%-2.5rem),16rem)] flex-1">
         <div className="text-sm font-medium">{t('temp.banner', { name: temp.sourceName ?? temp.name })}</div>
         {temp.expiresAt && <div className="text-xs text-dim">{t('temp.expires', { time: durationUntil(temp.expiresAt, lang) })}</div>}
       </div>
@@ -87,33 +91,6 @@ function TempBanner({ folderId }: { folderId: string }) {
   );
 }
 
-/** Year/month scrubber for the timeline. */
-function DateRail({ onJump }: { onJump: (key: string) => void }) {
-  const backend = useBackend();
-  const lang = useLang();
-  const q = useQuery({ queryKey: ['timeline', backend.id], queryFn: () => backend.timeline() });
-  const buckets = q.data?.buckets ?? [];
-  if (buckets.length < 2) return null;
-  let lastYear = '';
-  return (
-    <div className="no-scrollbar fixed top-[calc(var(--topbar-h)+16px)] right-3 bottom-6 z-10 hidden w-20 flex-col items-end overflow-y-auto py-2 xl:flex">
-      {buckets.map((b) => {
-        const y = b.key.slice(0, 4);
-        const showYear = y !== lastYear;
-        lastYear = y;
-        return (
-          <div key={b.key} className="flex flex-col items-end">
-            {showYear && <div className="mt-2 mb-0.5 font-display text-xs font-semibold text-dim">{y}</div>}
-            <button type="button" onClick={() => onJump(b.key)} className="rounded-md px-1.5 py-0.5 text-[11px] text-faint capitalize transition-colors hover:bg-surface-2 hover:text-fg" title={`${formatMonth(b.key, lang)} · ${b.count}`}>
-              {formatMonth(b.key, lang).split(' ')[0].slice(0, 3)}
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function GalleryPage({ mode }: { mode: GalleryMode }) {
   const t = useT();
   const backend = useBackend();
@@ -122,24 +99,28 @@ export function GalleryPage({ mode }: { mode: GalleryMode }) {
   const [sp] = useSearchParams();
   const routerLoc = useRouterLocation();
   const nav = useNavigate();
-  const prefs = usePrefs();
+  const sort = usePrefs((s) => s.sort);
+  const order = usePrefs((s) => s.order);
+  const kind = usePrefs((s) => s.kind);
+  const recursive = usePrefs((s) => s.recursive);
   const scrollRef = useScrollRef();
   const setChrome = useChrome((s) => s.set);
   const setView = useLocation((s) => s.setView);
-  const actions = useMediaActions();
+  const actions = useMediaActions('selection');
   const gridHandle = useRef<MediaGridHandle | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const mobile = useIsMobile();
 
   const dir = mode === 'folder' ? (params['*'] ?? '').split('/').map(decodeURIComponent).join('/') : '';
   const q = sp.get('q') ?? '';
 
   const query: BrowseQuery = useMemo(() => {
-    const base = { sort: prefs.sort, order: prefs.order, kind: prefs.kind };
+    const base = { sort, order, kind };
     switch (mode) {
       case 'folder':
-        return { ...base, folderId: params.folderId, dir, recursive: prefs.recursive };
+        return { ...base, folderId: params.folderId, dir, recursive };
       case 'library':
-        return { ...base, libraryId: params.libraryId, recursive: prefs.recursive || showAll };
+        return { ...base, libraryId: params.libraryId, recursive: recursive || showAll };
       case 'timeline':
         return { ...base, sort: 'takenAt', order: 'desc', recursive: true };
       case 'favorites':
@@ -147,11 +128,14 @@ export function GalleryPage({ mode }: { mode: GalleryMode }) {
       case 'search':
         return { ...base, q, recursive: true };
     }
-  }, [mode, params.folderId, params.libraryId, dir, prefs.sort, prefs.order, prefs.kind, prefs.recursive, q, showAll]);
+  }, [mode, params.folderId, params.libraryId, dir, sort, order, kind, recursive, q, showAll]);
 
-  const browse = useBrowse(query, mode !== 'search' || !!q);
-  const { first, items, total } = browse;
-  const crumbs = first?.crumbs ?? [];
+  const source = useGridSource(mode !== 'search' || !!q ? query : null);
+  const meta = source?.meta ?? null;
+  const total = source?.total ?? 0;
+  const loading = !!source && (!source.ready || !meta) && !source.error;
+  const crumbs = useMemo(() => meta?.crumbs ?? [], [meta?.crumbs]);
+  const target = meta?.target ?? null;
   const title =
     mode === 'timeline' ? t('nav.timeline') : mode === 'favorites' ? t('nav.favorites') : mode === 'search' ? `“${q}”` : (crumbs[crumbs.length - 1]?.label ?? '');
 
@@ -160,10 +144,10 @@ export function GalleryPage({ mode }: { mode: GalleryMode }) {
   }, [crumbs, title, mode, setChrome]);
 
   useEffect(() => {
-    setView({ target: first?.target ?? null, targetLabel: crumbs[crumbs.length - 1]?.label ?? '', items });
-  }, [first?.target, crumbs, items, setView]);
+    setView({ target, targetLabel: crumbs[crumbs.length - 1]?.label ?? '', source });
+  }, [target, crumbs, source, setView]);
 
-  useEffect(() => () => setView({ target: null, targetLabel: '', items: [] }), [setView]);
+  useEffect(() => () => setView({ target: null, targetLabel: '', source: null }), [setView]);
 
   // keep the grid scrolled to the item the viewer is showing (for the closing animation)
   const activeId = useViewer((s) => s.activeId);
@@ -174,55 +158,59 @@ export function GalleryPage({ mode }: { mode: GalleryMode }) {
   const open = useCallback(
     (item: MediaItem) => {
       useViewer.getState().setActive(item.id);
-      requestAnimationFrame(() => nav({ search: withView(routerLoc.search, item.id) }));
+      requestAnimationFrame(() => nav({ search: withView(routerLoc.search, item.id) }, { state: { viewer: true } }));
     },
     [nav, routerLoc.search],
   );
 
-  const loadMore = useCallback(() => {
-    if (browse.hasNextPage && !browse.isFetchingNextPage) void browse.fetchNextPage();
-  }, [browse]);
+  const slideshowAll = async () => {
+    if (!source) return;
+    const list = await source.itemsInRange(0, Math.min(source.total, 5000) - 1);
+    void actions.run('slideshow', list.filter((x) => x.kind === 'image' || x.kind === 'video'));
+  };
 
-  const folders = first?.folders ?? [];
-  const roots = first?.roots ?? [];
-  const archives = first?.archives ?? [];
+  const folders = meta?.folders ?? [];
+  const roots = meta?.roots ?? [];
+  const archives = meta?.archives ?? [];
   const isTemp = mode === 'folder' && !!params.folderId;
-  const photos = items.filter((i) => i.kind === 'image').length;
-  const videos = items.filter((i) => i.kind === 'video').length;
-  const empty = !browse.isLoading && !items.length && !folders.length && !roots.length && !archives.length;
+  const photos = source?.kindCounts.image ?? 0;
+  const videos = source?.kindCounts.video ?? 0;
+  const empty = !!source && source.ready && !!meta && !total && !folders.length && !roots.length && !archives.length;
 
   return (
-    <div className="mx-auto w-full max-w-[1800px] px-2.5 pt-5 pb-28 sm:px-7 sm:pt-6">
+    <div className="mx-auto w-full max-w-[1800px] px-3 pt-4 pb-28 sm:px-7 sm:pt-6">
       {isTemp && <TempBanner folderId={params.folderId!} />}
 
       {/* Page header */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 30 }} className="mb-7 flex flex-wrap items-end gap-x-6 gap-y-3">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+        className="mb-4 flex flex-wrap items-end gap-x-6 gap-y-3 sm:mb-7"
+      >
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-3 truncate font-display text-2xl font-bold tracking-tight sm:text-[34px]">
-            {mode === 'timeline' && <CalendarDays className="size-7 text-accent" />}
-            {mode === 'favorites' && <Heart className="size-7 text-[var(--accent-2)]" />}
-            {mode === 'search' && <Search className="size-7 text-accent" />}
-            <span className="truncate">{title || ' '}</span>
+          <h1 className="flex items-center gap-2.5 truncate font-display text-[22px] font-bold tracking-tight sm:gap-3 sm:text-[34px]">
+            {mode === 'timeline' && <CalendarDays className="size-6 text-accent sm:size-7" />}
+            {mode === 'favorites' && <Heart className="size-6 text-[var(--accent-2)] sm:size-7" />}
+            {mode === 'search' && <Search className="size-6 text-accent sm:size-7" />}
+            <span className="truncate">{title || ' '}</span>
           </h1>
-          <p className="mt-1.5 text-sm text-dim tabular-nums">
-            {browse.isLoading ? t('common.loading') : `${t('common.items', { n: total })}${photos || videos ? ` · ${t('home.stats', { photos, videos })}` : ''}`}
+          <p className="mt-1 text-[13px] text-dim tabular-nums sm:mt-1.5 sm:text-sm">
+            {loading ? t('common.loading') : `${t('common.items', { n: total })}${photos || videos ? ` · ${t('home.stats', { photos, videos })}` : ''}`}
           </p>
         </div>
-        {items.length > 0 && (
+        {total > 0 && (
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" icon={<Play className="size-4" />} onClick={() => actions.slideshow(items, first?.target)}>
+            <Button variant="secondary" size="sm" icon={<Play className="size-4" />} onClick={() => void slideshowAll()}>
               {t('nav.slideshow')}
             </Button>
-            {mode === 'folder' && params.folderId && (
-              <Button variant="ghost" size="sm" icon={<Download className="size-4" />} onClick={() => download(backend.folderDownloadUrl(params.folderId!, dir, title))}>
-                <span className="hidden lg:inline">{t('gallery.downloadFolder')}</span>
-              </Button>
-            )}
+            {mode === 'folder' && params.folderId && <FolderHeaderActions folderId={params.folderId} dir={dir} name={title} />}
           </div>
         )}
       </motion.div>
+      {mode === 'timeline' && <MemoriesStrip className="mb-5" />}
 
-      {browse.isLoading && (
+      {loading && (
         <div className="grid h-60 place-items-center">
           <Spinner className="size-7" />
         </div>
@@ -251,12 +239,13 @@ export function GalleryPage({ mode }: { mode: GalleryMode }) {
             {folders.map((f, i) => (
               <FolderCard
                 key={f.dir}
-                folderId={params.folderId ?? first?.target?.folderId ?? ''}
+                folderId={params.folderId ?? target?.folderId ?? ''}
                 f={f}
                 index={i}
                 onSlideshow={async () => {
-                  const r = await backend.browse({ folderId: params.folderId ?? first?.target?.folderId, dir: f.dir, recursive: true, limit: 2000 });
-                  actions.slideshow(r.items.filter((x) => x.kind !== 'audio'), { folderId: params.folderId ?? first?.target?.folderId ?? '', dir: f.dir });
+                  const r = await backend.browse({ folderId: params.folderId ?? target?.folderId, dir: f.dir, recursive: true, limit: 2000 });
+                  useLocation.getState().setView({ target: { folderId: params.folderId ?? target?.folderId ?? '', dir: f.dir } });
+                  void actions.run('slideshow', r.items.filter((x) => x.kind !== 'audio'));
                 }}
               />
             ))}
@@ -275,36 +264,25 @@ export function GalleryPage({ mode }: { mode: GalleryMode }) {
         </section>
       )}
 
-      {items.length > 0 && (
-        <section className={cn(mode === 'timeline' && 'xl:pr-20')}>
-          {(folders.length > 0 || archives.length > 0) && <SectionHeading count={total}>{t('gallery.media')}</SectionHeading>}
-          <MediaGrid
-            items={items}
-            hasMore={!!browse.hasNextPage}
-            loadMore={loadMore}
-            scrollRef={scrollRef}
-            groupBy={mode === 'timeline' ? 'month' : null}
-            onOpen={open}
-            handleRef={gridHandle}
-          />
-          {browse.isFetchingNextPage && (
-            <div className="grid h-20 place-items-center">
-              <Spinner />
+      {source && total > 0 && (
+        <section className={cn(mobile ? '-mx-2.5' : 'pr-3')}>
+          {(folders.length > 0 || archives.length > 0) && (
+            <div className={cn(mobile && 'px-2.5')}>
+              <SectionHeading count={total}>{t('gallery.media')}</SectionHeading>
             </div>
           )}
+          <MediaGrid source={source} scrollRef={scrollRef} onOpen={open} handleRef={gridHandle} sortKey={query.sort} groups={query.sort === 'takenAt'} />
         </section>
       )}
-
-      {mode === 'timeline' && <DateRail onJump={(k) => gridHandle.current?.scrollToGroup(k)} />}
 
       <AnimatePresence>
         {empty && (
           <EmptyState
-            icon={mode === 'search' ? <Search /> : mode === 'favorites' ? <Heart /> : first?.target ? <UploadCloud /> : <ImageOff />}
+            icon={mode === 'search' ? <Search /> : mode === 'favorites' ? <Heart /> : target ? <UploadCloud /> : <ImageOff />}
             title={mode === 'search' ? t('gallery.noResults') : t('gallery.empty')}
-            body={first?.target && info && !info.caps.readonly ? t('gallery.emptyHint') : undefined}
+            body={target && info && !info.caps.readonly ? t('gallery.emptyHint') : undefined}
             action={
-              mode === 'folder' && items.length === 0 && !first?.target ? undefined : mode === 'library' && roots.length ? (
+              mode === 'library' && roots.length ? (
                 <Button variant="primary" icon={<Presentation className="size-4" />} onClick={() => setShowAll(true)}>
                   {t('gallery.showAll')}
                 </Button>
@@ -314,7 +292,7 @@ export function GalleryPage({ mode }: { mode: GalleryMode }) {
         )}
       </AnimatePresence>
 
-      <SelectionBar items={items} target={first?.target ?? null} />
+      <SelectionBar source={source} />
     </div>
   );
 }

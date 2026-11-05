@@ -10,6 +10,8 @@ const PhotoEditorPage = lazy(() => import('@/features/photo-editor'));
 const CollagePage = lazy(() => import('@/features/collage'));
 const VideoEditorPage = lazy(() => import('@/features/video-editor'));
 const SlideshowPage = lazy(() => import('@/features/slideshow'));
+const ExplorePage = lazy(() => import('@/features/explore'));
+const LibraryPage = lazy(() => import('@/features/nav/LibraryPage'));
 
 export function App() {
   return (
@@ -22,6 +24,8 @@ export function App() {
           <Route path="timeline" element={<GalleryPage mode="timeline" />} />
           <Route path="favorites" element={<GalleryPage mode="favorites" />} />
           <Route path="search" element={<GalleryPage mode="search" />} />
+          <Route path="explore/*" element={<ExplorePage />} />
+          <Route path="library" element={<LibraryPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="fonts" element={<FontsPage />} />
           <Route path="collage" element={<CollagePage />} />

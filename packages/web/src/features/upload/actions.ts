@@ -14,7 +14,8 @@ const t = (k: Parameters<typeof translate>[1], v?: Record<string, string | numbe
 
 type Target = { folderId: string; dir: string };
 
-async function zipMode(backend: Backend, names: string[]): Promise<UploadZipMode | null> {
+/** zip handling for these archive names: the setting, or ask (null = canceled). */
+export async function zipModeFor(backend: Backend, names: string[]): Promise<UploadZipMode | null> {
   let settings: Settings | undefined;
   try {
     settings = await backend.settings();
@@ -85,7 +86,7 @@ export async function addFiles(backend: Backend, collected: Collected, target: T
   const zips = files.filter((f) => extOf(f.file.name) === 'zip');
   let mode: UploadZipMode = 'keep';
   if (zips.length) {
-    const m = await zipMode(backend, zips.map((z) => z.file.name));
+    const m = await zipModeFor(backend, zips.map((z) => z.file.name));
     if (!m) return;
     mode = m;
   }
@@ -142,6 +143,8 @@ async function runQueue(backend: Backend, files: Picked[], target: Target, mode:
           dir: target.dir,
           path: f.relPath,
           zip: isZip ? mode : undefined,
+          // keep the original date (File.lastModified; 0 / missing → server time)
+          mtime: f.file.lastModified > 0 ? f.file.lastModified : undefined,
           signal: ctrl.signal,
           onProgress: (loaded, total) => {
             patch(id, { loaded, status: loaded >= total && isZip && mode !== 'keep' ? 'processing' : 'uploading' });

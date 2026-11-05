@@ -1,0 +1,173 @@
+{
+  "label": "after",
+  "date": "2026-11-05T19:53:24.164Z",
+  "items": 4150,
+  "throttle": 4,
+  "mobile": {
+    "gridFling": {
+      "frame": {
+        "frames": 475,
+        "p50": 16.7,
+        "p95": 16.8,
+        "p99": 50.1,
+        "max": 83.4,
+        "over33": 11,
+        "over50": 5
+      },
+      "longTasks": {
+        "count": 1,
+        "max": 51,
+        "over100": 0
+      },
+      "tileMounts": 213,
+      "tileRenders": 242,
+      "backdrop": {
+        "checked": 232,
+        "withBackdrop": 0
+      },
+      "scrollTop": 7372
+    },
+    "fastScroller": {
+      "found": true,
+      "perf": {
+        "frame": {
+          "frames": 45,
+          "p50": 16.7,
+          "p95": 50,
+          "p99": 50.1,
+          "max": 50.1,
+          "over33": 5,
+          "over50": 1
+        },
+        "longTasks": {
+          "count": 0,
+          "max": 0,
+          "over100": 0
+        },
+        "tileMounts": 207,
+        "tileRenders": 258
+      },
+      "before": {
+        "id": "668",
+        "idx": "2286",
+        "top": 25,
+        "left": 2
+      },
+      "after": {
+        "id": "668",
+        "idx": "2286",
+        "top": 25,
+        "left": 2
+      },
+      "sameItem": true,
+      "drift": 0,
+      "ms": 4109
+    },
+    "viewer": {
+      "open": {
+        "frame": {
+          "frames": 92,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 66.6,
+          "max": 66.6,
+          "over33": 1,
+          "over50": 1
+        },
+        "longTasks": {
+          "count": 1,
+          "max": 60,
+          "over100": 0
+        },
+        "tileMounts": 0,
+        "tileRenders": 1
+      },
+      "openRequests": {
+        "thumb640": 2,
+        "thumb1600": 3
+      },
+      "swipe": {
+        "frame": {
+          "frames": 579,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "max": 16.8,
+          "over33": 0,
+          "over50": 0
+        },
+        "longTasks": {
+          "count": 0,
+          "max": 0,
+          "over100": 0
+        },
+        "tileMounts": 0,
+        "tileRenders": 1
+      },
+      "distinctViews": 10,
+      "swipeRequests": {
+        "thumb640": 10,
+        "thumb1600": 9
+      }
+    },
+    "gestures": {
+      "doubleTapScale": 2.5,
+      "zoomRequestedAfterDoubleTap": true,
+      "afterSecondDoubleTap": 1,
+      "pinchScale": 4.13,
+      "pinchRequests": {},
+      "unzoomedScale": 1,
+      "closedBySwipeDown": true
+    },
+    "backStack": 0
+  },
+  "desktop": {
+    "wheelScroll": {
+      "frame": {
+        "frames": 232,
+        "p50": 16.7,
+        "p95": 16.8,
+        "p99": 50,
+        "max": 50,
+        "over33": 4,
+        "over50": 0
+      },
+      "longTasks": {
+        "count": 0,
+        "max": 0,
+        "over100": 0
+      },
+      "tileMounts": 178,
+      "tileRenders": 200,
+      "backdrop": {
+        "checked": 194,
+        "withBackdrop": 0
+      }
+    },
+    "viewerArrows": {
+      "frame": {
+        "frames": 211,
+        "p50": 16.7,
+        "p95": 16.7,
+        "p99": 16.8,
+        "max": 33.4,
+        "over33": 0,
+        "over50": 0
+      },
+      "longTasks": {
+        "count": 0,
+        "max": 0,
+        "over100": 0
+      },
+      "tileMounts": 9,
+      "tileRenders": 10,
+      "requests": {
+        "thumb640": 2,
+        "thumb1600": 2
+      }
+    }
+  },
+  "shots": {
+    "rangeSelected": 7
+  }
+}

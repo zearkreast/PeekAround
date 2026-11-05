@@ -1,4 +1,10 @@
 import type {
+  BrowseSkeleton,
+  DeviceInfo,
+  ExploreResult,
+  GeoPoints,
+  RemoteImportSpec,
+  RemoteInspect,
   BrowseQuery,
   BrowseResult,
   FileRef,
@@ -34,6 +40,8 @@ export interface UploadOptions {
   /** relative path incl. file name, e.g. "Holiday/IMG_1.jpg" */
   path: string;
   zip?: UploadZipMode;
+  /** original modification time (ms) to preserve on the server */
+  mtime?: number;
   onProgress?: (loaded: number, total: number) => void;
   signal?: AbortSignal;
 }
@@ -65,7 +73,8 @@ export interface Backend {
   settings(): Promise<Settings>;
   updateSettings(patch: Partial<Settings>): Promise<Settings>;
 
-  libraries(): Promise<{ libraries: Library[]; temp: FolderRef[] }>;
+  /** devices: linked phones (http backends only; desktop window / paired devices) */
+  libraries(): Promise<{ libraries: Library[]; temp: FolderRef[]; devices?: DeviceInfo[] }>;
   createLibrary(input: { name: string; color?: string; icon?: string; folders?: string[] }): Promise<Library>;
   updateLibrary(id: string, patch: { name?: string; color?: string; icon?: string; sort?: number }): Promise<Library>;
   deleteLibrary(id: string): Promise<void>;
@@ -76,8 +85,15 @@ export interface Backend {
   hostDirs(path?: string): Promise<{ path: string | null; parent: string | null; dirs: HostDirEntry[] }>;
   hostMkdir(path: string, name: string): Promise<{ path: string }>;
 
-  browse(q: BrowseQuery): Promise<BrowseResult>;
+  browse(q: BrowseQuery, opts?: { signal?: AbortSignal }): Promise<BrowseResult>;
   timeline(libraryId?: string): Promise<{ buckets: TimelineBucket[] }>;
+  /** exact layout skeleton for a browse query (same order as browse pages) */
+  skeleton(q: BrowseQuery): Promise<BrowseSkeleton>;
+  /** automatic groups: memories, places, types, cameras, years */
+  explore(): Promise<ExploreResult>;
+  geoPoints(q: BrowseQuery): Promise<GeoPoints>;
+  /** url of a bounded rendition (longest side ≤ 4096) for zooming; never the raw original */
+  zoomUrl(item: Pick<MediaItem, 'id' | 'playback' | 'kind'>): string;
   media(id: string): Promise<MediaDetails>;
   setFavorite(ids: string[], favorite: boolean): Promise<void>;
 
@@ -102,7 +118,8 @@ export interface Backend {
 
   mkdir(folderId: string, dir: string, name: string): Promise<{ folderId: string; dir: string }>;
   rename(ref: FileRef, name: string): Promise<{ rel: string }>;
-  move(refs: FileRef[], to: { folderId: string; dir: string }, copy?: boolean): Promise<void>;
+  /** copies from / into a linked phone's folder (http) resolve with the transfer job */
+  move(refs: FileRef[], to: { folderId: string; dir: string }, copy?: boolean): Promise<void | { moved?: string[]; job?: Job }>;
   remove(refs: FileRef[]): Promise<void>;
 
   fonts(): Promise<FontInfo[]>;
@@ -118,6 +135,16 @@ export interface Backend {
   uploadJobAsset(blob: Blob, ext?: string): Promise<string>;
   startVideoEdit(spec: VideoEditSpec): Promise<Job>;
   startSlideshow(spec: SlideshowExportSpec): Promise<Job>;
+
+  // ── linked phones (http backends; undefined elsewhere) ──
+  devices?(): Promise<DeviceInfo[]>;
+  /** approve / reject a pairing request (desktop window only) */
+  pairDevice?(id: string, approve: boolean): Promise<void>;
+  forgetDevice?(id: string): Promise<void>;
+
+  // ── remote links (MEGA) ──
+  remoteInspect?(url: string): Promise<RemoteInspect>;
+  remoteImport?(spec: RemoteImportSpec): Promise<Job>;
 
   cacheSize(): Promise<number>;
   clearCache(): Promise<void>;

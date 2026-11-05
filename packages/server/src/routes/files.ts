@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { FS_LIMIT, HEAVY_LIMIT } from '../security.js';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -8,8 +9,9 @@ import exifr from 'exifr';
 import { extOf, type FileRef, type UploadResult, type UploadZipMode } from '@peekaround/shared';
 import { getSettings, type Ctx } from '../context.js';
 import { TRASH_DIR } from '../media/scanner.js';
-import { HttpError, normalizeRel, resolveInRoot, sanitizeName, sanitizeRel, toPosix, uniqueEditPath, uniquePath } from '../paths.js';
+import { HttpError, normalizeRel, resolveHostPath, resolveInRoot, sanitizeName, sanitizeRel, toPosix, uniqueEditPath, uniquePath } from '../paths.js';
 import { extractZip } from '../zip.js';
+import { copyFromDevice, copyToDevice } from '../devices/transfer.js';
 import { folderPath, mediaAbs, mediaRow, moveFile, requireLocal, requireWritable, type Plugin } from './util.js';
 
 function relOf(root: string, abs: string) {
@@ -22,11 +24,16 @@ function dirOfRel(rel: string) {
 }
 
 /** Turn an extracted/uploaded zip into a temp session. */
-async function zipToTemp(ctx: Ctx, zipFile: string, sourceName: string) {
+export async function zipToTemp(ctx: Ctx, zipFile: string, sourceName: string) {
   const id = crypto.randomUUID();
   const sessionDir = path.join(ctx.cfg.tempDir, id);
   const content = path.join(sessionDir, 'content');
-  await extractZip(zipFile, content);
+  try {
+    await extractZip(zipFile, content);
+  } catch (e) {
+    await fsp.rm(sessionDir, { recursive: true, force: true });
+    throw e;
+  }
   const row = ctx.lib.createTempFolder(content, sourceName, getSettings(ctx).tempSessionHours);
   await ctx.scanner.scanFolder(row.id);
   return ctx.lib.folderRef(row);
@@ -40,12 +47,12 @@ export const fileRoutes: Plugin = (app, ctx) => {
   }
 
   /**
-   * PUT /api/upload?folderId=&dir=&path=sub/dir/name.jpg&zip=extract|temp|keep
+   * PUT /api/upload?folderId=&dir=&path=sub/dir/name.jpg&zip=extract|temp|keep&mtime=<ms>
    * Body: raw file bytes.
    */
-  app.put<{ Querystring: { folderId: string; dir?: string; path: string; zip?: UploadZipMode } }>(
+  app.put<{ Querystring: { folderId: string; dir?: string; path: string; zip?: UploadZipMode; mtime?: string } }>(
     '/api/upload',
-    { bodyLimit: ctx.cfg.maxUploadBytes },
+    { ...FS_LIMIT, bodyLimit: ctx.cfg.maxUploadBytes },
     async (req): Promise<UploadResult> => {
       requireWritable(ctx);
       const { folder } = folderPath(ctx, req.query.folderId, '');
@@ -90,6 +97,9 @@ export const fileRoutes: Plugin = (app, ctx) => {
       const part = `${finalAbs}.${crypto.randomBytes(4).toString('hex')}.part`;
       try {
         await pipeline(req.raw, fs.createWriteStream(part));
+        // keep the original modification time (phones/desktop pass it) — it is the date fallback
+        const mtime = Number(req.query.mtime);
+        if (Number.isFinite(mtime) && mtime > 0 && mtime < 4102444800000) await fsp.utimes(part, new Date(), new Date(mtime));
         await fsp.rename(part, finalAbs);
       } catch (e) {
         await fsp.rm(part, { force: true });
@@ -102,7 +112,7 @@ export const fileRoutes: Plugin = (app, ctx) => {
   );
 
   /** Peek into an archive that already lives in a library (temp session, library untouched). */
-  app.post<{ Body: { id: string } }>('/api/zip/peek', async (req) => {
+  app.post<{ Body: { id: string } }>('/api/zip/peek', HEAVY_LIMIT, async (req) => {
     const r = mediaRow(ctx, req.body.id);
     if (r.kind !== 'archive') throw new HttpError(400, 'Not an archive');
     const { abs } = mediaAbs(ctx, r);
@@ -110,7 +120,7 @@ export const fileRoutes: Plugin = (app, ctx) => {
   });
 
   /** Extract an archive that lives in a library next to itself. */
-  app.post<{ Body: { id: string } }>('/api/zip/extract', async (req) => {
+  app.post<{ Body: { id: string } }>('/api/zip/extract', HEAVY_LIMIT, async (req) => {
     requireWritable(ctx);
     const r = mediaRow(ctx, req.body.id);
     if (r.kind !== 'archive') throw new HttpError(400, 'Not an archive');
@@ -123,14 +133,15 @@ export const fileRoutes: Plugin = (app, ctx) => {
   });
 
   /** Desktop only: import files/folders by absolute path (drag & drop from the OS without uploading). */
-  app.post<{ Body: { paths: string[]; folderId: string; dir: string; zip?: UploadZipMode } }>('/api/import-local', async (req) => {
+  app.post<{ Body: { paths: string[]; folderId: string; dir: string; zip?: UploadZipMode } }>('/api/import-local', HEAVY_LIMIT, async (req) => {
     requireWritable(ctx);
     requireLocal(req);
     if (ctx.cfg.mode !== 'desktop') throw new HttpError(403, 'Only available in the desktop app');
     const { folder, abs: destDir } = folderPath(ctx, req.body.folderId, req.body.dir ?? '');
     await fsp.mkdir(destDir, { recursive: true });
     const result: UploadResult = { created: [] };
-    for (const src of req.body.paths ?? []) {
+    for (const raw of Array.isArray(req.body.paths) ? req.body.paths : []) {
+      const src = resolveHostPath(raw, ctx.cfg.hostBrowseRoots);
       const st = await fsp.stat(src).catch(() => null);
       if (!st) continue;
       const base = sanitizeName(path.basename(src));
@@ -157,7 +168,7 @@ export const fileRoutes: Plugin = (app, ctx) => {
 
   // ── file operations ──
 
-  app.post<{ Body: { folderId: string; dir: string; name: string } }>('/api/fs/mkdir', async (req) => {
+  app.post<{ Body: { folderId: string; dir: string; name: string } }>('/api/fs/mkdir', FS_LIMIT, async (req) => {
     requireWritable(ctx);
     const { folder, abs } = folderPath(ctx, req.body.folderId, req.body.dir ?? '');
     const dest = await uniquePath(abs, sanitizeName(req.body.name || 'New folder'));
@@ -166,7 +177,7 @@ export const fileRoutes: Plugin = (app, ctx) => {
     return { folderId: String(folder.id), dir: relOf(folder.path, dest) };
   });
 
-  app.post<{ Body: FileRef & { name: string } }>('/api/fs/rename', async (req) => {
+  app.post<{ Body: FileRef & { name: string } }>('/api/fs/rename', FS_LIMIT, async (req) => {
     requireWritable(ctx);
     const { folder, abs } = folderPath(ctx, req.body.folderId, req.body.rel);
     const relSrc = normalizeRel(req.body.rel);
@@ -194,12 +205,29 @@ export const fileRoutes: Plugin = (app, ctx) => {
     return { rel: relDest };
   });
 
-  app.post<{ Body: { refs: FileRef[]; to: { folderId: string; dir: string }; copy?: boolean } }>('/api/fs/move', async (req) => {
+  /**
+   * Move / copy. Linked phones: copy FROM a device folder into a PC folder and copy INTO a device
+   * folder run as transfer jobs → response `{ moved: string[], job: Job }` (moved = local part done
+   * synchronously). Moving from/to a device → 403.
+   */
+  app.post<{ Body: { refs: FileRef[]; to: { folderId: string; dir: string }; copy?: boolean } }>('/api/fs/move', FS_LIMIT, async (req) => {
     requireWritable(ctx);
+    const allRefs = req.body.refs ?? [];
+    const target = ctx.lib.folderRow(req.body.to.folderId);
+    const deviceRefs = allRefs.filter((r) => !!ctx.lib.folderRow(r.folderId).device_id);
+    if (target.device_id || deviceRefs.length) {
+      if (!req.body.copy) throw new HttpError(403, 'Files on a linked device can only be copied');
+      if (target.device_id) {
+        if (deviceRefs.length) throw new HttpError(403, 'Copying between devices is not supported');
+        return { moved: [], job: await copyToDevice(ctx, allRefs, target, req.body.to.dir ?? '') };
+      }
+    }
     const { folder: toFolder, abs: toAbs } = folderPath(ctx, req.body.to.folderId, req.body.to.dir ?? '');
     await fsp.mkdir(toAbs, { recursive: true });
     const out: string[] = [];
-    for (const ref of req.body.refs ?? []) {
+    const job = deviceRefs.length ? copyFromDevice(ctx, deviceRefs, toFolder, req.body.to.dir ?? '') : null;
+    for (const ref of allRefs) {
+      if (deviceRefs.includes(ref)) continue;
       const { folder, abs } = folderPath(ctx, ref.folderId, ref.rel);
       const relSrc = normalizeRel(ref.rel);
       if (!relSrc) continue;
@@ -219,10 +247,10 @@ export const fileRoutes: Plugin = (app, ctx) => {
       else await ctx.scanner.upsertFile(toFolder.id, relDest);
       out.push(relDest);
     }
-    return { moved: out };
+    return job ? { moved: out, job } : { moved: out };
   });
 
-  app.post<{ Body: { refs: FileRef[] } }>('/api/fs/delete', async (req) => {
+  app.post<{ Body: { refs: FileRef[] } }>('/api/fs/delete', FS_LIMIT, async (req) => {
     requireWritable(ctx);
     let n = 0;
     for (const ref of req.body.refs ?? []) {
@@ -256,7 +284,7 @@ export const fileRoutes: Plugin = (app, ctx) => {
    */
   app.post<{ Querystring: { sourceId?: string; folderId?: string; dir?: string; name?: string; format?: string; quality?: string } }>(
     '/api/edits/save',
-    { bodyLimit: 1024 * 1024 * 1024 },
+    { ...FS_LIMIT, bodyLimit: 1024 * 1024 * 1024 },
     async (req) => {
       requireWritable(ctx);
       const fmt = (['jpg', 'png', 'webp'].includes(req.query.format ?? '') ? req.query.format : 'jpg') as 'jpg' | 'png' | 'webp';
@@ -302,7 +330,7 @@ export const fileRoutes: Plugin = (app, ctx) => {
   // ── fonts ──
   app.get('/api/fonts', async () => ({ fonts: listFonts(ctx) }));
 
-  app.put<{ Querystring: { name: string } }>('/api/fonts', { bodyLimit: 64 * 1024 * 1024 }, async (req) => {
+  app.put<{ Querystring: { name: string } }>('/api/fonts', { ...FS_LIMIT, bodyLimit: 64 * 1024 * 1024 }, async (req) => {
     const name = sanitizeName(req.query.name || 'font.ttf');
     const ext = extOf(name);
     if (!['ttf', 'otf', 'woff', 'woff2'].includes(ext)) throw new HttpError(400, 'Unsupported font format');
@@ -327,7 +355,7 @@ export const fileRoutes: Plugin = (app, ctx) => {
     return { fonts: listFonts(ctx) };
   });
 
-  app.delete<{ Params: { id: string } }>('/api/fonts/:id', async (req) => {
+  app.delete<{ Params: { id: string } }>('/api/fonts/:id', FS_LIMIT, async (req) => {
     const r = ctx.db.get<{ file: string }>('SELECT file FROM fonts WHERE id = ?', Number(req.params.id));
     if (r) {
       ctx.db.run('DELETE FROM fonts WHERE id = ?', Number(req.params.id));
@@ -337,7 +365,7 @@ export const fileRoutes: Plugin = (app, ctx) => {
     return { fonts: listFonts(ctx) };
   });
 
-  app.get<{ Params: { id: string } }>('/api/fonts/:id/file', async (req, reply) => {
+  app.get<{ Params: { id: string } }>('/api/fonts/:id/file', FS_LIMIT, async (req, reply) => {
     const r = ctx.db.get<{ file: string; format: string }>('SELECT file, format FROM fonts WHERE id = ?', Number(req.params.id));
     if (!r) throw new HttpError(404, 'Font not found');
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');

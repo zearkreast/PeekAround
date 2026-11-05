@@ -3,3 +3,4 @@ declare module 'heic-decode' {
   export default decode;
 }
 declare module 'fontkit';
+declare module 'ws';

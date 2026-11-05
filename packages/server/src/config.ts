@@ -8,6 +8,8 @@ export interface DesktopHooks {
 }
 
 export interface ServerOptions {
+  /** browser security (Host / Origin allow-lists), default from env PEEK_ALLOWED_HOSTS / PEEK_ALLOWED_ORIGINS */
+  security?: import('./security.js').SecurityOptions;
   mode?: RunMode;
   host?: string;
   port?: number;
@@ -27,9 +29,11 @@ export interface ServerOptions {
   logger?: boolean;
   hooks?: DesktopHooks;
   version?: string;
+  /** tests: replace the MEGA client */
+  mega?: import('./remote/mega.js').MegaClient;
 }
 
-export interface ResolvedConfig extends Required<Omit<ServerOptions, 'hooks' | 'webDir' | 'roots'>> {
+export interface ResolvedConfig extends Required<Omit<ServerOptions, 'hooks' | 'webDir' | 'roots' | 'mega' | 'security'>> {
   hooks: DesktopHooks;
   webDir: string | null;
   roots: { path: string; name?: string }[];
@@ -59,7 +63,7 @@ export function resolveConfig(opts: ServerOptions): ResolvedConfig {
     maxUploadBytes: opts.maxUploadBytes ?? 20 * 1024 * 1024 * 1024,
     logger: opts.logger ?? false,
     hooks: opts.hooks ?? {},
-    version: opts.version ?? '1.0.0',
+    version: opts.version ?? '1.1.0',
     cacheDir,
     thumbDir: path.join(cacheDir, 'thumbs'),
     tempDir: path.join(dataDir, 'temp'),

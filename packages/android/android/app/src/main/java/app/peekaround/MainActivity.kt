@@ -11,6 +11,10 @@ import com.getcapacitor.BridgeActivity
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(PeekLocalPlugin::class.java)
+        // system back / predictive back → web back stack (see PeekBackPlugin)
+        registerPlugin(PeekBackPlugin::class.java)
+        // phone ↔ PC folder sharing (PeekLinkService)
+        registerPlugin(PeekLinkPlugin::class.java)
         super.onCreate(savedInstanceState)
         handleShare(intent)
     }
@@ -26,6 +30,15 @@ class MainActivity : BridgeActivity() {
         val uris = ArrayList<Uri>()
         when (intent.action) {
             Intent.ACTION_SEND -> {
+                if (intent.type?.startsWith("text/") == true && !intent.hasExtra(Intent.EXTRA_STREAM)) {
+                    // shared text, e.g. a mega.nz link from the MEGA app → getShared().text
+                    val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()?.take(8192)
+                    if (text.isNullOrEmpty()) return
+                    PeekLocalPlugin.pendingShare.clear()
+                    PeekLocalPlugin.pendingText = text
+                    PeekLocalPlugin.instance?.onShared()
+                    return
+                }
                 val u: Uri? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
                 u?.let { uris.add(it) }
@@ -39,6 +52,7 @@ class MainActivity : BridgeActivity() {
         }
         if (uris.isEmpty()) return
         PeekLocalPlugin.pendingShare.clear()
+        PeekLocalPlugin.pendingText = null
         PeekLocalPlugin.pendingShare.addAll(uris)
         PeekLocalPlugin.instance?.onShared()
     }

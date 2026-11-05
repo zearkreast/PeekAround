@@ -12,7 +12,22 @@ import { MenuItem, Popover } from '@/components/ui';
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
 
 /** Custom video player. For codecs the browser can't play it uses the server transcode stream with restart-on-seek. */
-export function VideoPlayer({ item, autoPlay = true, onFrameSaved }: { item: MediaItem; autoPlay?: boolean; onFrameSaved?: () => void }) {
+const COARSE = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+
+export function VideoPlayer({
+  item,
+  autoPlay = true,
+  onFrameSaved,
+  poster,
+  compact = COARSE,
+}: {
+  item: MediaItem;
+  autoPlay?: boolean;
+  onFrameSaved?: () => void;
+  poster?: string;
+  /** phones: fewer, larger controls; tap on the picture is left to the viewer */
+  compact?: boolean;
+}) {
   const t = useT();
   const backend = useBackend();
   const ref = useRef<HTMLVideoElement>(null);
@@ -119,13 +134,15 @@ export function VideoPlayer({ item, autoPlay = true, onFrameSaved }: { item: Med
       className={cn('relative flex size-full items-center justify-center bg-black/0', !controls && playing && 'cursor-none')}
       onPointerMove={poke}
       onClick={(e) => {
-        if (e.target === ref.current) toggle();
+        if (!compact && e.target === ref.current) toggle();
       }}
     >
       <video
         ref={ref}
         key={src}
         src={src}
+        poster={poster}
+        preload="metadata"
         autoPlay={autoPlay || offset > 0}
         playsInline
         loop={loop}
@@ -154,7 +171,8 @@ export function VideoPlayer({ item, autoPlay = true, onFrameSaved }: { item: Med
             transition={{ type: 'spring', stiffness: 400, damping: 25 }}
             onClick={toggle}
             aria-label={t('viewer.play')}
-            className="absolute grid size-20 place-items-center rounded-full bg-white/15 text-white backdrop-blur-xl hover:bg-white/25"
+            data-no-gesture
+            className="absolute grid size-20 place-items-center rounded-full bg-black/45 text-white hover:bg-black/60"
           >
             <Play className="ml-1 size-9 fill-current" />
           </motion.button>
@@ -164,14 +182,18 @@ export function VideoPlayer({ item, autoPlay = true, onFrameSaved }: { item: Med
       <motion.div
         animate={{ opacity: controls || !playing ? 1 : 0, y: controls || !playing ? 0 : 12 }}
         transition={{ duration: 0.25 }}
-        className="absolute inset-x-4 bottom-4 rounded-2xl bg-black/55 px-4 pt-3 pb-2 text-white backdrop-blur-xl"
+        className={cn(
+          'absolute rounded-2xl bg-black/60 text-white',
+          compact ? 'inset-x-2 bottom-2 px-3 pt-2 pb-1' : 'inset-x-4 bottom-4 px-4 pt-3 pb-2 [@media(pointer:fine)]:backdrop-blur-xl',
+        )}
         onClick={(e) => e.stopPropagation()}
+        data-no-gesture
       >
         {transcode && <div className="mb-1 text-[11px] text-white/60">{t('viewer.transcoding')}</div>}
         {/* scrub bar */}
         <div
           ref={bar}
-          className="group relative h-5 cursor-pointer"
+          className={cn('group relative cursor-pointer touch-none', compact ? 'h-8' : 'h-5')}
           onPointerDown={(e) => {
             (e.target as HTMLElement).setPointerCapture(e.pointerId);
             seek(barPos(e.clientX) * dur);
@@ -206,45 +228,51 @@ export function VideoPlayer({ item, autoPlay = true, onFrameSaved }: { item: Med
           )}
         </div>
         <div className="mt-1 flex items-center gap-1">
-          <button type="button" onClick={toggle} className="grid size-9 place-items-center rounded-lg hover:bg-white/10" aria-label={playing ? t('viewer.pause') : t('viewer.play')}>
+          <button type="button" onClick={toggle} className="grid size-9 place-items-center rounded-lg hover:bg-white/10 [@media(pointer:coarse)]:size-11" aria-label={playing ? t('viewer.pause') : t('viewer.play')}>
             {playing ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current" />}
           </button>
-          <button type="button" onClick={() => setMuted((m) => !m)} className="grid size-9 place-items-center rounded-lg hover:bg-white/10" aria-label={muted ? t('viewer.unmute') : t('viewer.mute')}>
+          <button type="button" onClick={() => setMuted((m) => !m)} className="grid size-9 place-items-center rounded-lg hover:bg-white/10 [@media(pointer:coarse)]:size-11" aria-label={muted ? t('viewer.unmute') : t('viewer.mute')}>
             {muted || volume === 0 ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
           </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={muted ? 0 : volume}
-            onChange={(e) => {
-              setVolume(Number(e.target.value));
-              setMuted(false);
-            }}
-            className="peek-range w-20"
-            style={{ ['--fill' as string]: `${(muted ? 0 : volume) * 100}%` }}
-          />
+          {!compact && (
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={muted ? 0 : volume}
+              onChange={(e) => {
+                setVolume(Number(e.target.value));
+                setMuted(false);
+              }}
+              className="peek-range w-20"
+              style={{ ['--fill' as string]: `${(muted ? 0 : volume) * 100}%` }}
+            />
+          )}
           <span className="ml-2 text-xs text-white/80 tabular-nums">
             {formatTime(time)} / {formatTime(dur)}
           </span>
           <div className="flex-1" />
-          <button type="button" title={t('viewer.saveFrame')} onClick={saveFrame} className="grid size-9 place-items-center rounded-lg hover:bg-white/10">
-            <Camera className="size-[18px]" />
-          </button>
-          <button ref={speedBtn} type="button" title={t('viewer.speed')} onClick={() => setSpeedOpen((o) => !o)} className="flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-white/10">
-            <Gauge className="size-[18px]" />
-            {speed !== 1 && `${speed}×`}
-          </button>
-          <button type="button" title={t('viewer.loop')} onClick={() => setLoop((l) => !l)} className={cn('grid size-9 place-items-center rounded-lg hover:bg-white/10', loop && 'text-[var(--accent-2)]')}>
-            <Repeat className="size-[18px]" />
-          </button>
-          {'pictureInPictureEnabled' in document && (
-            <button type="button" title={t('viewer.pip')} onClick={() => void ref.current?.requestPictureInPicture?.()} className="grid size-9 place-items-center rounded-lg hover:bg-white/10">
-              <PictureInPicture2 className="size-[18px]" />
+          {!compact && (
+            <>
+            <button type="button" title={t('viewer.saveFrame')} onClick={saveFrame} className="grid size-9 place-items-center rounded-lg hover:bg-white/10 [@media(pointer:coarse)]:size-11">
+              <Camera className="size-[18px]" />
             </button>
+            <button ref={speedBtn} type="button" title={t('viewer.speed')} onClick={() => setSpeedOpen((o) => !o)} className="flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold hover:bg-white/10">
+              <Gauge className="size-[18px]" />
+              {speed !== 1 && `${speed}×`}
+            </button>
+            <button type="button" title={t('viewer.loop')} onClick={() => setLoop((l) => !l)} className={cn('grid size-9 place-items-center rounded-lg hover:bg-white/10 [@media(pointer:coarse)]:size-11', loop && 'text-[var(--accent-2)]')}>
+              <Repeat className="size-[18px]" />
+            </button>
+            {'pictureInPictureEnabled' in document && (
+              <button type="button" title={t('viewer.pip')} onClick={() => void ref.current?.requestPictureInPicture?.()} className="grid size-9 place-items-center rounded-lg hover:bg-white/10 [@media(pointer:coarse)]:size-11">
+                <PictureInPicture2 className="size-[18px]" />
+              </button>
+            )}
+            </>
           )}
-          <button type="button" title={t('viewer.fullscreen')} onClick={() => (document.fullscreenElement ? document.exitFullscreen() : wrap.current?.requestFullscreen())} className="grid size-9 place-items-center rounded-lg hover:bg-white/10">
+          <button type="button" title={t('viewer.fullscreen')} onClick={() => (document.fullscreenElement ? document.exitFullscreen() : wrap.current?.requestFullscreen())} className="grid size-9 place-items-center rounded-lg hover:bg-white/10 [@media(pointer:coarse)]:size-11">
             <Maximize className="size-[18px]" />
           </button>
         </div>

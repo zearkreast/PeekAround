@@ -1,0 +1,8 @@
+[
+  {"dir":"s2p","frame":{"t":"req","rid":"AAAAAAAAAAAAAAAAAAAAAA","op":"list","args":{"key":"k1","dir":"","recursive":true}}},
+  {"dir":"put","rid":"AAAAAAAAAAAAAAAAAAAAAA","headers":{"Content-Type":"application/x-ndjson"},"body":"{\"p\":\"IMG_1.jpg\",\"k\":\"image\",\"s\":2048,\"m\":1700000000000,\"w\":4000,\"h\":3000,\"d\":null,\"t\":1699999999000,\"id\":11}\n{\"p\":\"Trip/VID_2.mp4\",\"k\":\"video\",\"s\":4096,\"m\":1700000500000,\"w\":1920,\"h\":1080,\"d\":12.5,\"t\":1700000400000,\"id\":12}\n{\"dir\":\"Empty\"}\n"},
+  {"dir":"s2p","frame":{"t":"req","rid":"BBBBBBBBBBBBBBBBBBBBBB","op":"thumb","args":{"key":"k1","p":"IMG_1.jpg","s":320}}},
+  {"dir":"put","rid":"BBBBBBBBBBBBBBBBBBBBBB","headers":{"Content-Type":"image/jpeg","Content-Length":"4"},"bodyBase64":"/9j/2Q=="},
+  {"dir":"s2p","frame":{"t":"req","rid":"CCCCCCCCCCCCCCCCCCCCCC","op":"thumb","args":{"key":"k1","p":"../etc/passwd","s":320}}},
+  {"dir":"p2s","frame":{"t":"err","rid":"CCCCCCCCCCCCCCCCCCCCCC","status":403,"message":"outside shared folder"}}
+]

@@ -7,6 +7,7 @@ import { useLang } from '@/i18n';
 import { toast, useToasts } from '@/store/toasts';
 import { FolderPicker } from '@/features/gallery/FolderPicker';
 import { L, fmt } from './strings';
+import { openMegaFrom } from '@/features/remote/RemoteHost';
 
 /** Android: files sent via "Share → PeekAround" are uploaded/copied into a folder the user picks. */
 export function ShareHandler() {
@@ -20,6 +21,11 @@ export function ShareHandler() {
     try {
       const r = await PeekLocal.getShared();
       if (r.files.length) setFiles(r.files);
+      // "Share → PeekAround" of a text, e.g. a mega.nz link from the MEGA app
+      else if (r.text) {
+        openMegaFrom(r.text);
+        void PeekLocal.clearShared();
+      }
     } catch {
       /* not native */
     }
@@ -54,7 +60,7 @@ export function ShareHandler() {
               const p = (e.index + (e.size > 0 ? e.sent / e.size : 0)) / e.total;
               useToasts.getState().update(tid, { title: fmt(s.uploading, { i: e.index + 1, n: e.total }), progress: p });
             });
-            await PeekLocal.uploadShared({ url: backend.base || location.origin, folderId: target.folderId, dir: target.dir, files: list });
+            await PeekLocal.uploadShared({ url: backend.base || location.origin, folderId: target.folderId, dir: target.dir, files: list, headers: backend.authHeaders() });
             await h.remove();
           } else {
             const libs = await backend.libraries();

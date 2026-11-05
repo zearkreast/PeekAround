@@ -1,0 +1,6 @@
+[
+  {"dir":"s2p","frame":{"t":"req","rid":"FFFFFFFFFFFFFFFFFFFFFF","op":"receive","args":{"key":"k1","dir":"From PC","name":"IMG_9.jpg","size":4,"mtime":1690000000000,"url":"/api/devices/pull/tok_abc"}}},
+  {"dir":"get","url":"/api/devices/pull/tok_abc","response":{"status":200,"headers":{"Content-Type":"application/octet-stream","Content-Length":"4","Last-Modified":"Sat, 22 Jul 2023 04:26:40 GMT","X-Peek-Mtime":"1690000000000"},"bodyBase64":"/9j/2Q=="}},
+  {"dir":"p2s","frame":{"t":"res","rid":"FFFFFFFFFFFFFFFFFFFFFF","ok":true,"data":{"p":"From PC/IMG_9.jpg"}}},
+  {"dir":"p2s","frame":{"t":"changed","key":"k1","dirs":["From PC"]}}
+]

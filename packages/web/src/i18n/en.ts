@@ -1,6 +1,14 @@
 import type { Messages } from './tr';
+import mobileEn from './mobile.en';
+import devicesEn from './devices.en';
+import exploreEn from './explore.en';
+import remoteEn from './remote.en';
 
 const en: Messages = {
+  ...mobileEn,
+  ...devicesEn,
+  ...exploreEn,
+  ...remoteEn,
   'app.tagline': 'Your folders, beautifully.',
   'common.cancel': 'Cancel',
   'common.close': 'Close',

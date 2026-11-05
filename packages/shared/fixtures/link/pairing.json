@@ -1,0 +1,5 @@
+[
+  {"dir":"p2s","frame":{"t":"hello","v":1,"id":"3f6c1d1e-6a2b-4b8e-9b51-0d7c2a9e1f00","name":"Test Phone","model":"Google Pixel 8","app":"1.1.0","folders":[{"key":"k1","name":"Kamera","path":"/storage/emulated/0/DCIM/Camera"}],"caps":{"read":true,"receive":true}}},
+  {"dir":"s2p","frame":{"t":"pending","code":"4821"}},
+  {"dir":"s2p","frame":{"t":"paired","token":"q8Jx2m3L0d4yKj9b8zQ1vR6tW5sY7uI0pO3aS2dF4gH"}}
+]

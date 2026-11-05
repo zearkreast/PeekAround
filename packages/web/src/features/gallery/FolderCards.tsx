@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'motion/react';
-import { Archive, Download, Eye, Folder, FolderInput, Pencil, Presentation, Trash2 } from 'lucide-react';
+import { Archive, Eye, Folder, FolderInput, Pencil, Presentation, Trash2 } from 'lucide-react';
 import type { FolderRef, MediaItem, SubFolder } from '@peekaround/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBackend, useInfo } from '@/backend';
@@ -12,7 +12,9 @@ import { go } from '@/lib/nav';
 import { folderHref } from '@/lib/routes';
 import { toast } from '@/store/toasts';
 import { Button, ContextMenu, MenuItem, MenuSep } from '@/components/ui';
-import { download, useActionUi } from './actions';
+import { useActionUi } from './actions';
+import { FolderMenuItems } from '@/features/devices/FolderActions';
+import { useDeviceFolder } from '@/features/devices/useDevices';
 
 function Covers({ ids, className }: { ids: string[]; className?: string }) {
   const backend = useBackend();
@@ -45,6 +47,8 @@ export function FolderCard({ folderId, f, index, onSlideshow }: { folderId: stri
   const ui = useActionUi();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const writable = info && !info.caps.readonly;
+  // folders on a linked phone: view + copy only
+  const device = useDeviceFolder(folderId);
   return (
     <>
       <motion.div
@@ -76,10 +80,8 @@ export function FolderCard({ folderId, f, index, onSlideshow }: { folderId: stri
         <MenuItem icon={<Presentation />} onClick={onSlideshow}>
           {t('gallery.slideshowHere')}
         </MenuItem>
-        <MenuItem icon={<Download />} onClick={() => download(backend.folderDownloadUrl(folderId, f.dir, f.name))}>
-          {t('gallery.downloadFolder')}
-        </MenuItem>
-        {writable && (
+        <FolderMenuItems folderId={folderId} dir={f.dir} name={f.name} />
+        {writable && !device && (
           <>
             <MenuSep />
             <MenuItem icon={<Pencil />} onClick={() => ui.open({ kind: 'rename', ref: { folderId, rel: f.dir }, name: f.name })}>

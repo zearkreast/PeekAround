@@ -1,5 +1,5 @@
 /** Turkish — the source of truth for translation keys. */
-const tr = {
+const base = {
   'app.tagline': 'Klasörlerin, en güzel haliyle.',
   'common.cancel': 'Vazgeç',
   'common.close': 'Kapat',
@@ -584,6 +584,13 @@ const tr = {
   'slide.endBody': '{n} slayt · {d}',
   'slide.replay': 'Tekrar oynat',
 } as const;
+
+import mobileTr from './mobile.tr';
+import devicesTr from './devices.tr';
+import exploreTr from './explore.tr';
+import remoteTr from './remote.tr';
+
+const tr = { ...base, ...mobileTr, ...devicesTr, ...exploreTr, ...remoteTr };
 
 export type MessageKey = keyof typeof tr;
 export type Messages = Record<MessageKey, string>;

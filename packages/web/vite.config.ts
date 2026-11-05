@@ -35,7 +35,18 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,woff2,svg,png}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-        runtimeCaching: [],
+        runtimeCaching: [
+          {
+            // Explore map tiles (CARTO / OpenStreetMap): offline-friendly, bounded
+            urlPattern: ({ url }) => /(^|\.)basemaps\.cartocdn\.com$/.test(url.hostname) || url.hostname === 'tile.openstreetmap.org',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'peek-map-tiles',
+              expiration: { maxEntries: 2000, maxAgeSeconds: 30 * 24 * 60 * 60, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],

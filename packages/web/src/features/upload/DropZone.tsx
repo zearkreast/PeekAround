@@ -11,9 +11,21 @@ import { Checkbox, Modal } from '@/components/ui';
 import { FolderPicker } from '@/features/gallery/FolderPicker';
 import { addFiles } from './actions';
 import { collectFromDataTransfer } from './collect';
+import { openMegaFrom } from '@/features/remote/RemoteHost';
 
 function hasFiles(e: DragEvent) {
   return !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+}
+
+/** a dragged link / text without files */
+function hasUrl(e: DragEvent) {
+  const types = e.dataTransfer ? Array.from(e.dataTransfer.types) : [];
+  return !types.includes('Files') && (types.includes('text/uri-list') || types.includes('text/plain'));
+}
+
+function editable(t: EventTarget | null) {
+  const el = t as HTMLElement | null;
+  return !!el?.tagName && (/^(input|textarea)$/i.test(el.tagName) || el.isContentEditable);
 }
 
 interface HoverTarget {
@@ -84,11 +96,26 @@ export function DropZone() {
       const dest = h ? { folderId: h.folderId, dir: h.dir } : useLocation.getState().target;
       void addFiles(backend, collected, dest);
     };
+    // a dragged link (e.g. a mega.nz URL from the browser's address bar) → MEGA import dialog
+    const onUrlOver = (e: DragEvent) => {
+      if (hasUrl(e) && !editable(e.target)) e.preventDefault();
+    };
+    const onUrlDrop = (e: DragEvent) => {
+      if (!hasUrl(e) || editable(e.target)) return;
+      const dt = e.dataTransfer!;
+      const text = dt.getData('text/uri-list') || dt.getData('text/plain');
+      e.preventDefault();
+      openMegaFrom(text);
+    };
     window.addEventListener('dragenter', onEnter);
     window.addEventListener('dragover', onOver);
+    window.addEventListener('dragover', onUrlOver);
     window.addEventListener('dragleave', onLeave);
     window.addEventListener('drop', onDrop);
+    window.addEventListener('drop', onUrlDrop);
     return () => {
+      window.removeEventListener('dragover', onUrlOver);
+      window.removeEventListener('drop', onUrlDrop);
       window.removeEventListener('dragenter', onEnter);
       window.removeEventListener('dragover', onOver);
       window.removeEventListener('dragleave', onLeave);

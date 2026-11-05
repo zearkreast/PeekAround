@@ -1,6 +1,8 @@
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
+import { foldText, instantToLocal, isValidTimeZone, localToInstant, systemTimeZone } from '@peekaround/shared';
+import { MIGRATIONS } from './migrations/index.js';
 
 export type Row = Record<string, any>;
 
@@ -76,11 +78,39 @@ CREATE TABLE IF NOT EXISTS fonts (
 export class Db {
   readonly raw: DatabaseSync;
   private cache = new Map<string, StatementSync>();
+  private arrayCache = new Map<string, StatementSync>();
 
   constructor(file: string) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     this.raw = new DatabaseSync(file);
     this.raw.exec(SCHEMA);
+    registerFunctions(this.raw);
+    this.migrate(file);
+  }
+
+  /** Apply pending migrations (PRAGMA user_version), backing up the DB file first. */
+  private migrate(file: string) {
+    const current = Number((this.raw.prepare('PRAGMA user_version').get() as { user_version: number }).user_version) || 0;
+    if (current >= MIGRATIONS.length) return;
+    if (file !== ':memory:' && fs.existsSync(file) && fs.statSync(file).size > 0) {
+      try {
+        this.raw.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        fs.copyFileSync(file, `${file}.bak-v${current}`);
+      } catch {
+        /* backup is best effort */
+      }
+    }
+    for (let v = current; v < MIGRATIONS.length; v++) {
+      this.raw.exec('BEGIN');
+      try {
+        MIGRATIONS[v].up(this.raw);
+        this.raw.exec(`PRAGMA user_version = ${v + 1}`);
+        this.raw.exec('COMMIT');
+      } catch (e) {
+        this.raw.exec('ROLLBACK');
+        throw new Error(`Migration ${MIGRATIONS[v].name} failed: ${(e as Error).message}`);
+      }
+    }
   }
 
   stmt(sql: string): StatementSync {
@@ -94,6 +124,18 @@ export class Db {
 
   all<T = Row>(sql: string, ...params: any[]): T[] {
     return this.stmt(sql).all(...params) as T[];
+  }
+
+  /** Rows as arrays (column order of the SELECT) — ~2× faster than objects for large result sets. */
+  allArrays(sql: string, ...params: any[]): unknown[][] {
+    let s = this.arrayCache.get(sql);
+    if (!s) {
+      s = this.raw.prepare(sql);
+      if (typeof s.setReturnArrays === 'function') s.setReturnArrays(true);
+      this.arrayCache.set(sql, s);
+    }
+    const rows = s.all(...params) as unknown[];
+    return rows.length && !Array.isArray(rows[0]) ? rows.map((r) => Object.values(r as object)) : (rows as unknown[][]);
   }
 
   get<T = Row>(sql: string, ...params: any[]): T | undefined {
@@ -134,7 +176,25 @@ export class Db {
     );
   }
 
+  /** IANA zone used for UTC-only timestamps (stored settings → server zone). */
+  homeTimeZone(): string {
+    const tz = this.getSetting<{ homeTimeZone?: string }>('settings', {}).homeTimeZone;
+    return isValidTimeZone(tz) ? tz : systemTimeZone();
+  }
+
   close() {
     this.raw.close();
   }
+}
+
+/** SQL helpers usable from queries and migrations. */
+function registerFunctions(db: DatabaseSync) {
+  const det = { deterministic: true, useBigIntArguments: false };
+  db.function('peek_fold', det, (s: unknown) => (s == null ? '' : foldText(String(s))));
+  db.function('peek_local', det, (instant: unknown, tz: unknown) =>
+    typeof instant === 'number' ? instantToLocal(instant, String(tz || 'UTC')) : null,
+  );
+  db.function('peek_instant', det, (local: unknown, tz: unknown) =>
+    typeof local === 'number' ? localToInstant(local, String(tz || 'UTC')) : null,
+  );
 }

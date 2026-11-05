@@ -17,6 +17,9 @@ import { Badge, Button, ColorSwatches, Input, Segmented, Switch } from '@/compon
 import { LogoMark, LogoWordmark } from '@/components/Logo';
 import { LibraryEditor } from './LibraryEditor';
 import { AndroidConnectionCard } from '@/features/android/ConnectionCard';
+import { DevicesCard } from '@/features/devices/DevicesCard';
+import { PhoneShareCard } from '@/features/devices/PhoneShareCard';
+import { ExploreSettings } from '@/features/explore/ExploreSettings';
 
 function Card({ icon, title, children, delay = 0 }: { icon: ReactNode; title: string; children: ReactNode; delay?: number }) {
   return (
@@ -225,7 +228,10 @@ export function SettingsPage() {
         )}
 
         <AndroidConnectionCard />
+        <PhoneShareCard />
         <LanCard />
+        <DevicesCard />
+        <ExploreSettings delay={0.14} />
 
         <Card icon={<HardDrive />} title={t('settings.cache')} delay={0.16}>
           <Row label={t('settings.cacheSize', { size: formatBytes(cache.data ?? 0) })}>

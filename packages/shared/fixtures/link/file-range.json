@@ -1,0 +1,7 @@
+[
+  {"dir":"s2p","frame":{"t":"req","rid":"DDDDDDDDDDDDDDDDDDDDDD","op":"file","args":{"key":"k1","p":"Trip/VID_2.mp4","range":"bytes=100-199"}}},
+  {"dir":"put","rid":"DDDDDDDDDDDDDDDDDDDDDD","headers":{"X-Peek-Status":"206","Content-Type":"video/mp4","Content-Length":"100","X-Peek-Content-Range":"bytes 100-199/4096","X-Peek-Total":"4096","X-Peek-Mtime":"1700000500000"},"bodyLength":100},
+  {"dir":"s2p","frame":{"t":"req","rid":"EEEEEEEEEEEEEEEEEEEEEE","op":"file","args":{"key":"k1","p":"Trip/VID_2.mp4","range":"bytes=5000-"}}},
+  {"dir":"put","rid":"EEEEEEEEEEEEEEEEEEEEEE","headers":{"X-Peek-Status":"416","X-Peek-Content-Range":"bytes */4096","X-Peek-Total":"4096","Content-Length":"0"},"bodyLength":0},
+  {"dir":"s2p","frame":{"t":"cancel","rid":"DDDDDDDDDDDDDDDDDDDDDD"}}
+]

@@ -38,13 +38,14 @@ object PeekFs {
 
     fun hidden(name: String) = name.startsWith(".") || name == TRASH
 
-    data class Meta(val width: Int?, val height: Int?, val duration: Double?, val takenAt: Long?)
+    data class Meta(val width: Int?, val height: Int?, val duration: Double?, val takenAt: Long?, val id: Long? = null)
 
     /** MediaStore metadata for every indexed file directly in (or below) a directory. */
     fun mediaStoreMeta(ctx: Context, dir: String, recursive: Boolean): Map<String, Meta> {
         val out = HashMap<String, Meta>()
         val uri = MediaStore.Files.getContentUri("external")
         val proj = arrayOf(
+            MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DATA,
             MediaStore.MediaColumns.WIDTH,
             MediaStore.MediaColumns.HEIGHT,
@@ -55,7 +56,9 @@ object PeekFs {
         val prefix = dir.trimEnd('/') + "/"
         try {
             ctx.contentResolver.query(uri, proj, "${MediaStore.MediaColumns.DATA} LIKE ?", arrayOf("$prefix%"), null)?.use { c ->
+                val iId = c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                 val iData = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+                val media = PeekMediaServer.get(ctx)
                 val iW = c.getColumnIndex(MediaStore.MediaColumns.WIDTH)
                 val iH = c.getColumnIndex(MediaStore.MediaColumns.HEIGHT)
                 val iO = c.getColumnIndex(MediaStore.MediaColumns.ORIENTATION)
@@ -70,7 +73,9 @@ object PeekFs {
                     if (o == 90 || o == 270) { val t = w; w = h; h = t }
                     val d = if (iD >= 0 && !c.isNull(iD)) c.getLong(iD) / 1000.0 else null
                     val taken = if (iT >= 0 && !c.isNull(iT)) c.getLong(iT) else null
-                    out[path] = Meta(w.takeIf { it > 0 }, h.takeIf { it > 0 }, d?.takeIf { it > 0 }, taken?.takeIf { it > 0 })
+                    val id = c.getLong(iId)
+                    media.rememberId(path, id)
+                    out[path] = Meta(w.takeIf { it > 0 }, h.takeIf { it > 0 }, d?.takeIf { it > 0 }, taken?.takeIf { it > 0 }, id)
                 }
             }
         } catch (_: Exception) {
@@ -143,6 +148,7 @@ object PeekFs {
         o.put("height", m.height)
         o.put("duration", m.duration)
         o.put("takenAt", m.takenAt ?: f.lastModified())
+        o.put("id", meta?.id)
         return o
     }
 
@@ -228,15 +234,7 @@ object PeekFs {
         return a
     }
 
-    fun uniqueFile(dir: File, name: String): File {
-        var f = File(dir, name)
-        if (!f.exists()) return f
-        val base = name.substringBeforeLast('.', name)
-        val e = if (name.contains('.')) "." + name.substringAfterLast('.') else ""
-        var i = 1
-        while (f.exists()) { f = File(dir, "$base ($i)$e"); i++ }
-        return f
-    }
+    fun uniqueFile(dir: File, name: String): File = File(dir, PathGuard.uniqueName(name) { File(dir, it).exists() })
 
     fun uniqueEditFile(dir: File, base: String, suffix: String, ext: String): File {
         var f = File(dir, "$base$suffix.$ext")
@@ -335,5 +333,21 @@ object PeekFs {
             b.saveAttributes()
         } catch (_: Exception) {
         }
+    }
+
+    /**
+     * Open a content:// URI; MediaStore items are opened with setRequireOriginal (Android 10+,
+     * needs ACCESS_MEDIA_LOCATION) so the EXIF GPS block is not redacted. Falls back to the plain URI.
+     */
+    fun openOriginal(ctx: android.content.Context, uri: android.net.Uri): java.io.InputStream {
+        if (android.os.Build.VERSION.SDK_INT >= 29 && uri.authority == android.provider.MediaStore.AUTHORITY &&
+            androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.ACCESS_MEDIA_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            try {
+                ctx.contentResolver.openInputStream(android.provider.MediaStore.setRequireOriginal(uri))?.let { return it }
+            } catch (_: Exception) {
+            }
+        }
+        return ctx.contentResolver.openInputStream(uri) ?: throw java.io.FileNotFoundException(uri.toString())
     }
 }

@@ -50,18 +50,40 @@ export function isInside(root: string, p: string): boolean {
   const r = path.resolve(root);
   const x = path.resolve(p);
   if (x === r) return true;
-  const rel = path.relative(r, x);
-  return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+  const prefix = r.endsWith(path.sep) ? r : r + path.sep;
+  return x.startsWith(prefix);
+}
+
+/** Linear-time trim of any of `chars` from the end (no regex backtracking). */
+export function trimEnd(s: string, chars: string): string {
+  let end = s.length;
+  while (end > 0 && chars.includes(s[end - 1])) end--;
+  return s.slice(0, end);
+}
+
+/** Linear-time trim of any of `chars` from both ends. */
+export function trimChars(s: string, chars: string): string {
+  let start = 0;
+  while (start < s.length && chars.includes(s[start])) start++;
+  return trimEnd(s.slice(start), chars);
+}
+
+/**
+ * Resolve a user supplied absolute host path and verify it lies inside one of `roots`
+ * (when roots are configured). Returns the normalised absolute path.
+ */
+export function resolveHostPath(p: string, roots: string[]): string {
+  if (typeof p !== 'string' || !p || p.includes('\0')) throw new HttpError(400, 'Invalid path');
+  const abs = path.resolve(p);
+  if (roots.length && !roots.some((r) => isInside(r, abs))) throw new HttpError(403, 'Path is outside of the allowed folders');
+  return abs;
 }
 
 const WIN_RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
 
 /** Make a single path segment safe for every OS. */
 export function sanitizeName(name: string): string {
-  let n = String(name)
-    .replace(/[\u0000-\u001f<>:"/\\|?*]/g, '_')
-    .replace(/[. ]+$/g, '')
-    .trim();
+  let n = trimEnd(String(name).replace(/[\u0000-\u001f<>:"/\\|?*]/g, '_'), '. ').trim();
   if (!n || n === '.' || n === '..') n = 'untitled';
   const base = n.split('.')[0];
   if (WIN_RESERVED.test(base)) n = `_${n}`;

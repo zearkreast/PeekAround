@@ -9,7 +9,10 @@ import { resolveConfig, type ServerOptions } from './config.js';
 import { getSettings, type Ctx } from './context.js';
 import { Db } from './db.js';
 import { EventHub } from './events.js';
+import { foldText, isValidTimeZone, systemTimeZone } from '@peekaround/shared';
+import { ExploreService } from './explore.js';
 import { Ffmpeg } from './ffmpeg.js';
+import { GeoService } from './geo.js';
 import { JobService } from './jobs/index.js';
 import { LibraryService } from './library.js';
 import { Scanner } from './media/scanner.js';
@@ -21,6 +24,14 @@ import { coreRoutes, serverInfo } from './routes/core.js';
 import { fileRoutes } from './routes/files.js';
 import { jobRoutes } from './routes/jobs.js';
 import { mediaRoutes } from './routes/media.js';
+import { exploreRoutes } from './routes/explore.js';
+import { corsDelegator, registerSecurity, securityOptionsFromEnv, type SecurityOptions } from './security.js';
+import { deviceRoutes } from './routes/devices.js';
+import { remoteRoutes } from './routes/remote.js';
+import { DeviceHub } from './devices/hub.js';
+import { deviceAccessHook } from './devices/access.js';
+import { megaClient } from './remote/mega.js';
+import type { Duplex } from 'node:stream';
 
 export interface PeekServer {
   app: FastifyInstance;
@@ -29,6 +40,8 @@ export interface PeekServer {
   port: number;
   /** Desktop: expose the gallery on the local network on an extra port. */
   setLan(enabled: boolean, port?: number): Promise<{ enabled: boolean; urls: string[] }>;
+  /** the LAN http.Server while sharing is on (tests / diagnostics) */
+  readonly lanServer: http.Server | null;
   close(): Promise<void>;
 }
 
@@ -42,11 +55,20 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
   await ffmpeg.check();
   const lib = new LibraryService(db, events);
   const thumbs = new ThumbService(cfg.thumbDir, ffmpeg);
-  const scanner = new Scanner(db, lib, ffmpeg, thumbs, events);
+  const geo = new GeoService(cfg.webDir);
+  registerSearch(db, geo);
+  const scanner = new Scanner(db, lib, ffmpeg, thumbs, events, geo);
   const watcher = new WatcherService(lib, scanner, cfg.watchPoll);
   const jobs = new JobService(events, cfg.tempDir);
-  const ctx: Ctx = { cfg, db, events, lib, ffmpeg, thumbs, scanner, watcher, jobs, lan: { enabled: false, port: 8080 } };
+  const ctx = { cfg, db, events, lib, ffmpeg, thumbs, scanner, watcher, jobs, geo, lan: { enabled: false, port: 8080 } } as Omit<Ctx, 'explore'> as Ctx;
+  ctx.explore = new ExploreService(ctx);
+  ctx.mega = opts.mega ?? megaClient();
+  ctx.devices = new DeviceHub(ctx);
+  // home time zone: persisted on first run (server zone), used for videos / mtime
+  const stored = db.getSetting<{ homeTimeZone?: string }>('settings', {});
+  if (!isValidTimeZone(stored.homeTimeZone)) db.setSetting('settings', { ...getSettings(ctx), homeTimeZone: systemTimeZone() });
   scanner.showHidden = getSettings(ctx).showHidden;
+  scanner.homeTimeZone = getSettings(ctx).homeTimeZone;
 
   const app = Fastify({
     logger: cfg.logger ? { level: 'info' } : false,
@@ -55,7 +77,9 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
     forceCloseConnections: true,
   });
 
-  await app.register(cors, { origin: true, credentials: false, methods: ['GET', 'HEAD', 'PUT', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] });
+  const sec = opts.security ?? securityOptionsFromEnv();
+  await registerSecurity(app, ctx, sec);
+  await app.register(cors, { delegator: corsDelegator(sec) } as never);
   await app.register(websocket, { options: { maxPayload: 1024 * 1024 } });
   const webDir = cfg.webDir && fs.existsSync(path.join(cfg.webDir, 'index.html')) ? cfg.webDir : null;
   await app.register(fastifyStatic, {
@@ -75,14 +99,20 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
     reply.code(code).send({ error: err.message });
   });
 
+  // device folders/media are invisible (404) to viewers that may not see them (see devices/access.ts)
+  app.addHook('preHandler', deviceAccessHook(ctx));
+
   await app.register(async (scope) => {
     coreRoutes(scope, ctx);
     browseRoutes(scope, ctx);
     mediaRoutes(scope, ctx);
     jobRoutes(scope, ctx);
+    exploreRoutes(scope, ctx);
+    remoteRoutes(scope, ctx);
   });
   // file routes add raw-body content type parsers → keep them in their own encapsulated scope
   await app.register(async (scope) => fileRoutes(scope, ctx));
+  await app.register(async (scope) => deviceRoutes(scope, ctx));
 
   // SPA fallback
   app.setNotFoundHandler((req, reply) => {
@@ -103,6 +133,7 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
   const addr = app.server.address();
   const port = typeof addr === 'object' && addr ? addr.port : cfg.port;
   const shownHost = cfg.host === '0.0.0.0' || cfg.host === '::' ? '127.0.0.1' : cfg.host;
+  ctx.devices.selfUrl = `http://${shownHost.includes(':') ? `[${shownHost}]` : shownHost}:${port}`;
 
   watcher.sync();
   void scanner.scanAll();
@@ -123,12 +154,24 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
   if (cfg.mdns && cfg.mode === 'server') void publishMdns(port);
 
   let lanServer: http.Server | null = null;
+  /** upgraded (WebSocket) sockets that came in through the LAN server: http.Server no longer tracks them */
+  const lanUpgraded = new Set<Duplex>();
+
+  const stopLan = async () => {
+    if (!lanServer) return;
+    const srv = lanServer;
+    lanServer = null;
+    const closed = new Promise<void>((r) => srv.close(() => r()));
+    // "stop sharing" must cut everything: phone tunnels, event sockets, in-flight replies/downloads
+    for (const s of lanUpgraded) s.destroy();
+    lanUpgraded.clear();
+    srv.closeAllConnections?.();
+    await closed;
+  };
 
   const setLan = async (enabled: boolean, lanPort = 8080) => {
     if (lanServer) {
-      await new Promise<void>((r) => lanServer!.close(() => r()));
-      lanServer.closeAllConnections?.();
-      lanServer = null;
+      await stopLan();
       mdns?.stop();
       mdns = null;
     }
@@ -138,8 +181,14 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
         (req as http.IncomingMessage & { peekLan?: boolean }).peekLan = true;
         app.routing(req, res);
       });
+      // long uploads / replies / downloads must never be cut by a request timeout
+      srv.requestTimeout = 0;
+      srv.keepAliveTimeout = 72_000;
+      srv.headersTimeout = 60_000;
       srv.on('upgrade', (req, socket, head) => {
         (req as http.IncomingMessage & { peekLan?: boolean }).peekLan = true;
+        lanUpgraded.add(socket);
+        socket.once('close', () => lanUpgraded.delete(socket));
         app.server.emit('upgrade', req, socket, head);
       });
       await new Promise<void>((resolve, reject) => {
@@ -160,14 +209,29 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
     port,
     url: `http://${shownHost}:${port}`,
     setLan,
+    get lanServer() {
+      return lanServer;
+    },
     async close() {
       clearInterval(cleanupTimer);
       mdns?.stop();
-      if (lanServer) lanServer.close();
+      await stopLan();
+      await ctx.devices.close();
+      await jobs.close();
       await watcher.close();
       await scanner.stop();
+      ctx.explore.close();
       await app.close();
+      events.close();
       db.close();
     },
   };
+}
+
+/** SQL function behind free-text search: folded name + place (city, province, country names) + camera. */
+function registerSearch(db: Db, geo: GeoService) {
+  db.raw.function('peek_search', { deterministic: true }, (name: unknown, city: unknown, cc: unknown, admin1: unknown, make: unknown, model: unknown) => {
+    const str = (v: unknown) => (v == null ? '' : String(v));
+    return `${foldText(str(name))} ${foldText(str(city))} ${geo.placeText(cc == null ? null : String(cc), admin1 == null ? null : String(admin1))} ${foldText(`${str(make)} ${str(model)}`)}`;
+  });
 }

@@ -21,13 +21,27 @@ Aynı uygulama üç şekilde çalışır:
 ## Özellikler
 
 **Galeri**
-- Kütüphane = bir veya birden çok klasör; klasör ağacı, zaman çizelgesi (ay başlıkları + tarih çubuğu), favoriler, arama, sıralama/filtre
-- Sanallaştırılmış *justified* ızgara (on binlerce dosya akıcı), kare ızgara, boyut kaydırıcısı
-- Küçük resimden tam ekrana **paylaşılan öğe geçişi**, zoom/pan/pinch, kaydırarak gezinme, film şeridi, EXIF bilgi paneli
+- Kütüphane = bir veya birden çok klasör; klasör ağacı, zaman çizelgesi (gün başlıkları + yer adı), favoriler, arama, sıralama/filtre
+- Kesin yerleşimli *justified* ızgara: 100 bin dosyada bile kayma/zıplama yok; Google Fotoğraflar tarzı **tarih kaydırıcısı** ile istediğin aya anında atla
+- Telefonda **iki parmakla ızgara yoğunluğu**, uzun basıp sürükleyerek çoklu seçim, alt menü (Fotoğraflar / Keşfet / Kitaplık / Ayarlar), Android geri tuşu desteği
+- Küçük resimden tam ekrana **paylaşılan öğe geçişi**; görüntüleyicide parmağı takip eden kaydırma, odak noktalı pinch-zoom, çift dokunma, aşağı kaydırıp kapatma, yukarı kaydırıp bilgi; EXIF + konum + kamera bilgisi
 - Video: özel oynatıcı (önizlemeli zaman çubuğu, hız, döngü, PiP, kareyi fotoğraf olarak kaydet); tarayıcının oynatamadığı formatlar (MKV/HEVC/AVI…) sunucuda anlık dönüştürülür
 - Videoların üzerine gelince sessiz önizleme, thumbhash ile anında bulanık yer tutucu
 - Seçim: tık, Shift-aralık, Ctrl, **kement (dikdörtgen sürükleme)**; toplu favori/indir/taşı/kopyala/sil
 - Diskteki değişiklikler **canlı** yansır (dosya izleme + WebSocket)
+
+**Keşfet — otomatik gruplama (Google Fotoğraflar gibi)**
+- **Anılar:** “Geçmişte bugün” ve otomatik bulunan **geziler** (“Antalya gezisi · Tem 2024”), hikâye tarzı anı oynatıcı
+- **Yerler + harita:** GPS’ten çevrimdışı yer adı (“Kadıköy, İstanbul”), il/eyalet bazında gruplar, küçük resimli kümelerle harita (harita karoları için internet gerekir, yer listesi çevrimdışı çalışır)
+- **Türler + kameralar:** videolar, ekran görüntüleri, selfie’ler, panoramalar, animasyonlar; telefon/kamera modeline göre; yıllar
+- Doğal dille arama: “istanbul 2023 video”, “Ağustos 2024”, “selfie”
+- Tarihler fotoğrafın çekildiği yerin saatine göre gruplanır (Ayarlar → Keşfet’ten ev saat dilimi)
+
+**Telefon ↔ PC**
+- Masaüstü uygulaması ağda paylaşırken telefon bağlanınca, **telefonda seçtiğin klasörler PC’de görünür** (ilk bağlantıda PC’de 4 haneli kodla onay)
+- PC’den telefon klasörünü gez, izle, **PC’ye kopyala**; PC’deki dosyaları **telefona gönder** (telefondaki dosyalar PC’den silinemez/değiştirilemez)
+- Telefonda **Yükle** → PC’ye; **Telefona kaydet** → her seferinde klasör sorulur, dosyalar kalıcı kaydedilir ve galeride görünür; tarih ve konum bilgisi korunur
+- Telefon ekranı kapalıyken de çalışır (bildirimli arka plan servisi, “Durdur” düğmesi)
 
 **Ekleme**
 - Uygulamanın üzerine **dosya, klasör veya zip sürükle-bırak** (kenar çubuğundaki/kart üzerindeki klasöre bırakma da olur)
@@ -35,6 +49,7 @@ Aynı uygulama üç şekilde çalışır:
 - Kütüphanedeki zip’lere “Göz at” ile geçici bakma; Türkçe Windows zip’lerindeki (CP857) dosya adları doğru çözülür
 - Masaüstünde bırakılan klasör: **kütüphaneye bağla** (kopyalamadan) veya **buraya kopyala**
 - Android’de **Paylaş → PeekAround**
+- **MEGA linkleri:** mega.nz dosya/klasör linkini yapıştır, sürükle ya da MEGA uygulamasından paylaş → ağacı gör, seç, kalıcı indir veya geçici aç
 
 **Düzenleme (her zaman kopyaya: `ad_edit.jpg`, `ad_edit-2.jpg` …)**
 - Fotoğraf editörü: pozlama, kontrast, sıcaklık, gölge/vurgu, vinyet, gren… (WebGL), filtre ön ayarları, kırp/döndür/çevir/düzleştir, **özel fontlu metin katmanları**, geri/ileri al, önce/sonra
@@ -82,9 +97,12 @@ docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/F
 | `PEEK_READONLY` | `false` | Yükleme/düzenleme/silmeyi kapat |
 | `PEEK_BROWSE_ROOTS` | `/media` | “Klasör ekle” gezgininin gösterebileceği dizinler |
 | `PEEK_PORT` | `8080` | Port |
-| `TZ` | – | Saat dilimi (ör. `Europe/Istanbul`) |
+| `TZ` | – | Saat dilimi (ör. `Europe/Istanbul`); ilk açılışta “ev saat dilimi” olur |
+| `PEEK_ALLOWED_HOSTS` | – | Alan adıyla erişiyorsan (ör. ters vekil arkasında `foto.ornek.com`) virgülle ekle; `*` kontrolü kapatır |
+| `PEEK_ALLOWED_ORIGINS` | – | API’yi çağırabilecek ek tarayıcı kökenleri |
 
 > Kimlik doğrulama yoktur: PeekAround’u yalnızca güvendiğin ağlarda çalıştır ya da önüne bir ters vekil (reverse proxy) + şifre koy.
+> Yine de tarayıcı tabanlı saldırılara karşı korunur: bilinmeyen alan adları (DNS rebinding), başka sitelerden gelen yazma istekleri (CSRF) ve aşırı istekler (hız sınırı) reddedilir. `.local`, `.lan`, IP adresleri ve tek kelimelik ağ adları (ör. `nas`) her zaman çalışır.
 
 ### 🖥️ Masaüstü
 
@@ -101,6 +119,8 @@ Releases’tan `PeekAround-*.apk` indir ve yükle (bilinmeyen kaynaklara izin ve
 - **Bir PeekAround sunucusuna bağlan** — ağdaki sunucular otomatik bulunur ya da adresi yaz.
 
 Bağlantıyı daha sonra Ayarlar → Bağlantı’dan değiştirebilirsin.
+
+**Telefon klasörünü PC’de göstermek için:** PC’de Ayarlar → Ağ → “Galeriyi yerel ağda paylaş”ı aç; telefonda Ayarlar → **Telefon paylaşımı** → klasörleri seç ve aç. PC’de çıkan penceredeki kodu telefondakiyle karşılaştırıp **İzin ver** de. İzinler: medya, konum (fotoğrafların konum bilgisi korunsun diye) ve bildirim.
 
 ---
 
@@ -163,6 +183,11 @@ git push origin v1.0.0
 ```
 
 İmzalı (release) APK için repo Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Yoksa debug imzalı APK üretilir.
+
+## Atıflar
+
+- Yer adları: [GeoNames](https://www.geonames.org/) (CC BY 4.0) — `packages/web/public/geo/ATTRIBUTION.txt`
+- Harita: © [OpenStreetMap](https://www.openstreetmap.org/copyright) katkıcıları (Leaflet, supercluster)
 
 ## Lisans
 

@@ -1,0 +1,4 @@
+cities.bin — offline reverse geocoding data for PeekAround (gzip, layout: packages/shared/src/geo.ts)
+Place names: GeoNames (https://www.geonames.org), CC BY 4.0
+https://creativecommons.org/licenses/by/4.0/
+Derived from cities5000.zip, admin1CodesASCII.txt and TR.zip (2026-11-05).

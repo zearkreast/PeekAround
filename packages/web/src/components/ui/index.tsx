@@ -11,9 +11,13 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useDragControls } from 'motion/react';
 import { Check, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { BACK, useBackHandler } from '@/lib/backStack';
+import { useIsMobile } from '@/lib/useMedia';
+import { useDialogFocus } from '@/lib/useDialogFocus';
+import { useT } from '@/i18n';
 
 // ───────────────────────── Button ─────────────────────────
 
@@ -71,7 +75,7 @@ export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTM
         aria-label={label}
         title={label}
         className={cn(
-          'inline-flex shrink-0 items-center justify-center transition-[transform,background,color] duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none [&>svg]:size-[18px]',
+          'touch-target inline-flex shrink-0 items-center justify-center transition-[transform,background,color] duration-150 active:scale-90 disabled:opacity-40 disabled:pointer-events-none [&>svg]:size-[18px]',
           s,
           tone === 'glass' ? 'glass border border-line text-fg hover:bg-surface-3' : active ? 'bg-surface-3 text-fg' : 'text-dim hover:bg-surface-2 hover:text-fg',
           className,
@@ -329,6 +333,11 @@ export function Modal({
   width?: number;
   className?: string;
 }) {
+  const sheet = useIsMobile();
+  const drag = useDragControls();
+  const t = useT();
+  const panel = useDialogFocus<HTMLDivElement>(open);
+  useBackHandler(open, onClose, BACK.modal, 'modal');
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -343,28 +352,53 @@ export function Modal({
   return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-[80] flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <motion.div
+          className={cn('fixed inset-0 z-[80] flex justify-center', sheet ? 'items-end' : 'items-center p-4')}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
           <motion.div className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-sm" onClick={onClose} />
           <motion.div
+            ref={panel}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.97 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-            style={{ maxWidth: width }}
-            className={cn('relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-3xl border border-line bg-elev shadow-soft', className)}
+            aria-label={typeof title === 'string' ? title : undefined}
+            initial={sheet ? { y: '100%' } : { opacity: 0, y: 24, scale: 0.96 }}
+            animate={sheet ? { y: 0 } : { opacity: 1, y: 0, scale: 1 }}
+            exit={sheet ? { y: '100%' } : { opacity: 0, y: 12, scale: 0.97 }}
+            transition={sheet ? { type: 'spring', stiffness: 420, damping: 40 } : { type: 'spring', stiffness: 420, damping: 32 }}
+            drag={sheet ? 'y' : false}
+            dragListener={false}
+            dragControls={drag}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 0.8 }}
+            onDragEnd={(_, i) => {
+              if (i.offset.y > 110 || i.velocity.y > 600) onClose();
+            }}
+            style={{ maxWidth: sheet ? undefined : width }}
+            className={cn(
+              'relative flex w-full flex-col overflow-hidden border border-line bg-elev shadow-soft outline-none',
+              sheet ? 'max-h-[92dvh] rounded-t-[28px] border-b-0 pb-[env(safe-area-inset-bottom)]' : 'max-h-[88vh] rounded-3xl',
+              className,
+            )}
           >
+            {sheet && (
+              <div className="flex h-6 shrink-0 cursor-grab touch-none items-center justify-center" onPointerDown={(e) => drag.start(e)}>
+                <span className="h-1.5 w-10 rounded-full bg-line-strong" />
+              </div>
+            )}
             {title && (
-              <div className="flex items-center justify-between gap-4 px-6 pt-5 pb-2">
+              <div className={cn('flex items-center justify-between gap-4 px-6 pb-2', sheet ? 'touch-none pt-1' : 'pt-5')} onPointerDown={sheet ? (e) => drag.start(e) : undefined}>
                 <h2 className="font-display text-lg font-semibold">{title}</h2>
-                <IconButton label="Close" size="sm" onClick={onClose}>
+                <IconButton label={t('common.close')} size="sm" onClick={onClose} onPointerDown={(e) => e.stopPropagation()}>
                   <X />
                 </IconButton>
               </div>
             )}
-            <div className="min-h-0 flex-1 overflow-auto px-6 py-3">{children}</div>
-            {footer && <div className="flex items-center justify-end gap-2 border-t border-line px-6 py-4">{footer}</div>}
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-6 py-3">{children}</div>
+            {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-6 py-4">{footer}</div>}
           </motion.div>
         </motion.div>
       )}
@@ -393,6 +427,7 @@ export function Popover({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number; origin: string } | null>(null);
+  useBackHandler(open, onClose, BACK.sheet, 'popover');
   useLayoutEffect(() => {
     if (!open || !anchor.current) return;
     const place = () => {
@@ -497,6 +532,7 @@ export function MenuSep() {
 export function ContextMenu({ at, onClose, children }: { at: { x: number; y: number } | null; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState(at);
+  useBackHandler(!!at, onClose, BACK.sheet, 'menu');
   useLayoutEffect(() => {
     if (!at) return;
     const el = ref.current;
@@ -661,3 +697,5 @@ export function ConfirmDialog({
     </Modal>
   );
 }
+
+export { BottomSheet, SheetItem } from './sheet';

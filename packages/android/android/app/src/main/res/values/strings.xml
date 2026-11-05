@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">PeekAround</string>
-    <string name="title_activity_main">PeekAround</string>
-    <string name="package_name">app.peekaround</string>
-    <string name="custom_url_scheme">app.peekaround</string>
+    <string name="app_name" translatable="false">PeekAround</string>
+    <string name="title_activity_main" translatable="false">PeekAround</string>
+    <string name="package_name" translatable="false">app.peekaround</string>
+    <string name="custom_url_scheme" translatable="false">app.peekaround</string>
 </resources>

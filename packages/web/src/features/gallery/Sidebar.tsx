@@ -18,6 +18,7 @@ import {
   Type,
   WifiOff,
   X,
+  Compass,
 } from 'lucide-react';
 import type { FolderRef, Library } from '@peekaround/shared';
 import { useBackend, useConnection, useInfo } from '@/backend';
@@ -32,8 +33,10 @@ import { useChrome } from '@/store/chrome';
 import { useIsMobile } from '@/lib/useMedia';
 import { useScan } from '@/store/scan';
 import { IconButton, ProgressRing } from '@/components/ui';
+import { BACK, useBackHandler } from '@/lib/backStack';
 import { LogoMark, LogoWordmark } from '@/components/Logo';
 import { LibraryEditor } from '@/features/settings/LibraryEditor';
+import { DevicesNav } from '@/features/devices/DevicesNav';
 
 function NavItem({ to, icon, label, collapsed, end }: { to: string; icon: ReactNode; label: string; collapsed: boolean; end?: boolean }) {
   return (
@@ -82,6 +85,7 @@ function DirTree({ folderId, dir, depth }: { folderId: string; dir: string; dept
 }
 
 function DirNode({ folderId, dir, name, count, depth }: { folderId: string; dir: string; name: string; count: number; depth: number }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const loc = useLocation();
   const href = folderHref(folderId, dir);
@@ -97,7 +101,7 @@ function DirNode({ folderId, dir, name, count, depth }: { folderId: string; dir:
       >
         <button
           type="button"
-          aria-label="Expand"
+          aria-label={t('mobile.expand')}
           onClick={() => setOpen((o) => !o)}
           className="grid size-5 shrink-0 place-items-center rounded text-faint hover:text-fg"
         >
@@ -121,6 +125,7 @@ function DirNode({ folderId, dir, name, count, depth }: { folderId: string; dir:
 }
 
 function LibraryRow({ lib, collapsed, onEdit }: { lib: Library; collapsed: boolean; onEdit: () => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const loc = useLocation();
   const active = loc.pathname === libraryHref(lib.id) || lib.folders.some((f) => loc.pathname.startsWith(`/folder/${f.id}`));
@@ -148,7 +153,7 @@ function LibraryRow({ lib, collapsed, onEdit }: { lib: Library; collapsed: boole
             <span className="mr-1 text-[11px] text-faint tabular-nums group-hover:hidden">{lib.mediaCount || ''}</span>
             <button
               type="button"
-              aria-label="Expand"
+              aria-label={t('mobile.expand')}
               onClick={() => setOpen((o) => !o)}
               className="mr-1 hidden size-6 place-items-center rounded-md text-faint hover:bg-surface-2 hover:text-fg group-hover:grid"
             >
@@ -221,6 +226,7 @@ export function Sidebar() {
   const setChrome = useChrome((s) => s.set);
   const loc = useLocation();
   const collapsed = mobile ? false : prefCollapsed;
+  useBackHandler(mobile && navOpen, () => setChrome({ navOpen: false }), BACK.drawer, 'drawer');
   // close the drawer after navigating
   useEffect(() => {
     if (mobile) setChrome({ navOpen: false });
@@ -242,6 +248,7 @@ export function Sidebar() {
       <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-3">
         <NavItem to="/" end icon={<Home />} label={t('nav.home')} collapsed={collapsed} />
         <NavItem to="/timeline" icon={<CalendarDays />} label={t('nav.timeline')} collapsed={collapsed} />
+        <NavItem to="/explore" icon={<Compass />} label={t('mobile.nav.explore')} collapsed={collapsed} />
         <NavItem to="/favorites" icon={<Heart />} label={t('nav.favorites')} collapsed={collapsed} />
 
         <SectionTitle
@@ -275,6 +282,8 @@ export function Sidebar() {
             </div>
           </>
         )}
+
+        <DevicesNav collapsed={collapsed} title={(c) => <SectionTitle collapsed={collapsed}>{c}</SectionTitle>} />
 
         <SectionTitle collapsed={collapsed}>{t('nav.tools')}</SectionTitle>
         <NavItem to="/collage" icon={<LayoutGrid />} label={t('nav.collage')} collapsed={collapsed} />

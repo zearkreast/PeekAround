@@ -1,4 +1,7 @@
 import type {
+  BrowseSkeleton,
+  ExploreResult,
+  GeoPoints,
   BrowseQuery,
   BrowseResult,
   Crumb,
@@ -24,6 +27,9 @@ import { ApiError, type Backend, type ConnectionState, type SaveEditOptions, typ
 import { loadLocal, saveLocal, type LocalConfig, type LocalFolder } from './config';
 import { readFontInfo } from './fontname';
 import { PeekLocal, writeBlob, type NativeFile } from './plugin';
+import { buildSkeleton } from './skeleton';
+import { buildExplore, filterExplore, geoPointsFor } from './explore';
+import { ensureIndexed } from './indexBridge';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#f97316', '#10b981', '#06b6d4', '#3b82f6'];
 const ICONS = ['camera', 'images', 'film', 'heart', 'star', 'plane'];
@@ -61,6 +67,9 @@ export class AndroidLocalBackend implements Backend {
   private dirs!: { cacheDir: string; filesDir: string };
   private ready: Promise<void>;
   private handles: { remove(): Promise<void> }[] = [];
+  /** media id → MediaStore _ID (fast native thumbnails via /_peek/thumb?id=) */
+  private msIds = new Map<string, number>();
+  private nativeSig = '';
 
   constructor(label = 'Telefon') {
     this.label = label;
@@ -71,6 +80,7 @@ export class AndroidLocalBackend implements Backend {
   private async init() {
     const r = await PeekLocal.roots();
     this.dirs = { cacheDir: r.cacheDir, filesDir: r.filesDir };
+    this.syncNative();
     this.handles.push(
       await PeekLocal.addListener('changed', () => {
         this.cache.clear();
@@ -121,6 +131,25 @@ export class AndroidLocalBackend implements Backend {
 
   private save() {
     saveLocal(this.cfg);
+    this.syncNative();
+  }
+
+  /**
+   * Keep the native side in step with the libraries: /_peek/* only serves library folders + temp
+   * sessions (+ the app's cache/files dirs, always allowed natively), and the metadata indexer
+   * (GPS, camera, offset) walks the library folders. Called after load and on every change.
+   */
+  private syncNative() {
+    if (!this.dirs) return;
+    const lib = this.cfg.libraries.flatMap((l) => l.folders.map((f) => f.path));
+    const temp = this.cfg.temp.map((t) => t.path);
+    const allowed = [...new Set([...lib, ...temp, this.dirs.cacheDir, this.dirs.filesDir].filter(Boolean))].sort();
+    const sig = allowed.join('\n');
+    if (sig === this.nativeSig) return;
+    this.nativeSig = sig;
+    void PeekLocal.setAllowedRoots({ paths: allowed }).catch(() => {});
+    const roots = [...new Set(lib)].sort();
+    if (roots.length) void ensureIndexed(roots, null).catch(() => {});
   }
 
   private emit(e: ServerEvent) {
@@ -141,7 +170,7 @@ export class AndroidLocalBackend implements Backend {
   }
 
   private folderRef(f: ReturnType<AndroidLocalBackend['folder']>): FolderRef {
-    return { id: f.id, path: f.path, name: f.name, libraryId: f.libraryId, temp: f.temp, expiresAt: f.expiresAt, sourceName: f.sourceName, mediaCount: this.cfg.counts[f.id] ?? 0 };
+    return { id: f.id, path: f.path, name: f.name, libraryId: f.libraryId, temp: f.temp, expiresAt: f.expiresAt, sourceName: f.sourceName, mediaCount: this.cfg.counts[f.id] ?? 0, device: null };
   }
 
   /** absolute path → { folderId, dir, name } within the libraries */
@@ -157,8 +186,10 @@ export class AndroidLocalBackend implements Backend {
   private toItem(n: NativeFile, f: { id: string; path: string }): MediaItem {
     const rel = n.path.slice(f.path.length + 1);
     const ext = extOf(n.name);
+    const id = encId(n.path);
+    if (n.id != null) this.msIds.set(id, n.id);
     return {
-      id: encId(n.path),
+      id,
       folderId: f.id,
       dir: rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '',
       name: n.name,
@@ -170,6 +201,8 @@ export class AndroidLocalBackend implements Backend {
       height: n.height,
       duration: n.duration,
       takenAt: n.takenAt || n.mtime,
+      localAt: (n.takenAt || n.mtime) - new Date(n.takenAt || n.mtime).getTimezoneOffset() * 60000,
+      flags: 0,
       thumbhash: null,
       favorite: this.cfg.favorites.includes(n.path),
       playback: ext === 'heic' || ext === 'heif' ? 'convert' : 'direct',
@@ -191,7 +224,7 @@ export class AndroidLocalBackend implements Backend {
   async info(): Promise<ServerInfo> {
     return {
       name: APP_NAME,
-      version: '1.0.0',
+      version: '1.1.0',
       apiVersion: API_VERSION,
       mode: 'android-local',
       hostname: this.label,
@@ -316,6 +349,29 @@ export class AndroidLocalBackend implements Backend {
   // ───────────────────────── browsing ─────────────────────────
 
   async browse(q: BrowseQuery): Promise<BrowseResult> {
+    const all = await this.browseAll(q);
+    const offset = q.offset ?? 0;
+    const limit = q.limit ?? 600;
+    return { ...all, folders: offset ? [] : all.folders, archives: offset ? [] : all.archives, items: all.items.slice(offset, offset + limit) };
+  }
+
+  async skeleton(q: BrowseQuery): Promise<BrowseSkeleton> {
+    const all = await this.browseAll(q);
+    return buildSkeleton(all.items, q);
+  }
+
+  async explore(): Promise<ExploreResult> {
+    await this.ready;
+    return buildExplore(await this.collect(this.allFolders().filter((f) => !f.temp)));
+  }
+
+  async geoPoints(q: BrowseQuery): Promise<GeoPoints> {
+    const all = await this.browseAll(q);
+    return geoPointsFor(all.items);
+  }
+
+  /** browse without paging: the full, filtered and sorted item list */
+  private async browseAll(q: BrowseQuery): Promise<BrowseResult> {
     await this.ready;
     const libs = await this.libraries();
     let lib = q.libraryId ? libs.libraries.find((l) => l.id === q.libraryId) : undefined;
@@ -364,10 +420,7 @@ export class AndroidLocalBackend implements Backend {
     if (q.kind === 'image') items = items.filter((i) => i.kind === 'image');
     else if (q.kind === 'video') items = items.filter((i) => i.kind === 'video');
     else if (q.kind === 'favorites') items = items.filter((i) => i.favorite && i.kind !== 'audio');
-    if (q.q) {
-      const s = q.q.toLocaleLowerCase();
-      items = items.filter((i) => i.name.toLocaleLowerCase().includes(s));
-    }
+    // free-text search (name, place, camera, type and date words) is handled by filterExplore below
     const dirMul = q.order === 'asc' ? 1 : -1;
     const key = q.sort ?? 'takenAt';
     items.sort((a, b) => {
@@ -375,10 +428,10 @@ export class AndroidLocalBackend implements Backend {
       const vb = key === 'name' ? b.name.toLocaleLowerCase() : key === 'kind' ? b.kind : b[key];
       return (va < vb ? -1 : va > vb ? 1 : 0) * dirMul;
     });
-    const total = items.length;
-    const offset = q.offset ?? 0;
-    const limit = q.limit ?? 600;
-    return { crumbs, folders: offset ? [] : folders, roots, items: items.slice(offset, offset + limit), total, archives: offset ? [] : archives, target };
+    if (q.from != null) items = items.filter((i) => i.localAt >= q.from!);
+    if (q.to != null) items = items.filter((i) => i.localAt < q.to!);
+    items = filterExplore(items, q);
+    return { crumbs, folders, roots, items, total: items.length, archives, target };
   }
 
   private async collect(fs: ReturnType<AndroidLocalBackend['folder']>[]) {
@@ -408,7 +461,7 @@ export class AndroidLocalBackend implements Backend {
     const d = await PeekLocal.details({ path });
     const f = this.allFolders().find((x) => path.startsWith(x.path + '/')) ?? { id: '', path: dirname(path) };
     const item = this.toItem(d, f);
-    return { ...item, path, exif: (d.exif as MediaDetails['exif']) ?? null };
+    return { ...item, path, exif: (d.exif as MediaDetails['exif']) ?? null, gps: null, place: null, camera: null, tzOffset: null };
   }
 
   async setFavorite(ids: string[], favorite: boolean) {
@@ -430,13 +483,18 @@ export class AndroidLocalBackend implements Backend {
     return `/_peek/${kind}?p=${encodeURIComponent(path)}${extra}`;
   }
   thumbUrl(id: string, size: number) {
-    return this.peek('thumb', decId(id), `&s=${size <= 320 ? 320 : size <= 640 ? 640 : 1600}`);
+    const ms = this.msIds.get(id);
+    return this.peek('thumb', decId(id), `&s=${size <= 320 ? 320 : size <= 640 ? 640 : 1600}${ms != null ? `&id=${ms}` : ''}`);
   }
   fileUrl(id: string) {
     return this.peek('file', decId(id));
   }
   displayUrl(item: Pick<MediaItem, 'id' | 'playback' | 'kind'>) {
     return item.playback === 'convert' ? this.peek('display', decId(item.id)) : this.fileUrl(item.id);
+  }
+  zoomUrl(item: Pick<MediaItem, 'id' | 'playback' | 'kind'>) {
+    // /_peek/display renders a JPEG with the longest side ≤ 4096
+    return this.peek('display', decId(item.id));
   }
   streamUrl(id: string) {
     return this.fileUrl(id);

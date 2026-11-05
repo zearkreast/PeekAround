@@ -130,6 +130,26 @@ async function startServer() {
   updateTray();
 }
 
+/** our own pages: the embedded server origin (and the Vite dev server when not packaged) */
+function isAppUrl(url: string): boolean {
+  try {
+    const o = new URL(url).origin;
+    return o === new URL(server!.url).origin || (!app.isPackaged && o === 'http://localhost:5173');
+  } catch {
+    return false;
+  }
+}
+
+/** only plain web links may leave the app — never file:, javascript:, custom schemes */
+function isExternalWebUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (u.protocol === 'https:' || u.protocol === 'http:') && !isAppUrl(url);
+  } catch {
+    return false;
+  }
+}
+
 function createWindow() {
   const b = prefs.bounds;
   const dark = nativeTheme.shouldUseDarkColors;
@@ -158,15 +178,17 @@ function createWindow() {
   if (b?.maximized) win.maximize();
   win.once('ready-to-show', () => win?.show());
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url) && !url.startsWith(server!.url)) void shell.openExternal(url);
+    if (isExternalWebUrl(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith(server!.url) && !url.startsWith('http://localhost:5173')) {
-      e.preventDefault();
-      void shell.openExternal(url);
-    }
+    if (isAppUrl(url)) return;
+    e.preventDefault();
+    if (isExternalWebUrl(url)) void shell.openExternal(url);
   });
+  // no <webview>, no permission prompts (camera, mic, geolocation, notifications…)
+  win.webContents.on('will-attach-webview', (e) => e.preventDefault());
+  win.webContents.session.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'));
   const saveBounds = () => {
     if (!win) return;
     prefs.bounds = { ...win.getNormalBounds(), maximized: win.isMaximized() };
@@ -211,7 +233,7 @@ function registerIpc() {
   });
   ipcMain.handle('peek:show-in-folder', (_e, p: string) => shell.showItemInFolder(p));
   ipcMain.handle('peek:open-external', (_e, url: string) => {
-    if (/^https?:\/\//.test(url)) return shell.openExternal(url);
+    if (typeof url === 'string' && isExternalWebUrl(url)) return shell.openExternal(url);
   });
   ipcMain.handle('peek:get-lan', () => {
     const lan = server!.ctx.lan;

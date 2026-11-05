@@ -21,6 +21,9 @@ export interface Prefs {
   sidebarCollapsed: boolean;
   infoOpen: boolean;
   hoverPreview: boolean;
+  /** grid density level 0 (big) … 3 (month overview); phones and desktop separately */
+  gridZoomMobile: number;
+  gridZoomDesktop: number;
 }
 
 export const ACCENTS = ['#8b5cf6', '#ec4899', '#f97316', '#10b981', '#06b6d4', '#3b82f6', '#eab308', '#ef4444'];
@@ -39,6 +42,8 @@ const defaults: Prefs = {
   sidebarCollapsed: false,
   infoOpen: false,
   hoverPreview: true,
+  gridZoomMobile: 1,
+  gridZoomDesktop: 1,
 };
 
 interface PrefsStore extends Prefs {

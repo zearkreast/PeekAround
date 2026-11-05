@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Ctx } from '../context.js';
-import type { FolderRow } from '../library.js';
+import { isDeviceFolder, type FolderRow } from '../library.js';
 import type { MediaRow } from '../media/mapper.js';
 import { HttpError, resolveInRoot } from '../paths.js';
 
@@ -12,13 +12,33 @@ export function mediaRow(ctx: Ctx, id: string | number): MediaRow {
   return r;
 }
 
+export const DEVICE_READONLY = 'Files on a linked device can only be viewed and copied';
+
+/**
+ * Device folders (linked phones) have no host path: everything that touches the file system
+ * must refuse them. Default-deny: mediaAbs/folderPath throw 403 for device folders, routes that
+ * can serve device media use mediaSource() and branch on `device`.
+ */
+export function requireLocalFolder(folder: FolderRow, message = DEVICE_READONLY) {
+  if (isDeviceFolder(folder)) throw new HttpError(403, message);
+}
+
+/** Local file of a media row (403 for device media — use mediaSource for read paths that support devices). */
 export function mediaAbs(ctx: Ctx, r: MediaRow): { folder: FolderRow; abs: string } {
   const folder = ctx.lib.folderRow(r.folder_id);
+  requireLocalFolder(folder);
   return { folder, abs: ctx.scanner.abs(folder, r.dir, r.name) };
+}
+
+/** Like mediaAbs but also for device media: abs is then the pseudo path `device://<id>/<key>/<rel>`. */
+export function mediaSource(ctx: Ctx, r: MediaRow): { folder: FolderRow; abs: string; device: boolean } {
+  const folder = ctx.lib.folderRow(r.folder_id);
+  return { folder, abs: ctx.scanner.abs(folder, r.dir, r.name), device: isDeviceFolder(folder) };
 }
 
 export function folderPath(ctx: Ctx, folderId: string | number, rel: string): { folder: FolderRow; abs: string } {
   const folder = ctx.lib.folderRow(folderId);
+  requireLocalFolder(folder);
   return { folder, abs: resolveInRoot(folder.path, rel) };
 }
 

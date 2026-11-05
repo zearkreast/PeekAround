@@ -16,6 +16,7 @@ import android.os.Environment
 import android.os.FileObserver
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.util.Base64
@@ -34,7 +35,9 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.getcapacitor.PermissionState
 import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -59,25 +62,33 @@ class PeekWebViewClient(bridge: Bridge, private val media: PeekMediaServer) : Br
     name = "PeekLocal",
     permissions = [
         Permission(alias = "legacy", strings = [Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE]),
+        Permission(alias = "media", strings = [Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO]),
+        Permission(alias = "location", strings = [Manifest.permission.ACCESS_MEDIA_LOCATION]),
+        Permission(alias = "notifications", strings = [Manifest.permission.POST_NOTIFICATIONS]),
     ],
 )
 class PeekLocalPlugin : Plugin() {
     private val io = Executors.newFixedThreadPool(3)
     private lateinit var media: PeekMediaServer
     private lateinit var jobs: PeekJobs
+    private lateinit var transfers: PeekTransfers
     private var observer: FileObserver? = null
     private val main = Handler(Looper.getMainLooper())
 
     companion object {
         /** content:// URIs handed to the app through "Share → PeekAround" */
         val pendingShare = ArrayList<Uri>()
+        /** text shared to the app (ACTION_SEND text/plain, e.g. a mega.nz link) */
+        @Volatile var pendingText: String? = null
         var instance: PeekLocalPlugin? = null
     }
 
     override fun load() {
         instance = this
-        media = PeekMediaServer(context)
+        media = PeekMediaServer.get(context)
         jobs = PeekJobs(context) { notifyListeners("job", it) }
+        transfers = PeekTransfers(context) { notifyListeners("transfer", it) }
+        PeekIndex.get(context).onProgress = { notifyListeners("index", it) }
         bridge.setWebViewClient(PeekWebViewClient(bridge, media))
         // downloads (server mode "Download" buttons) → system DownloadManager
         bridge.webView.setDownloadListener { url, ua, cd, mime, _ ->
@@ -97,7 +108,7 @@ class PeekLocalPlugin : Plugin() {
     }
 
     fun onShared() {
-        notifyListeners("shared", JSObject().put("count", pendingShare.size))
+        notifyListeners("shared", JSObject().put("count", pendingShare.size).put("text", pendingText))
     }
 
     private fun bg(call: PluginCall, fn: () -> Unit) {
@@ -118,7 +129,98 @@ class PeekLocalPlugin : Plugin() {
 
     @PluginMethod
     fun checkAccess(call: PluginCall) {
-        call.resolve(JSObject().put("granted", hasAccess()).put("sdk", Build.VERSION.SDK_INT))
+        call.resolve(JSObject().put("granted", hasAccess()).put("sdk", Build.VERSION.SDK_INT).put("media", mediaPermissions()))
+    }
+
+    /** 'granted' | 'denied' | 'prompt' (…-with-rationale is reported as 'prompt'); not applicable on this SDK → 'granted' */
+    private fun perm(alias: String, minSdk: Int): String {
+        if (Build.VERSION.SDK_INT < minSdk) return "granted"
+        return when (getPermissionState(alias)) {
+            PermissionState.GRANTED -> "granted"
+            PermissionState.DENIED -> "denied"
+            else -> "prompt"
+        }
+    }
+
+    private fun mediaPermissions(): JSObject = JSObject()
+        .put("media", perm("media", 33))
+        .put("location", perm("location", 29))
+        .put("notifications", perm("notifications", 33))
+
+    /**
+     * Runtime permissions used by the gallery: READ_MEDIA_IMAGES/VIDEO (33+), ACCESS_MEDIA_LOCATION
+     * (29+, un-redacted GPS) and POST_NOTIFICATIONS (33+). Resolves with their states.
+     */
+    @PluginMethod
+    fun requestMediaPermissions(call: PluginCall) {
+        val want = ArrayList<String>()
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("media") != PermissionState.GRANTED) want.add("media")
+        if (Build.VERSION.SDK_INT >= 29 && getPermissionState("location") != PermissionState.GRANTED) want.add("location")
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) want.add("notifications")
+        if (want.isEmpty()) return call.resolve(mediaPermissions())
+        requestPermissionForAliases(want.toTypedArray(), call, "mediaPermsCallback")
+    }
+
+    @PermissionCallback
+    private fun mediaPermsCallback(call: PluginCall) {
+        call.resolve(mediaPermissions())
+    }
+
+    /**
+     * Roots the /_peek/ media server may serve (library folders + temp sessions). Until the first
+     * call the storage roots of roots() are allowed. App cache/files dirs and folders shared with a
+     * PC are always allowed. paths: null/absent = back to the default.
+     */
+    @PluginMethod
+    fun setAllowedRoots(call: PluginCall) {
+        val arr = call.getArray("paths")
+        media.setAllowedRoots(arr?.toList<String>())
+        call.resolve()
+    }
+
+    // ───────────────────────── metadata index (grouping) ─────────────────────────
+
+    @PluginMethod
+    fun indexSync(call: PluginCall) {
+        val paths = call.getArray("paths")?.toList<String>() ?: return call.reject("paths required")
+        val idx = PeekIndex.get(context)
+        idx.sync(paths)
+        call.resolve(idx.status())
+    }
+
+    @PluginMethod
+    fun indexStatus(call: PluginCall) = call.resolve(PeekIndex.get(context).status())
+
+    @PluginMethod
+    fun indexQuery(call: PluginCall) = bg(call) {
+        val paths = call.getArray("paths")?.toList<String>() ?: return@bg call.reject("paths required")
+        call.resolve(PeekIndex.get(context).query(paths))
+    }
+
+    // ───────────────────────── native transfers ─────────────────────────
+
+    @PluginMethod
+    fun downloadTo(call: PluginCall) {
+        val items = call.getArray("items") ?: return call.reject("items required")
+        val dest = call.getString("dest") ?: return call.reject("dest required")
+        val id = transfers.download(call.getString("id"), items, dest, call.getObject("headers"))
+        call.resolve(JSObject().put("id", id))
+    }
+
+    @PluginMethod
+    fun uploadPaths(call: PluginCall) {
+        val url = call.getString("url") ?: return call.reject("url required")
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return call.reject("http/https only")
+        val folderId = call.getString("folderId") ?: return call.reject("folderId required")
+        val paths = call.getArray("paths") ?: return call.reject("paths required")
+        val id = transfers.upload(call.getString("id"), url, folderId, call.getString("dir", "")!!, paths, call.getString("zip"), call.getObject("headers"))
+        call.resolve(JSObject().put("id", id))
+    }
+
+    @PluginMethod
+    fun cancelTransfer(call: PluginCall) {
+        transfers.cancel(call.getString("id") ?: "")
+        call.resolve()
     }
 
     @PluginMethod
@@ -175,10 +277,12 @@ class PeekLocalPlugin : Plugin() {
 
     @PluginMethod
     fun mkdir(call: PluginCall) = bg(call) {
-        val dir = File(call.getString("path")!!)
-        val f = PeekFs.uniqueFile(dir, call.getString("name")!!)
-        f.mkdirs()
-        call.resolve(JSObject().put("path", f.absolutePath))
+        val dir = File(call.getString("path") ?: return@bg call.reject("path required"))
+        val name = try { PathGuard.cleanName(call.getString("name") ?: "") } catch (_: LinkError) { return@bg call.reject("Invalid folder name") }
+        if (!dir.isDirectory) return@bg call.reject("Parent folder not found")
+        val f = PeekFs.uniqueFile(dir, name)
+        if (!f.mkdirs() && !f.isDirectory) return@bg call.reject("Cannot create folder")
+        call.resolve(JSObject().put("path", f.absolutePath).put("name", f.name))
     }
 
     @PluginMethod
@@ -296,13 +400,23 @@ class PeekLocalPlugin : Plugin() {
     @PluginMethod
     fun share(call: PluginCall) {
         val paths = call.getArray("paths")!!.toList<String>()
-        val uris = ArrayList(paths.map { FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(it)) })
+        val uris = ArrayList(paths.map { shareUri(File(it)) ?: return call.reject("Cannot share ${File(it).name}") })
         val i = if (uris.size == 1) Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris[0])
         else Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
         i.type = call.getString("mime", "*/*")
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         activity.startActivity(Intent.createChooser(i, null))
         call.resolve()
+    }
+
+    /** FileProvider (primary storage / app dirs); files elsewhere (SD card) via their MediaStore URI. */
+    private fun shareUri(f: File): Uri? {
+        try {
+            return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", f)
+        } catch (_: IllegalArgumentException) {
+        }
+        val id = media.mediaId(f) ?: return null
+        return android.content.ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), id)
     }
 
     // ───────────────────────── live folder watching ─────────────────────────
@@ -423,12 +537,13 @@ class PeekLocalPlugin : Plugin() {
             }
             a.put(JSObject().put("uri", u.toString()).put("name", name).put("size", size).put("mime", context.contentResolver.getType(u)))
         }
-        call.resolve(JSObject().put("files", a))
+        call.resolve(JSObject().put("files", a).put("text", pendingText))
     }
 
     @PluginMethod
     fun clearShared(call: PluginCall) {
         pendingShare.clear()
+        pendingText = null
         call.resolve()
     }
 
@@ -450,9 +565,11 @@ class PeekLocalPlugin : Plugin() {
             conn.requestMethod = "PUT"
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/octet-stream")
+            conn.setRequestProperty("X-Peek", "1")
+            call.getObject("headers")?.let { h -> h.keys().forEach { k -> conn.setRequestProperty(k, h.optString(k)) } }
             val size = f.optLong("size", -1)
             conn.setChunkedStreamingMode(256 * 1024) // provider SIZE values are not always exact
-            context.contentResolver.openInputStream(uri)!!.use { input ->
+            PeekFs.openOriginal(context, uri).use { input ->
                 conn.outputStream.use { out ->
                     val buf = ByteArray(256 * 1024)
                     var sent = 0L
@@ -489,7 +606,7 @@ class PeekLocalPlugin : Plugin() {
         for (i in 0 until files.length()) {
             val f = files.getJSONObject(i)
             val dest = PeekFs.uniqueFile(dir, f.getString("name"))
-            context.contentResolver.openInputStream(Uri.parse(f.getString("uri")))!!.use { input -> FileOutputStream(dest).use { input.copyTo(it, 256 * 1024) } }
+            PeekFs.openOriginal(context, Uri.parse(f.getString("uri"))).use { input -> FileOutputStream(dest).use { input.copyTo(it, 256 * 1024) } }
             PeekFs.scan(context, dest.absolutePath)
             out.put(dest.absolutePath)
         }

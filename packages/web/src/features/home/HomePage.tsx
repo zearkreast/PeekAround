@@ -15,6 +15,8 @@ import { Button, EmptyState } from '@/components/ui';
 import { LibraryEditor } from '@/features/settings/LibraryEditor';
 import { MediaGrid } from '@/features/gallery/MediaGrid';
 import { useScrollRef } from '@/features/gallery/GalleryPage';
+import { StaticSource } from '@/features/gallery/grid/source';
+import { MemoriesStrip } from '@/features/explore/MemoriesStrip';
 
 function greeting(t: ReturnType<typeof useT>) {
   const h = new Date().getHours();
@@ -79,10 +81,15 @@ export function HomePage() {
   const setView = useLocation((s) => s.setView);
   const [adding, setAdding] = useState(false);
   const recent = useBrowse({ recursive: true, sort: 'mtime', order: 'desc', limit: 60, kind: 'all' });
-  const recentItems = useMemo(() => recent.items.filter((i: MediaItem) => i.kind !== 'audio').slice(0, 48), [recent.items]);
+  const recentItems = useMemo(
+    () => (recent.data?.pages.flatMap((p) => p.items) ?? []).filter((i: MediaItem) => i.kind !== 'audio').slice(0, 48),
+    [recent.data],
+  );
 
   useEffect(() => setChrome({ crumbs: [], title: t('nav.home'), viewControls: false }), [setChrome, t]);
-  useEffect(() => setView({ target: null, targetLabel: '', items: recentItems }), [recentItems, setView]);
+  const recentSource = useMemo(() => new StaticSource(`recent:${recentItems.map((i) => i.id).join(',')}`, recentItems), [recentItems]);
+  useEffect(() => setView({ target: null, targetLabel: '', source: recentSource }), [recentSource, setView]);
+  useEffect(() => () => setView({ source: null }), [setView]);
 
   const libraries = libs.data?.libraries ?? [];
   const total = libraries.reduce((a, l) => a + l.mediaCount, 0);
@@ -104,6 +111,8 @@ export function HomePage() {
           {total > 0 && <p className="mt-3 text-dim tabular-nums">{t('common.items', { n: total.toLocaleString() })}</p>}
         </motion.div>
       </section>
+
+      <MemoriesStrip className="mb-10" />
 
       {libs.isSuccess && libraries.length === 0 && (
         <EmptyState
@@ -147,13 +156,14 @@ export function HomePage() {
             </Button>
           </div>
           <MediaGrid
-            items={recentItems}
-            hasMore={false}
-            loadMore={() => {}}
+            source={recentSource}
             scrollRef={scrollRef}
+            groups={false}
+            fastScroller={false}
+            zoomable={false}
             onOpen={(item) => {
               useViewer.getState().setActive(item.id);
-              requestAnimationFrame(() => nav({ search: withView(routerLoc.search, item.id) }));
+              requestAnimationFrame(() => nav({ search: withView(routerLoc.search, item.id) }, { state: { viewer: true } }));
             }}
           />
         </section>

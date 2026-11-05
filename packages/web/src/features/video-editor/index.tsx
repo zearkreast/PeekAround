@@ -169,7 +169,7 @@ function EditorTopBar({ item, onExport, busy, disabled }: { item: MediaDetails; 
       <IconButton label={t('common.reset')} onClick={reset} className="hidden sm:inline-flex">
         <RotateCcw />
       </IconButton>
-      <Button variant="primary" icon={<Download className="size-4" />} onClick={onExport} loading={busy} disabled={!!disabled} title={disabled ?? undefined} className="ml-1" data-testid="export-top">
+      <Button variant="primary" icon={<Download className="size-4" />} onClick={onExport} loading={busy} disabled={!!disabled} title={disabled ?? undefined} aria-label={t('video.export')} className="ml-1" data-testid="export-top">
         <span className="hidden sm:inline">{t('video.export')}</span>
       </Button>
     </header>

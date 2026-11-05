@@ -12,6 +12,8 @@ export interface ProbeResult {
   container: string | null;
   creationTime: number | null;
   hasAudio: boolean;
+  /** container + video stream tags, lower-cased keys (location, com.apple.quicktime.*, com.android.*) */
+  tags: Record<string, string>;
 }
 
 export class Ffmpeg {
@@ -63,6 +65,10 @@ export class Ffmpeg {
         const [n, d] = fpsStr.split('/').map(Number);
         if (d) fps = Math.round((n / d) * 100) / 100;
       }
+      const tags: Record<string, string> = {};
+      for (const src of [v?.tags, j.format?.tags]) {
+        for (const [k, val] of Object.entries((src ?? {}) as Record<string, unknown>)) if (val != null) tags[k.toLowerCase()] = String(val);
+      }
       const ct = j.format?.tags?.creation_time ?? v?.tags?.creation_time;
       const creationTime = ct ? Date.parse(ct) : NaN;
       const duration = Number(j.format?.duration ?? v?.duration ?? a?.duration);
@@ -78,6 +84,7 @@ export class Ffmpeg {
         container: j.format?.format_name ?? null,
         creationTime: Number.isFinite(creationTime) && creationTime > 0 ? creationTime : null,
         hasAudio: !!a,
+        tags,
       };
     } catch {
       return null;

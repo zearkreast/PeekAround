@@ -53,3 +53,37 @@ export function durationUntil(ms: number, lang: Lang): string {
   if (lang === 'tr') return h ? `${h} sa ${m} dk` : `${m} dk`;
   return h ? `${h}h ${m}m` : `${m}m`;
 }
+
+const dtfCache = new Map<string, Intl.DateTimeFormat>();
+function dtf(lang: Lang, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const k = lang + JSON.stringify(opts);
+  let f = dtfCache.get(k);
+  if (!f) {
+    f = new Intl.DateTimeFormat(locale(lang), { ...opts, timeZone: 'UTC' });
+    dtfCache.set(k, f);
+  }
+  return f;
+}
+
+/** Format a wall-clock-as-UTC timestamp (MediaItem.localAt) — never shifts the day. */
+export function formatLocal(localAt: number, lang: Lang, opts: Intl.DateTimeFormatOptions = { dateStyle: 'medium' }): string {
+  try {
+    return dtf(lang, opts).format(new Date(localAt));
+  } catch {
+    return new Date(localAt).toISOString().slice(0, 10);
+  }
+}
+
+/** 'YYYY-MM-DD' (skeleton day key) → "Cmt, 5 Tem" / "Cmt, 5 Tem 2023" */
+export function formatDayKey(key: string, lang: Lang): string {
+  const [y, m, d] = key.split('-').map(Number);
+  const ms = Date.UTC(y, (m || 1) - 1, d || 1);
+  const sameYear = y === new Date().getFullYear();
+  return formatLocal(ms, lang, sameYear ? { weekday: 'short', day: 'numeric', month: 'short' } : { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** 'YYYY-MM' or 'YYYY-MM-DD' → "Temmuz 2024" */
+export function formatMonthKey(key: string, lang: Lang, short = false): string {
+  const [y, m] = key.split('-').map(Number);
+  return formatLocal(Date.UTC(y, (m || 1) - 1, 1), lang, { month: short ? 'short' : 'long', year: 'numeric' });
+}

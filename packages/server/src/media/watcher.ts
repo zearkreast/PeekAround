@@ -15,7 +15,7 @@ export class WatcherService {
   ) {}
 
   sync() {
-    const rows = this.lib.allFolderRows().filter((f) => !f.temp);
+    const rows = this.lib.allFolderRows().filter((f) => !f.temp && !f.device_id);
     const want = new Set(rows.map((r) => r.id));
     for (const [id, w] of this.watchers) {
       if (!want.has(id)) {

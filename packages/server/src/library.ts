@@ -18,6 +18,15 @@ export interface FolderRow {
   expires_at: number | null;
   source_name: string | null;
   sort: number;
+  /** linked phone folders (migration 002): path = device://<device_id>/<device_key> */
+  device_id: string | null;
+  device_key: string | null;
+}
+
+export const DEVICE_SCHEME = 'device://';
+
+export function isDeviceFolder(r: Pick<FolderRow, 'device_id'> | null | undefined): boolean {
+  return !!r?.device_id;
 }
 
 export class LibraryService {
@@ -25,6 +34,9 @@ export class LibraryService {
     private db: Db,
     private events: EventHub,
   ) {}
+
+  /** set by the DeviceHub: name + online state of a linked phone */
+  deviceLookup: ((deviceId: string) => { id: string; name: string; online: boolean }) | null = null;
 
   folderRow(id: string | number): FolderRow {
     const r = this.db.get<FolderRow>('SELECT * FROM folders WHERE id = ?', Number(id));
@@ -46,6 +58,7 @@ export class LibraryService {
       expiresAt: r.expires_at,
       sourceName: r.source_name,
       mediaCount: counts?.get(r.id) ?? this.countFolder(r.id),
+      device: r.device_id ? (this.deviceLookup?.(r.device_id) ?? { id: r.device_id, name: r.name, online: false }) : null,
     };
   }
 
@@ -53,7 +66,7 @@ export class LibraryService {
     return this.db.get<{ c: number }>("SELECT count(*) c FROM media WHERE folder_id = ? AND kind IN ('image','video')", id)?.c ?? 0;
   }
 
-  private counts(): Map<number, number> {
+  counts(): Map<number, number> {
     const m = new Map<number, number>();
     for (const r of this.db.all<{ folder_id: number; c: number }>(
       "SELECT folder_id, count(*) c FROM media WHERE kind IN ('image','video') GROUP BY folder_id",
