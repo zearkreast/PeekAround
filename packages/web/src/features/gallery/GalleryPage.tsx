@@ -164,8 +164,9 @@ export function GalleryPage({ mode }: { mode: GalleryMode }) {
     mode === 'timeline' ? t('nav2.photos') : mode === 'favorites' ? t('nav.favorites') : mode === 'search' ? `“${q}”` : (crumbs[crumbs.length - 1]?.label ?? '');
 
   useEffect(() => {
-    // folder / library pages show their breadcrumb in the page header (FolderHeader)
-    setChrome({ crumbs: [], title, viewControls: true });
+    // folder pages show their breadcrumb in the page header (FolderHeader) and, once that scrolled
+    // away, in the top bar; the timeline has a fixed order, Favorites is a type filter itself
+    setChrome({ crumbs: mode === 'folder' ? crumbs : [], title, viewControls: true, viewSort: mode !== 'timeline', viewKind: mode !== 'favorites' });
   }, [crumbs, title, mode, setChrome]);
 
   useEffect(() => {

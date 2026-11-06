@@ -5,7 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import sharp, { type Sharp } from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
+import { BackgroundPool } from '../background.js';
 import type { Ffmpeg } from '../ffmpeg.js';
+import { decodeHeic } from './heic.js';
 import type { MediaRow } from './mapper.js';
 import type { ThumbQuality } from '@peekaround/shared';
 
@@ -155,6 +157,11 @@ export class ThumbService {
   /** one base decode (320 + 640 [+ 1600 for videos] + thumbhash) per source, whatever asked for it */
   private bases = new Map<string, { promise: Promise<BaseResult>; promote: () => void }>();
   readonly limiter = new Limiter(Math.max(2, Math.min(6, os.cpus().length)));
+  /**
+   * CPU budget shared by every background pass (scanner meta / thumbnails / enrichment, duplicate
+   * hashing); on-demand renditions put it on hold for a moment (BackgroundPool.foreground).
+   */
+  readonly bg = new BackgroundPool(2);
   /** set by the DeviceHub (device://) */
   remote: RemoteImageSource | null = null;
   /** set by the RemoteService (remote:// — MEGA links streamed without downloading) */
@@ -212,9 +219,8 @@ export class ThumbService {
     }
     if (row.kind !== 'image') return null;
     if (row.ext === 'heic' || row.ext === 'heif') {
-      const { default: decode } = await import('heic-decode');
-      const buf = await fsp.readFile(abs);
-      const img = await decode({ buffer: buf });
+      // libheif (WASM) runs in a worker thread: ~1 s per photo must not block the event loop
+      const img = await decodeHeic(await fsp.readFile(abs));
       return sharp(Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength), { raw: { width: img.width, height: img.height, channels: 4 } });
     }
     return sharp(abs, { failOn: 'none', limitInputPixels: 1e9 }).rotate();
@@ -227,6 +233,7 @@ export class ThumbService {
    */
   generateBase(abs: string, row: ThumbRow, prio: Priority = 'low'): Promise<BaseResult> {
     const key = this.key(abs, row);
+    if (prio === 'high') this.bg.foreground();
     const cur = this.bases.get(key);
     if (cur) {
       if (prio === 'high') cur.promote();
@@ -298,6 +305,7 @@ export class ThumbService {
     const key = this.key(abs, row);
     const f = this.file(key, `${size}.webp`);
     if (await exists(f)) return f;
+    if (prio === 'high') this.bg.foreground();
     const remote = this.remoteOf(abs);
     if (remote && size === 1600) {
       return this.once(f, async () => {
@@ -349,6 +357,7 @@ export class ThumbService {
     }
     const f = this.file(key, max ? `display-${max}.${alpha ? 'webp' : 'jpg'}` : 'full.jpg');
     if (await exists(f)) return f;
+    this.bg.foreground();
     return this.once(f, () =>
       this.limiter.run(async () => {
         const src = await this.source(abs, row, max ?? 4096);
@@ -437,11 +446,25 @@ export class ThumbService {
   }
 
   async clear() {
+    this.sized = null;
     await fsp.rm(this.dir, { recursive: true, force: true });
     await fsp.mkdir(this.dir, { recursive: true });
   }
 
-  async sizeBytes(): Promise<number> {
+  private sized: { at: number; bytes: Promise<number> } | null = null;
+
+  /**
+   * Bytes on disk. Walking a big cache (hundreds of thousands of files) keeps the libuv pool — which
+   * sharp shares — busy for seconds, so a result is reused for a minute (Settings page re-opens).
+   */
+  sizeBytes(maxAgeMs = 60_000): Promise<number> {
+    if (this.sized && Date.now() - this.sized.at < maxAgeMs) return this.sized.bytes;
+    const bytes = this.walkSize().catch(() => 0);
+    this.sized = { at: Date.now(), bytes };
+    return bytes;
+  }
+
+  private async walkSize(): Promise<number> {
     let total = 0;
     const walk = async (d: string) => {
       for (const e of await fsp.readdir(d, { withFileTypes: true }).catch(() => [])) {

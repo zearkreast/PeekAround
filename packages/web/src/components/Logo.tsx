@@ -7,6 +7,32 @@ import { cn } from '@/lib/cn';
  * Animated: the bird leans and "peeks around", blinks now and then, and tilts its head
  * curiously on hover. All geometry is in a 256×256 box.
  */
+
+/** idle rhythm: a blink every BEAT_MS, a peek every PEEK_EVERY beats */
+const BEAT_MS = 8000;
+const PEEK_EVERY = 6;
+
+/**
+ * Idle animations are short one-shots started by a timer (paused while the window is hidden), not
+ * `repeat: Infinity` loops: the logo is on every page, so the renderer would draw 60 fps forever.
+ */
+function useIdleBeat(live: boolean) {
+  const [beat, setBeat] = useState(0);
+  useEffect(() => {
+    if (!live) return;
+    let t: ReturnType<typeof setTimeout>;
+    const next = () => {
+      t = setTimeout(() => {
+        // only while someone looks at it: visible and focused (desktop: not while working in another app)
+        if (typeof document === 'undefined' || (document.visibilityState === 'visible' && document.hasFocus())) setBeat((b) => b + 1);
+        next();
+      }, BEAT_MS);
+    };
+    next();
+    return () => clearTimeout(t);
+  }, [live]);
+  return beat;
+}
 const P = {
   wing: 'M168 178 C196 170 236 180 270 198 L270 270 L132 270 C146 238 152 200 168 178 Z',
   beakLow: 'M126 112 C98 111 72 112 52 113 C64 118 92 121 116 121 C121 120 126 118 126 112 Z',
@@ -25,6 +51,14 @@ export function LogoMark({ size = 32, className, animated = true, framed = true 
   const live = animated && !reduce;
   const [hover, setHover] = useState(false);
   const id = (k: string) => `${k}-${uid}`;
+  const beat = useIdleBeat(live);
+  const [blink, setBlink] = useState(false);
+  const [peek, setPeek] = useState(false);
+  useEffect(() => {
+    if (!beat) return;
+    setBlink(true);
+    if (beat % PEEK_EVERY === 1) setPeek(true);
+  }, [beat]);
 
   return (
     <motion.svg
@@ -70,8 +104,9 @@ export function LogoMark({ size = 32, className, animated = true, framed = true 
         {/* the whole bird leans around a pivot low on the neck */}
         <motion.g
           style={svgOrigin(150, 250)}
-          animate={live ? (hover ? { rotate: -7, y: -4 } : { rotate: [0, 0, -4, -4, 2.5, 2.5, 0], y: [0, 0, -2, -2, 0, 0, 0] }) : undefined}
-          transition={hover ? { type: 'spring', stiffness: 260, damping: 14 } : { duration: 9, times: [0, 0.3, 0.38, 0.55, 0.63, 0.8, 0.9], repeat: Infinity, ease: 'easeInOut' }}
+          animate={live ? (hover ? { rotate: -7, y: -4 } : peek ? { rotate: [0, -4, -4, 2.5, 2.5, 0], y: [0, -2, -2, 0, 0, 0] } : { rotate: 0, y: 0 }) : undefined}
+          transition={hover || !peek ? { type: 'spring', stiffness: 260, damping: 14 } : { duration: 2.6, times: [0, 0.15, 0.4, 0.55, 0.8, 1], ease: 'easeInOut' }}
+          onAnimationComplete={() => setPeek(false)}
         >
           <path d={P.beakLow} fill={`url(#${id('low')})`} />
           <path d={P.beakUp} fill={`url(#${id('beak')})`} />
@@ -82,8 +117,9 @@ export function LogoMark({ size = 32, className, animated = true, framed = true 
           <motion.path d={P.brow} fill="#1b1f2e" style={svgOrigin(130, 82)} animate={live && hover ? { y: -3, rotate: 4 } : { y: 0, rotate: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }} />
           <motion.g
             style={svgOrigin(129, 84)}
-            animate={live ? { scaleY: [1, 1, 0.12, 1, 1, 0.12, 1] } : undefined}
-            transition={{ duration: 5.5, times: [0, 0.7, 0.73, 0.76, 0.9, 0.93, 0.96], repeat: Infinity }}
+            animate={live && blink ? { scaleY: [1, 0.12, 1] } : { scaleY: 1 }}
+            transition={blink ? { duration: 0.28 } : { duration: 0 }}
+            onAnimationComplete={() => setBlink(false)}
           >
             <ellipse cx="129" cy="84" rx="5.6" ry="4.4" fill="#0b0d14" />
             <circle cx="127.4" cy="82.6" r="1.5" fill="#fff" />

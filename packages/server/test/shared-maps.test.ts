@@ -299,6 +299,14 @@ describe('insights', () => {
     expect(computeInsights(rows, { colors: false, dayTimes: false }).colors).toBeUndefined();
   });
 
+  it('stats: cloud (MEGA) bytes apart from the local ones', () => {
+    const row = (id: string, size: number, cloud?: boolean) => ({ id, kind: 'image', localAt: Date.UTC(2024, 0, 1), size, width: 10, height: 10, duration: null, lat: null, lon: null, cc: null, placeKey: null, city: null, flags: 0, mtime: 0, cloud });
+    const s = computeInsights([row('1', 100), row('2', 250, true), row('3', 50, false), row('4', 1000, true)]).stats!;
+    expect(s.bytes).toBe(1400);
+    expect(s.cloudBytes).toBe(1250);
+    expect(computeInsights([row('1', 100)]).stats!.cloudBytes).toBe(0);
+  });
+
   it('year in review spreads covers over the months', () => {
     const items = Array.from({ length: 60 }, (_, k) => ({ id: `i${k}`, localAt: Date.UTC(2023, k % 12, 1 + (k % 27)) }));
     items.sort((a, b) => b.localAt - a.localAt);

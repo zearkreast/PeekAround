@@ -17,6 +17,9 @@ describe('skeleton performance (100k rows)', () => {
     fs.mkdirSync(path.join(tmp, 'lib'));
     srv = await createServer({ dataDir: path.join(tmp, 'data'), roots: [{ path: path.join(tmp, 'lib'), name: 'Big' }], port: 0, host: '127.0.0.1', mdns: false });
     await srv.ctx.scanner.scanAll();
+    // the start-up scan may still be running (scanAll above then only queued a rescan): wait until the
+    // scanner is idle, or its rescan would drop the synthetic rows (not on disk) while explore yields
+    for (let i = 0; i < 400 && srv.ctx.scanner.busy; i++) await new Promise((r) => setTimeout(r, 25));
     const db = srv.ctx.db;
     let seed = 5;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -84,6 +87,23 @@ describe('skeleton performance (100k rows)', () => {
     expect(ex.countries!.map((c) => c.cc).sort()).toEqual(['DE', 'TR']);
     expect(ex.noLocation).toBe(N / 4);
     expect(ex.calendarYears!.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('explore is computed without blocking the event loop for long', async () => {
+    let worst = 0;
+    let last = performance.now();
+    const t = setInterval(() => {
+      const n = performance.now();
+      worst = Math.max(worst, n - last);
+      last = n;
+    }, 5);
+    const r = await srv.ctx.explore.compute({}, Date.now());
+    clearInterval(t);
+    worst = Math.max(worst, performance.now() - last);
+    console.log(`explore compute: longest event-loop block ${worst.toFixed(0)} ms`);
+    expect(r.stats!.photos + r.stats!.videos).toBe(N);
+    // one synchronous pass over 100k rows blocked for ~1 s (desktop: the window's IPC with it)
+    expect(worst).toBeLessThan(500);
   });
 
   it('insight filters stay fast', async () => {

@@ -310,9 +310,11 @@ export class GridSource implements GridItems {
       const r = await this.backend.browse({ ...this.query, offset: p * PAGE, limit: PAGE }, { signal: this.ctl.signal });
       if (epoch !== this.epoch) return;
       const gen = (r as BrowseResult & { gen?: string }).gen;
-      if ((gen && this.gen && gen !== this.gen) || r.total !== this.total) {
-        // the result set changed under us (or the skeleton doesn't match the pages)
-        if (++this.mismatchChecks > 2) this.switchToFallback();
+      const moved = !!gen && !!this.gen && gen !== this.gen;
+      if (moved || r.total !== this.total) {
+        // the result set changed under us → new skeleton; a skeleton that doesn't match its own
+        // generation's pages (old servers) → page through everything instead
+        if (!moved && ++this.mismatchChecks > 2) this.switchToFallback();
         else this.refresh();
       } else this.mismatchChecks = 0;
       const items = r.items.map(normalizeItem);

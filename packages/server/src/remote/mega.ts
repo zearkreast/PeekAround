@@ -87,15 +87,79 @@ export interface MegaClient {
   load(link: MegaLink): Promise<MegaNode>;
 }
 
+/**
+ * The optional MEGA account session (remote/account.ts). Read on EVERY API request, so links loaded
+ * before a login / logout switch accounts without being re-listed.
+ */
+export interface MegaSessionSource {
+  /** current session id, or null (anonymous) */
+  sid(): string | null;
+  /** MEGA rejected the session (ESID): forget it — the request is retried anonymously */
+  invalid(sid: string): void;
+  /** a link request failed in a way that can also mean a blocked / removed account: verify the session */
+  suspect?(sid: string): void;
+}
+
+export interface MegaClientOptions {
+  session?: MegaSessionSource;
+  /** API gateway (tests point it at a local fake MEGA) */
+  gateway?: string;
+}
+
+/** ESID (-15): invalid or expired session */
+export const isSessionError = (e: unknown) => /\bESID\b|\(-15\)/.test(String((e as Error)?.message ?? e));
+
+/**
+ * A megajs API instance whose `sid` is read from the session source on every request: with a session
+ * the "g" (download URL), "f" (folder listing) and "ufa" requests carry `&sid=` next to the folder
+ * link's `&n=` — exactly what the MEGA web client sends for a logged-in user opening a link — and
+ * downloads count against the account's transfer quota. An ESID answer drops the session and retries
+ * the request once without it.
+ */
+export function sessionApi(API: any, opts: MegaClientOptions = {}): any {
+  const api = new API(false, opts.gateway ? { gateway: opts.gateway } : {});
+  const session = opts.session;
+  let sid: string | null = null;
+  Object.defineProperty(api, 'sid', {
+    configurable: true,
+    get: () => (session ? session.sid() : sid),
+    set: (v: string | null) => {
+      sid = v;
+    },
+  });
+  if (!session) return api;
+  const orig = api.request.bind(api);
+  const request = (json: any, cb: any, retry?: number): unknown => {
+    const used = session.sid();
+    // megajs consumes `_querystring` from the request object: keep a copy for the anonymous retry
+    const copy = used ? { ...json, ...(json?._querystring ? { _querystring: { ...json._querystring } } : {}) } : null;
+    return orig(
+      json,
+      (err: unknown, resp: unknown) => {
+        if (err && used && copy) {
+          if (isSessionError(err)) {
+            session.invalid(used);
+            if (session.sid() !== used) return void request(copy, cb, retry);
+          } else if (/\bEBLOCKED\b|\(-16\)|\bENOENT\b|\(-9\)/.test(String((err as Error)?.message ?? err))) session.suspect?.(used);
+        }
+        cb?.(err, resp);
+      },
+      retry,
+    );
+  };
+  api.request = request;
+  return api;
+}
+
 /** Real client on top of megajs (dynamic import keeps it out of startup). */
-export function megaClient(): MegaClient {
+export function megaClient(opts: MegaClientOptions = {}): MegaClient {
   return {
     async load(link) {
       const mod: any = await import('megajs');
       const File = mod.File ?? mod.default?.File;
       const API = mod.API ?? mod.default?.API;
       // own API instance: its raw responses carry the file attributes (`fa`) megajs drops
-      const api = new API(false);
+      const api = sessionApi(API, opts);
       const fa = new Map<string, string>();
       const orig = api.request.bind(api);
       api.request = (json: any, cb: any, retry?: number) =>
@@ -176,6 +240,11 @@ function apiRequest(api: any, json: Record<string, unknown>): Promise<any> {
 /** temporary download URLs per node (MEGA "g" command), reused for seeks */
 const DL_URLS = new Map<string, { url: string; at: number }>();
 const DL_URL_TTL = 10 * 60_000;
+
+/** forget cached download URLs (a login / logout: new URLs are accounted to the new session) */
+export function clearDownloadUrls() {
+  DL_URLS.clear();
+}
 
 async function downloadUrl(c: WrapCtx, nodeId: string, fresh: boolean): Promise<string> {
   const k = `${c.link.id}/${nodeId}`;

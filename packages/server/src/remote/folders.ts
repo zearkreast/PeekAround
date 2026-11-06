@@ -292,7 +292,7 @@ export class RemoteService implements RemoteImageSource {
   private loops = new Set<Promise<void>>();
   private metaRunning = false;
   private thumbRunning = false;
-  /** MEGA transfer quota exhausted until (ms epoch) — shared by every link (the quota is per IP) */
+  /** MEGA transfer quota exhausted until (ms epoch) — shared by every link (the quota is per IP, or per account when logged in) */
   quotaUntil = 0;
   /** API rate limit / congestion back-off (EAGAIN / ERATELIMIT) */
   private backoffUntil = 0;
@@ -338,7 +338,7 @@ export class RemoteService implements RemoteImageSource {
     if (!row?.remote) return;
     const next = { ...this.storedStatus(row), ...patch };
     this.ctx.db.run('UPDATE folders SET remote_status = ? WHERE id = ?', JSON.stringify(next), folderId);
-    this.ctx.events.emit({ type: 'folders' });
+    this.ctx.events.emit({ type: 'folders', status: true });
   }
 
   /** FolderRef.remote — never contains the key */
@@ -558,13 +558,30 @@ export class RemoteService implements RemoteImageSource {
     this.kick();
   }
 
+  /**
+   * the MEGA account session changed (login / logout / expired, remote/account.ts): transfers now count
+   * against another quota → lift the quota pause and re-list folders that stopped on it. A quota that is
+   * still exceeded shows again on the next transfer (noteError).
+   */
+  resumeTransfers() {
+    if (this.closed) return;
+    this.quotaUntil = 0;
+    this.backoffUntil = 0;
+    this.ctx.db.setSetting('remoteQuota', {});
+    for (const f of this.folders()) {
+      if (!this.listing.has(f.id) && this.storedStatus(f).state === 'quota') void this.refresh(f.id).catch(() => {});
+    }
+    this.ctx.events.emit({ type: 'folders', status: true });
+    this.kick();
+  }
+
   private tick() {
     if (this.closed) return;
     const now = Date.now();
     if (this.quotaUntil && this.quotaUntil <= now) {
       this.quotaUntil = 0;
       this.ctx.db.setSetting('remoteQuota', {});
-      this.ctx.events.emit({ type: 'folders' });
+      this.ctx.events.emit({ type: 'folders', status: true });
       this.kick();
     }
     for (const f of this.folders()) {
@@ -619,7 +636,7 @@ export class RemoteService implements RemoteImageSource {
     if (until <= this.quotaUntil) return;
     this.quotaUntil = until;
     this.ctx.db.setSetting('remoteQuota', { until });
-    this.ctx.events.emit({ type: 'folders' });
+    this.ctx.events.emit({ type: 'folders', status: true });
   }
 
   /** a transfer's signal that also fires on shutdown */
@@ -1122,7 +1139,7 @@ export class RemoteService implements RemoteImageSource {
     if (this.progressTimer || this.closed) return;
     this.progressTimer = setTimeout(() => {
       this.progressTimer = null;
-      if (!this.closed) this.ctx.events.emit({ type: 'folders' });
+      if (!this.closed) this.ctx.events.emit({ type: 'folders', status: true });
     }, 2000);
     this.progressTimer.unref();
   }

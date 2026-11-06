@@ -15,7 +15,6 @@ import {
   LayoutGrid,
   Library as LibraryGlyph,
   PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Presentation,
   Settings,
@@ -385,12 +384,13 @@ const photosMatch = (p: string) => p === '/' || p.startsWith('/timeline') || p.s
 
 export function Sidebar() {
   const t = useT();
-  const { sidebarCollapsed: prefCollapsed, set } = usePrefs();
+  const set = usePrefs((s) => s.set);
   const mobile = useIsMobile();
   const navOpen = useChrome((s) => s.navOpen);
   const setChrome = useChrome((s) => s.set);
   const loc = useLocation();
-  const collapsed = mobile ? false : prefCollapsed;
+  // always expanded: the icons-only collapsed mode is the navigation rail (features/nav/NavRail)
+  const collapsed = false;
   useBackHandler(mobile && navOpen, () => setChrome({ navOpen: false }), BACK.drawer, 'drawer');
   // close the drawer after navigating
   useEffect(() => {
@@ -544,17 +544,12 @@ export function Sidebar() {
           <div className="min-w-0 flex-1">
             <NavItem to="/settings" icon={<Settings />} label={t('nav.settings')} collapsed={collapsed} />
           </div>
-          {!collapsed && !mobile && (
-            <IconButton label={t('nav.collapse')} size="sm" onClick={() => set({ sidebarCollapsed: true })}>
+          {!mobile && (
+            <IconButton label={t('nav.collapse')} size="sm" onClick={() => set({ wideSidebar: false })}>
               <PanelLeftClose />
             </IconButton>
           )}
         </div>
-        {collapsed && (
-          <IconButton label={t('nav.expand')} size="sm" className="mx-auto" onClick={() => set({ sidebarCollapsed: false })}>
-            <PanelLeftOpen />
-          </IconButton>
-        )}
       </div>
     </>
   );
@@ -593,12 +588,8 @@ export function Sidebar() {
   }
 
   return (
-    <motion.aside
-      animate={{ width: collapsed ? 68 : 268 }}
-      transition={{ type: 'spring', stiffness: 420, damping: 40 }}
-      className="relative z-20 flex h-full shrink-0 flex-col border-r border-line bg-elev/60"
-    >
+    <aside className="relative z-20 flex h-full w-[var(--sidebar-w)] shrink-0 flex-col border-r border-line bg-elev/60" data-testid="wide-sidebar">
       {body}
-    </motion.aside>
+    </aside>
   );
 }

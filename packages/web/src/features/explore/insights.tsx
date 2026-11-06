@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   CalendarDays,
   Clapperboard,
+  Cloud,
   Copy,
   Dices,
   Film,
@@ -71,16 +72,16 @@ import {
 
 // ───────────────────────── stats header ─────────────────────────
 
-function StatChip({ icon, children, to }: { icon: ReactNode; children: ReactNode; to?: string }) {
+function StatChip({ icon, children, to, title }: { icon: ReactNode; children: ReactNode; to?: string; title?: string }) {
   const cls =
     'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-medium tabular-nums transition-colors [&>svg]:size-4 [&>svg]:text-accent';
   return to ? (
-    <Link to={to} className={cn(cls, 'hover:bg-surface-2')}>
+    <Link to={to} className={cn(cls, 'hover:bg-surface-2')} title={title}>
       {icon}
       {children}
     </Link>
   ) : (
-    <span className={cls}>
+    <span className={cls} title={title}>
       {icon}
       {children}
     </span>
@@ -110,8 +111,29 @@ export function StatsHeader({ r }: { r: ExploreResult }) {
       {s.countries > 0 && <StatChip icon={<Globe2 />}>{t('insights.stats.countries', { n: s.countries })}</StatChip>}
       {s.cities > 0 && <StatChip icon={<MapPin />}>{t('insights.stats.cities', { n: s.cities })}</StatChip>}
       {years && <StatChip icon={<CalendarDays />}>{years}</StatChip>}
-      <StatChip icon={<HardDrive />}>{bytesLabel(s.bytes, lang)}</StatChip>
+      <SizeChip bytes={s.bytes} cloud={s.cloudBytes ?? 0} />
     </div>
+  );
+}
+
+/** total size, split into local (this computer / phone folders) and cloud (MEGA folders) when there is a cloud part */
+export function SizeChip({ bytes, cloud }: { bytes: number; cloud: number }) {
+  const t = useT();
+  const lang = useLang();
+  const local = Math.max(0, bytes - cloud);
+  if (cloud <= 0) return <StatChip icon={<HardDrive />} title={t('insights.stats.localTip')}>{bytesLabel(bytes, lang)}</StatChip>;
+  return (
+    <span className="inline-flex h-9 shrink-0 items-center rounded-full border border-line bg-surface text-[13px] font-medium tabular-nums [&_svg]:size-4" data-stat="size">
+      <span className="inline-flex h-full items-center gap-1.5 pr-2.5 pl-3" title={t('insights.stats.localTip')} data-stat="local">
+        <HardDrive className="text-accent" />
+        {t('insights.stats.local', { size: bytesLabel(local, lang) })}
+      </span>
+      <span className="h-4 w-px bg-line" aria-hidden />
+      <span className="inline-flex h-full items-center gap-1.5 pr-3 pl-2.5" title={t('insights.stats.cloudTip')} data-stat="cloud">
+        <Cloud className="text-[#e5484d]" />
+        {t('insights.stats.cloud', { size: bytesLabel(cloud, lang) })}
+      </span>
+    </span>
   );
 }
 
@@ -430,10 +452,10 @@ export function CalendarHeatmap({ years, counts }: { years: number[]; counts?: {
         {cal && <span className="ml-auto text-xs text-faint tabular-nums">{t('insights.calendar.total', { year, n: cal.total })}</span>}
       </div>
       <div className="no-scrollbar overflow-x-auto pb-1">
-        <div className="inline-block">
-          <div className="relative mb-1 h-4 text-[10.5px] text-faint" style={{ width: `calc(${Math.ceil((n + lead) / 7)} * (var(--cal-cell, 12px) + 3px))` }}>
+        <div className="cal-wrap inline-block">
+          <div className="relative mb-1 h-4 text-[10.5px] text-faint" style={{ width: `calc(${Math.ceil((n + lead) / 7)} * (var(--cal-cell) + 3px) - 3px)` }}>
             {months.map((m) => (
-              <span key={m.label + m.col} className="absolute" style={{ left: `calc(${m.col} * (var(--cal-cell, 12px) + 3px))` }}>
+              <span key={m.label + m.col} className="absolute" style={{ left: `calc(${m.col} * (var(--cal-cell) + 3px))` }}>
                 {m.label}
               </span>
             ))}

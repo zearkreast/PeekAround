@@ -27,6 +27,8 @@ const settingsEn: Record<keyof typeof settingsTr, string> = {
   // ── language & format ──
   'pref.format': 'Language & format',
   'pref.dateFormat': 'Date format',
+  'pref.wideSidebar': 'Wide sidebar',
+  'pref.wideSidebarHint': 'Shows albums, libraries, phones and tools in a long list on the left. When off, a slim navigation rail is used; everything is on the Library page.',
   'pref.dateFormat.locale': 'By language',
   'pref.dateFormat.iso': 'ISO (2024-07-05)',
   'pref.hourCycle': 'Clock',

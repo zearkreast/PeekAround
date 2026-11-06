@@ -16,6 +16,9 @@ import type {
   RemoteCopySpec,
   RemoteFolderCreate,
   RemoteFolderCreated,
+  MegaAccountStatus,
+  MegaLoginRequest,
+  MegaLoginResult,
   BrowseQuery,
   BrowseResult,
   FileRef,
@@ -182,6 +185,10 @@ export interface Backend {
   remoteCopy?(spec: RemoteCopySpec): Promise<Job>;
   /** bytes in the MEGA stream cache (Settings.remoteCacheMb caps it) */
   remoteCacheSize?(): Promise<number>;
+  /** optional MEGA account (its transfer quota instead of the per-IP one) — 403 for LAN clients of the desktop app */
+  megaAccount?(): Promise<MegaAccountStatus>;
+  megaLogin?(req: MegaLoginRequest): Promise<MegaLoginResult>;
+  megaLogout?(): Promise<MegaAccountStatus>;
 
   cacheSize(): Promise<number>;
   clearCache(): Promise<void>;

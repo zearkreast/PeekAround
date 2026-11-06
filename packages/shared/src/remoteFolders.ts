@@ -53,3 +53,40 @@ export interface RemoteCopySpec {
 }
 
 export const DEFAULT_REMOTE_CACHE_MB = 2048;
+
+// ───────────────────────── MEGA account (optional login) ─────────────────────────
+
+/**
+ * GET /api/remote/account — the optional MEGA account whose session every MEGA request uses
+ * (transfers then count against the account's quota instead of the shared per-IP one).
+ * Only the session id is stored on the server; the password never is, and nothing secret is sent here.
+ */
+export interface MegaAccountStatus {
+  loggedIn: boolean;
+  email: string | null;
+  /** 'free' | 'pro' (Pro I–III, Lite, Flexi) | 'business'; null when MEGA did not say */
+  type: 'free' | 'pro' | 'business' | null;
+  /** plan name when known, e.g. "Pro I", "Pro Lite" */
+  plan: string | null;
+  /** transfer quota of the account (bytes) — only when MEGA reports a fixed one */
+  transfer: { used: number; total: number | null } | null;
+  /** the stored session was rejected by MEGA (expired / logged out elsewhere): log in again */
+  expired: boolean;
+  /** ms epoch of the login */
+  since: number | null;
+}
+
+/** POST /api/remote/account/login — `code`: the 6 digit two-factor code when MEGA asks for one */
+export interface MegaLoginRequest {
+  email: string;
+  password: string;
+  code?: string;
+}
+
+/**
+ * login result. Refusals: 'credentials' wrong email or password, 'mfa-required' MEGA wants the two-factor
+ * code, 'mfa-invalid' the given code was wrong, 'blocked' the account is blocked by MEGA.
+ * Network / rate limit problems are HTTP errors (502 / 429).
+ */
+export type MegaLoginRefusal = 'credentials' | 'mfa-required' | 'mfa-invalid' | 'blocked';
+export type MegaLoginResult = { ok: true; account: MegaAccountStatus } | { ok: false; reason: MegaLoginRefusal };

@@ -13,6 +13,8 @@ import { TopBar } from '@/features/gallery/TopBar';
 import { ScrollContext } from '@/features/gallery/GalleryPage';
 import { ActionsHost } from '@/features/gallery/actions';
 import { BottomNav } from '@/features/nav/BottomNav';
+import { NavRail } from '@/features/nav/NavRail';
+import { usePrefs } from '@/store/prefs';
 import { DropZone } from '@/features/upload/DropZone';
 import { UploadPanel } from '@/features/upload/UploadPanel';
 import { Viewer } from '@/features/viewer/Viewer';
@@ -42,6 +44,7 @@ export function Layout() {
   const loc = useRouterLocation();
   const nav = useNavigate();
   const mobile = useIsMobile();
+  const wideSidebar = usePrefs((s) => s.wideSidebar);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => setNavigate((to) => nav(to)), [nav]);
 
@@ -58,7 +61,8 @@ export function Layout() {
   return (
     <ScrollContext.Provider value={scrollRef}>
       <div className="flex h-full w-full overflow-hidden bg-bg text-fg">
-        {!immersive && <Sidebar />}
+        {/* desktop: the slim navigation rail (or the full sidebar, Settings → Appearance); phones: the drawer */}
+        {!immersive && (mobile || wideSidebar ? <Sidebar /> : <NavRail />)}
         <div className="relative flex min-w-0 flex-1 flex-col">
           {!immersive && <TopBar />}
           <div ref={scrollRef} id="scroller" className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">

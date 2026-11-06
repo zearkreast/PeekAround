@@ -414,11 +414,16 @@ export type ServerEvent =
   | { type: 'devices' } // device list / online state changed
   | { type: 'pair'; device: DeviceInfo } // a phone asks to be paired (desktop window only)
   | { type: 'explore' } // grouping data (places, cameras, memories) changed
-  | { type: 'folders' } // libraries / folders / temp sessions changed
+  /**
+   * libraries / folders / temp sessions changed; `status`: only the state shown for a folder changed
+   * (remote listing / indexing progress, quota) — no media rows came or went, nothing to re-query
+   */
+  | { type: 'folders'; status?: boolean }
   | { type: 'albums'; ids?: string[] } // albums or their items changed
   | { type: 'scan'; scanning: boolean; done: number; total: number }
   | { type: 'job'; job: Job }
-  | { type: 'fonts' };
+  | { type: 'fonts' }
+  | { type: 'megaAccount' }; // the MEGA account session started / ended / expired (no details: refetch, local clients only)
 
 // ───────────────────────── File operations ─────────────────────────
 

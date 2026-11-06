@@ -85,11 +85,19 @@ export function BackendProvider({ initial, children }: { initial: Backend; child
           break;
         }
         case 'folders':
+          if (e.status) {
+            // only a folder's status / indexing progress (remote folders): the folder lists, nothing else
+            later('folder-status', 1500, () => void qc.invalidateQueries({ queryKey: ['libraries'] }));
+            break;
+          }
           void qc.invalidateQueries({ queryKey: ['libraries'] });
           void qc.invalidateQueries({ queryKey: ['browse'] });
           break;
         case 'fonts':
           void qc.invalidateQueries({ queryKey: ['fonts'] });
+          break;
+        case 'megaAccount':
+          void qc.invalidateQueries({ queryKey: ['mega-account'] });
           break;
         case 'albums':
           // album list / covers / counts + open album grids

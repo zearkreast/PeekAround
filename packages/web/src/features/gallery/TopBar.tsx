@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import type { KindFilter, SortKey } from '@peekaround/shared';
 import { useBackend, useInfo } from '@/backend';
-import { useT } from '@/i18n';
+import { useT, type MessageKey } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { folderHref, libraryHref } from '@/lib/routes';
 import { useChrome } from '@/store/chrome';
@@ -42,7 +42,8 @@ function Crumbs() {
   const crumbs = useChrome((s) => s.crumbs);
   const title = useChrome((s) => s.title);
   const mobile = useIsMobile();
-  if (!crumbs.length || mobile) return <h1 className="truncate font-display text-[17px] font-semibold">{crumbs.length ? crumbs[crumbs.length - 1].label : title}</h1>;
+  // (not an <h1>: the page has its own big title; this one only shows once that scrolled away)
+  if (!crumbs.length || mobile) return <div className="truncate font-display text-[17px] font-semibold">{crumbs.length ? crumbs[crumbs.length - 1].label : title}</div>;
   return (
     <nav className="flex min-w-0 items-center gap-1 text-[14px]">
       <AnimatePresence initial={false} mode="popLayout">
@@ -75,7 +76,42 @@ function Crumbs() {
   );
 }
 
-function SearchBox() {
+/**
+ * Desktop: the page title in the top bar shows only once the page's own big title (its first
+ * <h1>) has scrolled out of view — no second title right above the first one. Pages without one
+ * (settings, collage, map …) always show it.
+ */
+function useTitleReveal(enabled: boolean): boolean {
+  const loc = useRouterLocation();
+  const [show, setShow] = useState(true);
+  useEffect(() => {
+    if (!enabled) return setShow(true);
+    const sc = document.getElementById('scroller');
+    if (!sc) return;
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      // the page that animates out may still be there for a moment: take the last (= newest) one
+      const all = sc.querySelectorAll('h1');
+      const h1 = all[all.length - 1];
+      setShow(!h1 || h1.getBoundingClientRect().bottom < sc.getBoundingClientRect().top + 8);
+    };
+    const on = () => {
+      if (!raf) raf = requestAnimationFrame(check);
+    };
+    sc.addEventListener('scroll', on, { passive: true });
+    // pages put their header up once their data is there
+    const timers = [0, 250, 700, 1500].map((ms) => setTimeout(check, ms));
+    return () => {
+      sc.removeEventListener('scroll', on);
+      if (raf) cancelAnimationFrame(raf);
+      timers.forEach(clearTimeout);
+    };
+  }, [enabled, loc.pathname]);
+  return show;
+}
+
+function SearchBox({ className }: { className?: string }) {
   const t = useT();
   const nav = useNavigate();
   const [params] = useSearchParams();
@@ -93,13 +129,14 @@ function SearchBox() {
   }, []);
   return (
     <form
-      className="hidden w-56 md:block lg:w-64"
+      role="search"
+      className={className}
       onSubmit={(e) => {
         e.preventDefault();
         if (q.trim()) nav(`/search?q=${encodeURIComponent(q.trim())}`);
       }}
     >
-      <Input ref={ref} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('nav.search')} icon={<Search />} className="app-no-drag" />
+      <Input ref={ref} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('nav.search')} title={`${t('nav.search')} (Ctrl+K)`} icon={<Search />} className="app-no-drag" />
     </form>
   );
 }
@@ -108,73 +145,101 @@ function ViewOptions() {
   const t = useT();
   const p = usePrefs();
   const mobile = useIsMobile();
+  // what this page honours (the timeline / albums keep their own order, Favorites is a filter itself)
+  const canSort = useChrome((s) => s.viewSort);
+  const canKind = useChrome((s) => s.viewKind);
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
   const sorts: SortKey[] = ['takenAt', 'name', 'mtime', 'size'];
+  // the levels of the grid on screen (a narrow grid uses the phone ones, see MediaGrid)
+  const gridPhone = useChrome((s) => s.gridPhone);
+  const phoneLevels = mobile || gridPhone;
+  const level = phoneLevels ? p.gridZoomMobile : p.gridZoomDesktop;
+  // the two dense levels are always square tiles of a fixed size: the layout / size options do nothing there
+  const freeLayout = level <= 1;
+  const filtered = canKind && p.kind !== 'all';
   const body = (
     <>
-      <MenuLabel>{t('gallery.filter.all')}</MenuLabel>
-      <div className="px-1 pb-2">
-        <Segmented<KindFilter>
-          size="sm"
-          value={p.kind}
-          onChange={(kind) => p.set({ kind })}
+      {canKind && (
+        <>
+          <MenuLabel>{t('gallery.filter')}</MenuLabel>
+          <div className="px-1 pb-2">
+            <Segmented<KindFilter>
+              size="sm"
+              value={p.kind}
+              onChange={(kind) => p.set({ kind })}
+              className="w-full [&>button]:flex-1"
+              options={[
+                { value: 'all', label: t('gallery.filter.all') },
+                { value: 'image', label: '', icon: <Images />, title: t('gallery.filter.image') },
+                { value: 'video', label: '', icon: <Film />, title: t('gallery.filter.video') },
+                { value: 'favorites', label: '', icon: <Heart />, title: t('gallery.filter.favorites') },
+              ]}
+            />
+          </div>
+          <MenuSep />
+        </>
+      )}
+      {canSort && (
+        <>
+          <MenuLabel>{t('gallery.sort')}</MenuLabel>
+          {sorts.map((s) => (
+            <MenuItem key={s} checked={p.sort === s} onClick={() => p.set({ sort: s })}>
+              {t(`gallery.sort.${s}` as const)}
+            </MenuItem>
+          ))}
+          <MenuSep />
+          <MenuItem icon={<ArrowDownWideNarrow />} checked={p.order === 'desc'} onClick={() => p.set({ order: 'desc' })}>
+            {t('gallery.order.desc')}
+          </MenuItem>
+          <MenuItem icon={<ArrowUpNarrowWide />} checked={p.order === 'asc'} onClick={() => p.set({ order: 'asc' })}>
+            {t('gallery.order.asc')}
+          </MenuItem>
+          <MenuSep />
+        </>
+      )}
+      <MenuLabel>{t('gallery.density')}</MenuLabel>
+      <div className="flex flex-col gap-3 px-1 pt-0.5 pb-2">
+        <Segmented<string>
+          size={mobile ? 'md' : 'sm'}
+          value={String(level)}
+          onChange={(v) => p.set(phoneLevels ? { gridZoomMobile: Number(v) } : { gridZoomDesktop: Number(v) })}
           className="w-full [&>button]:flex-1"
-          options={[
-            { value: 'all', label: t('gallery.filter.all') },
-            { value: 'image', label: '', icon: <Images />, title: t('gallery.filter.image') },
-            { value: 'video', label: '', icon: <Film />, title: t('gallery.filter.video') },
-            { value: 'favorites', label: '', icon: <Heart />, title: t('gallery.filter.favorites') },
-          ]}
+          options={['0', '1', '2', '3'].map((v) => ({ value: v, label: '', icon: <span className="grid place-items-center">{densityIcon(Number(v))}</span>, title: t(`gallery.density.${v}` as MessageKey) }))}
         />
-      </div>
-      <MenuSep />
-      <MenuLabel>{t('gallery.sort')}</MenuLabel>
-      {sorts.map((s) => (
-        <MenuItem key={s} checked={p.sort === s} onClick={() => p.set({ sort: s })}>
-          {t(`gallery.sort.${s}` as const)}
-        </MenuItem>
-      ))}
-      <MenuSep />
-      <MenuItem icon={<ArrowDownWideNarrow />} checked={p.order === 'desc'} onClick={() => p.set({ order: 'desc' })}>
-        {t('gallery.order.desc')}
-      </MenuItem>
-      <MenuItem icon={<ArrowUpNarrowWide />} checked={p.order === 'asc'} onClick={() => p.set({ order: 'asc' })}>
-        {t('gallery.order.asc')}
-      </MenuItem>
-      <MenuSep />
-      <div className="flex flex-col gap-3 px-2.5 py-2">
-        <Segmented
-          size="sm"
-          value={p.gridMode}
-          onChange={(gridMode) => p.set({ gridMode })}
-          className="w-full [&>button]:flex-1"
-          options={[
-            { value: 'justified', label: t('gallery.layout.justified'), icon: <Rows3 /> },
-            { value: 'square', label: t('gallery.layout.square'), icon: <Grid2x2 /> },
-          ]}
-        />
-        {mobile ? (
-          <Segmented<string>
-            size="md"
-            value={String(p.gridZoomMobile)}
-            onChange={(v) => p.set({ gridZoomMobile: Number(v) })}
-            className="w-full [&>button]:flex-1"
-            options={['0', '1', '2', '3'].map((v) => ({ value: v, label: '', icon: <span className="grid place-items-center">{densityIcon(Number(v))}</span>, title: t('gallery.size') }))}
-          />
+        {freeLayout ? (
+          <>
+            <Segmented
+              size="sm"
+              value={p.gridMode}
+              onChange={(gridMode) => p.set({ gridMode })}
+              className="w-full [&>button]:flex-1"
+              options={[
+                { value: 'justified', label: t('gallery.layout.justified'), icon: <Rows3 /> },
+                { value: 'square', label: t('gallery.layout.square'), icon: <Grid2x2 /> },
+              ]}
+            />
+            {!phoneLevels && (
+              <div className="px-1.5">
+                <Slider label={t('gallery.size')} value={p.rowHeight} min={110} max={420} step={10} onChange={(rowHeight) => p.set({ rowHeight })} format={(v) => `${v}px`} />
+              </div>
+            )}
+          </>
         ) : (
-          <Slider label={t('gallery.size')} value={p.rowHeight} min={110} max={420} step={10} onChange={(rowHeight) => p.set({ rowHeight })} format={(v) => `${v}px`} />
+          <p className="px-1.5 text-xs text-faint">{t('gallery.density.fixedHint')}</p>
         )}
+        {!mobile && <p className="px-1.5 text-[11px] text-faint">{t('gallery.density.wheelHint')}</p>}
       </div>
     </>
   );
   return (
     <>
-      <IconButton ref={anchor} label={t('gallery.sort')} active={open} onClick={() => setOpen((o) => !o)}>
+      <IconButton ref={anchor} label={filtered ? `${t('gallery.viewOptions')} · ${t(`gallery.filter.${p.kind}` as MessageKey)}` : t('gallery.viewOptions')} active={open} onClick={() => setOpen((o) => !o)} className="relative" data-action="view-options">
         <SlidersHorizontal />
+        {filtered && <span className="absolute top-2 right-2 size-2 rounded-full bg-accent ring-2 ring-[var(--bg)]" />}
       </IconButton>
       {mobile ? (
-        <BottomSheet open={open} onClose={() => setOpen(false)} title={t('gallery.sort')}>
+        <BottomSheet open={open} onClose={() => setOpen(false)} title={t('gallery.viewOptions')}>
           <div className="px-3 [&>button]:min-h-11">{body}</div>
         </BottomSheet>
       ) : (
@@ -332,6 +397,12 @@ function MobileSearch() {
 
 const ROOT_TABS = ['/', '/explore', '/library', '/settings'];
 
+/**
+ * The page header. Desktop: title / breadcrumb (once the page's own title scrolled away) ·
+ * centered search · page actions; the window buttons of the desktop app (titleBarOverlay) sit in
+ * the right padding, which stays a window drag region like the rest of the empty bar.
+ * Phones: menu / back · title · search · actions.
+ */
 export function TopBar() {
   const t = useT();
   const viewControls = useChrome((s) => s.viewControls);
@@ -341,38 +412,48 @@ export function TopBar() {
   const loc = useRouterLocation();
   const nav = useNavigate();
   const root = ROOT_TABS.includes(loc.pathname);
+  const showTitle = useTitleReveal(!mobile);
+  const actions = (
+    <div className="-mr-1 flex shrink-0 items-center justify-end gap-0.5 sm:mr-0 sm:gap-1.5">
+      {mobile && <MobileSearch />}
+      {viewControls && <ViewOptions />}
+      <JobsButton />
+      {info && !info.caps.readonly && viewControls && <AddMenu />}
+    </div>
+  );
+  if (!mobile)
+    return (
+      <header
+        className="app-drag wco-r relative z-10 grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)] items-center gap-4 border-b border-line bg-bg/70 pl-5 backdrop-blur-xl [--wco-base:1rem]"
+        style={{ height: 'var(--topbar-h)' }}
+        data-testid="topbar"
+      >
+        <div className={cn('flex min-w-0 items-center transition-opacity duration-200', showTitle ? 'opacity-100' : 'pointer-events-none opacity-0')} aria-hidden={!showTitle}>
+          <Crumbs />
+        </div>
+        <SearchBox className="w-[clamp(200px,34vw,520px)]" />
+        {actions}
+      </header>
+    );
   return (
     <header
-      className={cn(
-        'app-drag relative z-10 flex shrink-0 items-center gap-2 border-b border-line px-3 sm:gap-3 sm:px-5',
-        mobile ? 'bg-bg' : 'bg-bg/70 backdrop-blur-xl',
-      )}
-      style={{
-        height: mobile ? 'calc(56px + env(safe-area-inset-top, 0px))' : 'calc(var(--topbar-h) + env(safe-area-inset-top, 0px))',
-        paddingTop: 'env(safe-area-inset-top, 0px)',
-        paddingRight: mobile ? undefined : 'max(20px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 12px))',
-      }}
+      className="app-drag relative z-10 flex shrink-0 items-center gap-2 border-b border-line bg-bg px-3 sm:gap-3 sm:px-5"
+      style={{ height: 'calc(56px + env(safe-area-inset-top, 0px))', paddingTop: 'env(safe-area-inset-top, 0px)' }}
     >
-      {mobile && !root && (
-        <IconButton label={t('common.back')} onClick={() => (canGoBackInHistory() ? nav(-1) : nav('/library'))} className="app-no-drag -ml-1.5">
+      {!root && (
+        <IconButton label={t('common.back')} onClick={() => (canGoBackInHistory() ? nav(-1) : nav('/library'))} className="-ml-1.5">
           <ArrowLeft />
         </IconButton>
       )}
-      {mobile && root && (
-        <IconButton label={t('mobile.menu')} onClick={() => setChrome({ navOpen: true })} className="app-no-drag -ml-1.5">
+      {root && (
+        <IconButton label={t('mobile.menu')} onClick={() => setChrome({ navOpen: true })} className="-ml-1.5">
           <Menu />
         </IconButton>
       )}
-      <div className="app-no-drag flex min-w-0 flex-1 items-center">
+      <div className="flex min-w-0 flex-1 items-center">
         <Crumbs />
       </div>
-      <div className="app-no-drag -mr-1 flex items-center gap-0.5 sm:mr-0 sm:gap-1.5">
-        <SearchBox />
-        <MobileSearch />
-        {viewControls && <ViewOptions />}
-        <JobsButton />
-        {info && !info.caps.readonly && viewControls && <AddMenu />}
-      </div>
+      {actions}
     </header>
   );
 }

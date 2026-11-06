@@ -98,16 +98,23 @@ const empty = (): ExtractedMeta => ({
   pages: null,
 });
 
-export async function extractMeta(abs: string, row: Pick<MediaRow, 'kind' | 'ext'>, ffmpeg: Ffmpeg): Promise<ExtractedMeta> {
-  const m = await extractEmbedded(abs, row, ffmpeg);
+/** still formats that can never be animated / multi-page: their pixel header is not needed when the size is known */
+const SINGLE_FRAME = new Set(['jpg', 'jpeg', 'jpe', 'jfif', 'bmp', 'ico']);
+
+/**
+ * `known`: the row already has its dimensions (enrichment of an indexed row) → JPEGs skip the pixel
+ * header read (a second open + libvips call per file; only EXIF / XMP / sidecars are needed).
+ */
+export async function extractMeta(abs: string, row: Pick<MediaRow, 'kind' | 'ext'>, ffmpeg: Ffmpeg, known?: { width: number | null; height: number | null }): Promise<ExtractedMeta> {
+  const m = await extractEmbedded(abs, row, ffmpeg, !!known?.width && !!known?.height && SINGLE_FRAME.has(row.ext));
   if ((row.kind === 'image' || row.kind === 'video') && (m.lat === null || (m.local === null && m.instant === null))) {
     await applySidecar(m, abs).catch(() => {});
   }
   return m;
 }
 
-async function extractEmbedded(abs: string, row: Pick<MediaRow, 'kind' | 'ext'>, ffmpeg: Ffmpeg): Promise<ExtractedMeta> {
-  if (row.kind === 'image') return imageMeta(abs, row.ext);
+async function extractEmbedded(abs: string, row: Pick<MediaRow, 'kind' | 'ext'>, ffmpeg: Ffmpeg, skipPixels = false): Promise<ExtractedMeta> {
+  if (row.kind === 'image') return imageMeta(abs, row.ext, skipPixels);
   if (row.kind === 'video' || row.kind === 'audio') {
     const p = await ffmpeg.probe(abs);
     if (row.kind === 'audio') return { ...empty(), duration: p?.duration ?? null };
@@ -181,11 +188,11 @@ export function videoGroupMeta(p: ProbeResult | null): Pick<ExtractedMeta, 'loca
   };
 }
 
-async function imageMeta(abs: string, ext: string): Promise<ExtractedMeta> {
+async function imageMeta(abs: string, ext: string, skipPixels = false): Promise<ExtractedMeta> {
   const m = empty();
   m.playback = BROWSER_IMAGE_EXT.includes(ext) ? 'direct' : 'convert';
 
-  if (ext !== 'heic' && ext !== 'heif') {
+  if (ext !== 'heic' && ext !== 'heif' && !skipPixels) {
     try {
       const s = await sharp(abs, { failOn: 'none' }).metadata();
       m.width = s.width ?? null;

@@ -35,7 +35,7 @@ RUN node -e "const p=require('./packages/server/package.json'); require('fs').wr
 FROM ${NODE_IMAGE}:${NODE_VERSION}-bookworm-slim
 LABEL org.opencontainers.image.title="PeekAround" \
       org.opencontainers.image.description="Modern, animated gallery for your folders" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="GPL-3.0-only"
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg tini gosu ca-certificates \
  && rm -rf /var/lib/apt/lists/*

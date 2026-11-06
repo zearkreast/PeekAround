@@ -10,6 +10,8 @@ const libraryEn: Record<keyof typeof libraryTr, string> = {
   'nav2.section.toggle': 'Toggle {name}',
   'nav2.reorderHint': 'Drag to reorder',
   'nav2.dropToAlbum': 'Add to “{name}”',
+  'nav2.dropAlbums': 'Drop onto an album',
+  'nav2.dropLibraries': 'Drop into a library',
 
   // ── library hub ──
   'lib2.hub.title': 'Library',

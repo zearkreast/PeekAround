@@ -35,6 +35,7 @@ import { applyRuntimeSettings } from './runtime-settings.js';
 import { DeviceHub } from './devices/hub.js';
 import { deviceAccessHook } from './devices/access.js';
 import { megaClient } from './remote/mega.js';
+import { MegaAccount, megaAuthClient } from './remote/account.js';
 import { RemoteService } from './remote/folders.js';
 import type { Duplex } from 'node:stream';
 
@@ -67,7 +68,9 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
   const jobs = new JobService(events, cfg.tempDir);
   const ctx = { cfg, db, events, lib, ffmpeg, thumbs, scanner, watcher, jobs, geo, lan: { enabled: false, port: 8080 } } as Omit<Ctx, 'explore'> as Ctx;
   ctx.explore = new ExploreService(ctx);
-  ctx.mega = opts.mega ?? megaClient();
+  // optional MEGA account: its session id rides on every MEGA API request (links, streaming, imports)
+  ctx.megaAccount = new MegaAccount(ctx, opts.megaAuth ?? megaAuthClient({ gateway: opts.megaGateway }));
+  ctx.mega = opts.mega ?? megaClient({ session: ctx.megaAccount, gateway: opts.megaGateway });
   ctx.devices = new DeviceHub(ctx);
   ctx.remote = new RemoteService(ctx);
   // home time zone: persisted on first run (server zone), used for videos / mtime

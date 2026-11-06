@@ -39,6 +39,8 @@ describe('runtime settings (thumb quality, indexing intensity, hwaccel) + cache 
     expect(peek.ctx.thumbs.q(80)).toBe(88);
     expect(peek.ctx.thumbs.limiter.lowMax).toBe(1);
     expect(peek.ctx.scanner.concurrency).toEqual({ meta: 1, thumb: 1 });
+    expect(peek.ctx.thumbs.bg.size).toBe(1);
+    expect(peek.ctx.ffmpeg.decodeThreads).toBe(1);
 
     // invalid values are ignored (like every other key)
     r = await patch({ thumbQuality: 'ultra', indexIntensity: 9, hwAccel: 'yes' });
@@ -51,10 +53,25 @@ describe('runtime settings (thumb quality, indexing intensity, hwaccel) + cache 
   });
 
   it('maps intensity to concurrency', () => {
-    expect(intensityLimits('low', 8)).toEqual({ max: 6, lowMax: 1, meta: 1, thumb: 1 });
-    expect(intensityLimits('normal', 8)).toEqual({ max: 6, lowMax: 5, meta: 6, thumb: 4 });
-    expect(intensityLimits('high', 16)).toEqual({ max: 12, lowMax: 11, meta: 12, thumb: 8 });
-    expect(intensityLimits('high', 1).thumb).toBeGreaterThanOrEqual(1);
+    // low: one background item at a time, single-threaded decodes, a pause after each item
+    expect(intensityLimits('low', 8)).toMatchObject({ max: 4, lowMax: 1, workers: 1, vipsThreads: 1, ffmpegThreads: 1, meta: 1, thumb: 1 });
+    expect(intensityLimits('low', 8).gapMs).toBeGreaterThan(0);
+    // normal: about half of the cores, never all of them (libvips / ffmpeg single-threaded per item)
+    expect(intensityLimits('normal', 8)).toMatchObject({ max: 6, lowMax: 3, workers: 3, gapMs: 0, vipsThreads: 1 });
+    expect(intensityLimits('normal', 4)).toMatchObject({ workers: 2, lowMax: 2 });
+    expect(intensityLimits('normal', 2).workers).toBe(1);
+    // desktop app (server in Electron's main process): a quarter of the cores, at most 2
+    expect(intensityLimits('normal', 4, true).workers).toBe(1);
+    expect(intensityLimits('normal', 8, true).workers).toBe(2);
+    expect(intensityLimits('normal', 32, true).workers).toBe(2);
+    // high: all but one core, libvips threading on
+    expect(intensityLimits('high', 16)).toMatchObject({ max: 12, lowMax: 8, workers: 8, vipsThreads: 0 });
+    expect(intensityLimits('high', 1).workers).toBeGreaterThanOrEqual(1);
+    for (const i of ['low', 'normal', 'high'] as const) for (const n of [1, 2, 4, 8, 32]) {
+      const l = intensityLimits(i, n);
+      expect(l.lowMax).toBeLessThanOrEqual(l.max);
+      expect(l.workers).toBeLessThanOrEqual(Math.max(2, n));
+    }
     expect(hwAccelArgs({ hwAccel: true })).toEqual(['-hwaccel', 'auto']);
     expect(hwAccelArgs({ hwAccel: false })).toEqual([]);
   });

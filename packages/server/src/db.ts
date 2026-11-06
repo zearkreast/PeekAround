@@ -79,8 +79,10 @@ export class Db {
   readonly raw: DatabaseSync;
   private cache = new Map<string, StatementSync>();
   private arrayCache = new Map<string, StatementSync>();
+  private readerConn: DatabaseSync | null | undefined;
+  private readerCache = new Map<string, StatementSync>();
 
-  constructor(file: string) {
+  constructor(private file: string) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     this.raw = new DatabaseSync(file);
     this.raw.exec(SCHEMA);
@@ -138,6 +140,47 @@ export class Db {
     return rows.length && !Array.isArray(rows[0]) ? rows.map((r) => Object.values(r as object)) : (rows as unknown[][]);
   }
 
+  /**
+   * A second, read-only connection for long reads that are consumed in chunks (yielding to the event
+   * loop in between): in WAL mode it reads a consistent snapshot and never blocks the writers.
+   * null for in-memory databases or when it cannot be opened.
+   */
+  private reader(): DatabaseSync | null {
+    if (this.readerConn !== undefined) return this.readerConn;
+    try {
+      if (this.file === ':memory:') throw new Error('in-memory');
+      const r = new DatabaseSync(this.file, { readOnly: true });
+      registerFunctions(r);
+      this.readerConn = r;
+    } catch {
+      this.readerConn = null;
+    }
+    return this.readerConn;
+  }
+
+  /**
+   * Rows as arrays, one at a time (reader connection when possible). Callers that take a break
+   * between rows must not hold the iterator across a close().
+   */
+  *iterateArrays(sql: string, ...params: any[]): Generator<unknown[]> {
+    const conn = this.reader();
+    let s: StatementSync | undefined = conn ? this.readerCache.get(sql) : undefined;
+    if (conn && !s) {
+      try {
+        s = conn.prepare(sql);
+        if (typeof s.setReturnArrays === 'function') s.setReturnArrays(true);
+        this.readerCache.set(sql, s);
+      } catch {
+        s = undefined; // e.g. a function only the main connection has
+      }
+    }
+    if (!s) {
+      yield* this.allArrays(sql, ...params);
+      return;
+    }
+    for (const r of s.iterate(...params) as Iterable<unknown>) yield Array.isArray(r) ? r : Object.values(r as object);
+  }
+
   get<T = Row>(sql: string, ...params: any[]): T | undefined {
     return this.stmt(sql).get(...params) as T | undefined;
   }
@@ -183,6 +226,13 @@ export class Db {
   }
 
   close() {
+    this.readerCache.clear();
+    try {
+      this.readerConn?.close();
+    } catch {
+      /* already closed */
+    }
+    this.readerConn = null;
     this.raw.close();
   }
 }

@@ -4,7 +4,7 @@
  * media action. The link key never reaches the UI except through the local-only remoteLink().
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Cloud, CloudOff, HardDriveDownload, Link2, RefreshCw, TriangleAlert, Unlink } from 'lucide-react';
@@ -18,6 +18,7 @@ import { Button, ConfirmDialog, ProgressRing, Spinner } from '@/components/ui';
 import { isPhoneClient, refOf, registerMediaAction, type ActionCtx } from '@/features/gallery/actions';
 import { useDeviceUi } from '@/features/devices/useDevices';
 import { megaErrorKey } from './mega';
+import { MEGA_ACCOUNT_HREF, useMegaAccount } from './MegaAccount';
 
 import { remoteStatusText } from './status';
 
@@ -55,6 +56,9 @@ function RemoteRow({ f, dir }: { f: FolderRef; dir: string }) {
   const writable = !!info && !info.caps.readonly;
   const pct = r.indexing.total ? r.indexing.done / r.indexing.total : 1;
   const problem = r.state === 'error' || r.state === 'offline' || r.state === 'quota';
+  // quota: logging in to a MEGA account moves transfers to the account's own quota (settings card)
+  const account = useMegaAccount(r.state === 'quota');
+  const offerLogin = r.state === 'quota' && !!account && !account.loggedIn;
 
   const refresh = async () => {
     setRefreshing(true);
@@ -101,6 +105,11 @@ function RemoteRow({ f, dir }: { f: FolderRef; dir: string }) {
         <div className={cn('flex items-center gap-1.5 text-xs', problem ? tone(r) : 'text-dim')}>
           {r.state === 'listing' ? <Spinner className="size-3" /> : r.indexing.done < r.indexing.total && r.state === 'ok' ? <ProgressRing value={pct} size={12} stroke={2} /> : null}
           <span className="truncate">{remoteStatusText(r, t, lang)}</span>
+          {offerLogin && (
+            <Link to={MEGA_ACCOUNT_HREF} className="shrink-0 font-medium underline underline-offset-2 hover:opacity-80" data-action="mega-login-link">
+              {t('mega.account.loginLink')}
+            </Link>
+          )}
           <span className="hidden text-faint sm:inline">· {t('mega.readonly')}</span>
         </div>
       </div>

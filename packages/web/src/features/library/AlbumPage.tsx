@@ -97,7 +97,8 @@ export default function AlbumPage() {
   const source = useGridSource(query);
   const total = source?.total ?? 0;
 
-  useEffect(() => setChrome({ crumbs: [], title: a?.name ?? t('album.title'), viewControls: true }), [setChrome, a?.name, t]);
+  // (the album keeps its own order: its ⋯ menu, not the top bar's sort options)
+  useEffect(() => setChrome({ crumbs: [], title: a?.name ?? t('album.title'), viewControls: true, viewSort: false, viewKind: true }), [setChrome, a?.name, t]);
   useEffect(() => setView({ target: null, targetLabel: a?.name ?? '', source }), [source, a?.name, setView]);
   useEffect(() => () => setView({ target: null, targetLabel: '', source: null }), [setView]);
   // album actions (remove from album, make cover, move) know the open album

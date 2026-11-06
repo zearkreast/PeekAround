@@ -313,7 +313,7 @@ export function MemoryPlayer({ memory, items, missing, onClose }: { memory: Memo
       </motion.div>
 
       {/* top: progress bars + controls */}
-      <div className={cn('absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/55 to-transparent px-3 pb-10 transition-opacity duration-200', !ui && 'opacity-0')} style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}>
+      <div className={cn('wco-r absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/55 to-transparent pb-10 pl-3 [--wco-base:0.75rem] transition-opacity duration-200', !ui && 'opacity-0')} style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}>
         <div className="flex gap-1">
           {slides.map((_, k) => (
             <span key={k} className="mp-bar" ref={(n) => void (bars.current[k] = n)}>

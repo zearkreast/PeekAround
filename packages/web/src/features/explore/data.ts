@@ -14,8 +14,7 @@ export const isIndexing = (r: ExploreResult | undefined) => !!r && r.indexing.to
 
 /**
  * Explore groups (memories, places, types, cameras, years). Refetches on the server's throttled
- * {type:'explore'} event and polls gently while metadata indexing is still running
- * (Android local mode has no push events for it).
+ * {type:'explore'} event and polls gently while metadata indexing is still running.
  */
 export function useExplore() {
   const backend = useBackend();
@@ -23,7 +22,7 @@ export function useExplore() {
   useEffect(
     () =>
       backend.subscribe((e) => {
-        if (e.type === 'explore' || e.type === 'folders') void qc.invalidateQueries({ queryKey: ['explore', backend.id] });
+        if (e.type === 'explore' || (e.type === 'folders' && !e.status)) void qc.invalidateQueries({ queryKey: ['explore', backend.id] });
       }),
     [backend, qc],
   );
@@ -31,7 +30,9 @@ export function useExplore() {
     queryKey: ['explore', backend.id],
     queryFn: () => backend.explore(),
     staleTime: 30_000,
-    refetchInterval: (query) => (isIndexing(query.state.data) ? 6000 : false),
+    // the server pushes {type:'explore'} (throttled) — the poll only refreshes the indexing progress;
+    // Android local mode has no push events for it
+    refetchInterval: (query) => (isIndexing(query.state.data) ? (backend.kind === 'http' ? 20_000 : 6000) : false),
   });
   return { ...q, result: q.data ?? EMPTY };
 }

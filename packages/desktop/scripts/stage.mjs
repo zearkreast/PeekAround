@@ -70,7 +70,7 @@ fs.writeFileSync(
       description: 'PeekAround — your folders, beautifully.',
       author: { name: 'PeekAround', email: 'hello@peekaround.app' },
       homepage: 'https://github.com/peekaround/peekaround',
-      license: 'MIT',
+      license: 'SEE LICENSE IN LICENSE',
       main: 'main.js',
       dependencies: NATIVE,
     },

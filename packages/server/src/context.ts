@@ -14,6 +14,7 @@ import type { JobService } from './jobs/index.js';
 import type { DeviceHub } from './devices/hub.js';
 import type { MegaClient } from './remote/mega.js';
 import type { RemoteService } from './remote/folders.js';
+import type { MegaAccount } from './remote/account.js';
 import { applyRuntimeSettings } from './runtime-settings.js';
 
 export interface Ctx {
@@ -34,6 +35,8 @@ export interface Ctx {
   mega: MegaClient;
   /** remote (streaming) folders — MEGA links shown without downloading */
   remote: RemoteService;
+  /** optional MEGA account session used by every MEGA request (remote/account.ts) */
+  megaAccount: MegaAccount;
   lan: { enabled: boolean; port: number };
 }
 

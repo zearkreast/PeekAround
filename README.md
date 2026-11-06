@@ -53,7 +53,7 @@ Aynı uygulama üç şekilde çalışır:
 - Kütüphanedeki zip’lere “Göz at” ile geçici bakma; Türkçe Windows zip’lerindeki (CP857) dosya adları doğru çözülür
 - Masaüstünde bırakılan klasör: **kütüphaneye bağla** (kopyalamadan) veya **buraya kopyala**
 - Android’de **Paylaş → PeekAround**
-- **MEGA linkleri:** mega.nz dosya/klasör linkini yapıştır, sürükle ya da MEGA uygulamasından paylaş → **indirmeden izle** (link kütüphane klasörü olur; fotoğraflar/videolar MEGA’dan akışla açılır, sadece küçük resimler ve sınırlı bir önbellek diske yazılır) veya seçip bilgisayara kopyala
+- **MEGA linkleri:** mega.nz dosya/klasör linkini yapıştır, sürükle ya da MEGA uygulamasından paylaş → **indirmeden izle** (link kütüphane klasörü olur; fotoğraflar/videolar MEGA’dan akışla açılır, sadece küçük resimler ve sınırlı bir önbellek diske yazılır) veya seçip bilgisayara kopyala. MEGA aktarım kotası dolarsa Ayarlar → Ağ → **MEGA hesabı** ile giriş yapılabilir: aktarımlar IP’nin ortak kotası yerine hesabın kotasından düşer (Pro’da çok daha büyük)
 
 **Düzenleme (her zaman kopyaya: `ad_edit.jpg`, `ad_edit-2.jpg` …)**
 - Fotoğraf editörü: pozlama, kontrast, sıcaklık, gölge/vurgu, vinyet, gren… (WebGL), filtre ön ayarları, kırp/döndür/çevir/düzleştir, **özel fontlu metin katmanları**, geri/ileri al, önce/sonra
@@ -109,6 +109,8 @@ docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/F
 
 > Kimlik doğrulama yoktur: PeekAround’u yalnızca güvendiğin ağlarda çalıştır ya da önüne bir ters vekil (reverse proxy) + şifre koy.
 > Yine de tarayıcı tabanlı saldırılara karşı korunur: bilinmeyen alan adları (DNS rebinding), başka sitelerden gelen yazma istekleri (CSRF) ve aşırı istekler (hız sınırı) reddedilir. `.local`, `.lan`, IP adresleri ve tek kelimelik ağ adları (ör. `nas`) her zaman çalışır.
+>
+> **MEGA hesabı (isteğe bağlı, Ayarlar → Ağ):** şifre hiçbir yere kaydedilmez; sunucu yalnızca MEGA oturum kimliğini (`sid`) veritabanında (`peekaround.db`, `settings` tablosu, `megaSession`) tutar ve bunu hiçbir istemciye göndermez. Masaüstü uygulamasında giriş/çıkış yalnızca bilgisayarın kendisinden yapılabilir (yerel ağ paylaşımından gelen istekler 403 alır). **Sunucu/Docker modunda** bu ayrım yoktur: sunucuya erişebilen herkes hesaba giriş/çıkış yapabilir ve MEGA aktarımları o hesabın kotasından düşer. Veritabanı dosyası ve yedekleri oturum kimliğini içerir; “Çıkış yap” onu siler ve oturumu MEGA tarafında da sonlandırır.
 
 ### 🖥️ Masaüstü
 
@@ -197,4 +199,4 @@ git push origin v1.0.0
 
 ## Lisans
 
-MIT. Hazır fontlar SIL Open Font License ile dağıtılır (@fontsource).
+GNU GPL v3 — ayrıntılar `LICENSE` dosyasında. Hazır fontlar SIL Open Font License ile dağıtılır (@fontsource).

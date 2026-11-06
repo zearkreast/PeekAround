@@ -1,5 +1,4 @@
 import fsp from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { kindOf, extOf, joinRel, instantToLocal, systemTimeZone, excludeMatcher, type ExcludeMatcher } from '@peekaround/shared';
 import type { Db } from '../db.js';
@@ -14,6 +13,8 @@ import type { ThumbService } from './thumbs.js';
 
 export const TRASH_DIR = '.peekaround-trash';
 
+// background pass results are only written while the file is still the one that was read
+const UNCHANGED = 'size = ? AND mtime = ?';
 // a changed file (size/mtime) is re-read from scratch by the meta pass
 const CHANGED = 'media.size != excluded.size OR media.mtime != excluded.mtime';
 const UPSERT = `
@@ -55,7 +56,7 @@ export class Scanner {
   private stopped = false;
   private loops: Promise<void>[] = [];
   showHidden = false;
-  /** background pass concurrency (Settings.indexIntensity via runtime-settings.ts); null = CPU based default */
+  /** background items at once (Settings.indexIntensity via runtime-settings.ts; the budget itself is thumbs.bg) */
   concurrency: { meta: number; thumb: number } | null = null;
   /** DeviceHub: (re)list a device folder instead of walking the file system */
   deviceScan: ((folderId: number, subDir: string) => Promise<void>) | null = null;
@@ -75,7 +76,7 @@ export class Scanner {
   ) {
     // library options may have changed: recompute the per-folder rules lazily
     events.on((e) => {
-      if (e.type === 'folders') this.rules.clear();
+      if (e.type === 'folders' && !e.status) this.rules.clear();
     });
   }
 
@@ -408,6 +409,7 @@ export class Scanner {
   /** Stop background work (server shutdown) and wait for in-flight items. */
   async stop() {
     this.stopped = true;
+    this.bg.close();
     await Promise.allSettled(this.loops);
   }
 
@@ -427,45 +429,97 @@ export class Scanner {
     );
   }
 
+  /** every background item takes a slot of the shared budget (Settings.indexIntensity) */
+  private get bg() {
+    return this.thumbs.bg;
+  }
+
+  /**
+   * Row updates of the background passes are committed together: a commit per row cost ~4× the
+   * main-thread time (WAL append + index updates per transaction), measured at 0.2–0.4 ms × 100k rows.
+   * `after` (events, progress) runs once the rows are written. Updates are conditional on the row
+   * not having changed meanwhile (size + mtime), so a watcher re-index is never overwritten.
+   */
+  private writes: { run: () => void; after?: () => void }[] = [];
+  private writesSince = 0;
+
+  private write(run: () => void, after?: () => void) {
+    if (this.stopped) return;
+    if (!this.writes.length) this.writesSince = Date.now();
+    this.writes.push({ run, after });
+    if (this.writes.length >= 48 || Date.now() - this.writesSince > 1000) this.flushWrites();
+  }
+
+  private flushWrites() {
+    if (!this.writes.length) return;
+    const list = this.writes;
+    this.writes = [];
+    if (this.stopped) return;
+    try {
+      this.db.tx(() => {
+        for (const w of list) {
+          try {
+            w.run();
+          } catch {
+            /* this row only */
+          }
+        }
+      });
+    } catch {
+      return; // database closed
+    }
+    for (const w of list) w.after?.();
+  }
+
   private async metaLoop() {
     this.metaRunning = true;
     this.progress = { done: 0, total: this.pendingCount() };
     try {
       for (;;) {
-        const conc = this.concurrency?.meta ?? Math.max(2, Math.min(6, os.cpus().length));
         if (this.stopped) break;
         const rows = this.db.all<MediaRow>('SELECT * FROM media WHERE meta_state = 0 LIMIT 64');
         if (!rows.length) break;
-        await pool(rows, conc, async (r) => {
+        await this.bg.each(rows, async (r) => {
           if (this.stopped) return;
           const folder = safe(() => this.lib.folderRow(r.folder_id));
           if (!folder) return;
           const abs = this.abs(folder, r.dir, r.name);
+          const done = () => {
+            this.events.mediaChanged(String(r.folder_id), r.dir, 'meta');
+            this.progress.done++;
+            this.emitScan();
+          };
           try {
             const m = await extractMeta(abs, r, this.ffmpeg);
             if (this.stopped) return;
             const g = groupColumns(r, m, this.geo, this.homeTimeZone);
-            this.db.run(
-              `UPDATE media SET width = ?, height = ?, duration = ?, playback = ?, extra = ?, meta_state = 1, meta_v = ?, ${GROUP_SET_SQL} WHERE id = ?`,
-              m.width,
-              m.height,
-              m.duration,
-              m.playback,
-              m.extra ? JSON.stringify(m.extra) : null,
-              META_V,
-              ...groupParams(g),
-              r.id,
+            this.write(
+              () =>
+                this.db.run(
+                  `UPDATE media SET width = ?, height = ?, duration = ?, playback = ?, extra = ?, meta_state = 1, meta_v = ?, ${GROUP_SET_SQL} WHERE id = ? AND ${UNCHANGED}`,
+                  m.width,
+                  m.height,
+                  m.duration,
+                  m.playback,
+                  m.extra ? JSON.stringify(m.extra) : null,
+                  META_V,
+                  ...groupParams(g),
+                  r.id,
+                  r.size,
+                  r.mtime,
+                ),
+              done,
             );
           } catch {
-            if (!this.stopped) this.db.run('UPDATE media SET meta_state = 2, meta_v = ? WHERE id = ?', META_V, r.id);
+            this.write(() => this.db.run(`UPDATE media SET meta_state = 2, meta_v = ? WHERE id = ? AND ${UNCHANGED}`, META_V, r.id, r.size, r.mtime), done);
           }
-          this.events.mediaChanged(String(r.folder_id), r.dir, 'meta');
-          this.onGroupsChanged?.();
-          this.progress.done++;
-          this.emitScan();
-        });
+        }, () => this.stopped);
+        this.flushWrites();
+        // grouping data changed: one Explore invalidation per batch (not per file)
+        this.onGroupsChanged?.();
       }
     } finally {
+      this.flushWrites();
       this.metaRunning = false;
       this.kickThumbs();
       this.kickEnrich();
@@ -481,7 +535,6 @@ export class Scanner {
     this.thumbRunning = true;
     try {
       for (;;) {
-        const conc = this.concurrency?.thumb ?? Math.max(1, Math.min(4, os.cpus().length - 1));
         if (this.stopped) break;
         // only thumbnail rows whose metadata is known (so videos have duration)
         const rows = this.db.all<MediaRow>(
@@ -489,37 +542,46 @@ export class Scanner {
           "SELECT * FROM media WHERE thumb_state = 0 AND meta_state != 0 AND kind IN ('image','video') AND folder_id IN (SELECT id FROM folders WHERE device_id IS NULL AND remote IS NULL) ORDER BY taken_at DESC LIMIT 32",
         );
         if (!rows.length) break;
-        await pool(rows, conc, async (r) => {
+        await this.bg.each(rows, async (r) => {
           if (this.stopped) return;
           const folder = safe(() => this.lib.folderRow(r.folder_id));
           if (!folder) return;
           const abs = this.abs(folder, r.dir, r.name);
           let reason: 'thumb' | 'meta' = 'thumb';
+          const done = () => {
+            this.events.mediaChanged(String(r.folder_id), r.dir, reason);
+            this.progress.done++;
+            this.emitScan();
+          };
+          const failed = () => this.db.run(`UPDATE media SET thumb_state = 2 WHERE id = ? AND ${UNCHANGED}`, r.id, r.size, r.mtime);
           try {
             const res = await this.thumbs.generateBase(abs, r, 'low');
             if (this.stopped) return;
             if (res) {
               const needDims = !r.width || !r.height;
               if (needDims && r.kind === 'image') reason = 'meta';
-              this.db.run(
-                'UPDATE media SET thumbhash = ?, thumb_state = 1, width = COALESCE(width, ?), height = COALESCE(height, ?) WHERE id = ?',
-                res.thumbhash,
-                needDims && r.kind === 'image' ? res.width : null,
-                needDims && r.kind === 'image' ? res.height : null,
-                r.id,
+              this.write(
+                () =>
+                  this.db.run(
+                    `UPDATE media SET thumbhash = ?, thumb_state = 1, width = COALESCE(width, ?), height = COALESCE(height, ?) WHERE id = ? AND ${UNCHANGED}`,
+                    res.thumbhash,
+                    needDims && r.kind === 'image' ? res.width : null,
+                    needDims && r.kind === 'image' ? res.height : null,
+                    r.id,
+                    r.size,
+                    r.mtime,
+                  ),
+                done,
               );
-            } else {
-              this.db.run('UPDATE media SET thumb_state = 2 WHERE id = ?', r.id);
-            }
+            } else this.write(failed, done);
           } catch {
-            if (!this.stopped) this.db.run('UPDATE media SET thumb_state = 2 WHERE id = ?', r.id);
+            this.write(failed, done);
           }
-          this.events.mediaChanged(String(r.folder_id), r.dir, reason);
-          this.progress.done++;
-          this.emitScan();
-        });
+        }, () => this.stopped);
+        this.flushWrites();
       }
     } finally {
+      this.flushWrites();
       this.thumbRunning = false;
       this.emitScan(true);
       this.kickEnrich();
@@ -548,6 +610,9 @@ export class Scanner {
     const flush = () => {
       for (const [fid, dirs] of touched) for (const d of dirs) this.events.mediaChanged(String(fid), d, 'meta');
       touched.clear();
+      // result sets of place / camera / flag filters may have changed → one new generation per flush
+      // (not per row: see EventHub.mediaChanged), no event of its own
+      if (changed) this.events.bumpThrottled();
       if (changed) this.onGroupsChanged?.();
       changed = false;
       lastFlush = Date.now();
@@ -566,17 +631,18 @@ export class Scanner {
         );
         if (!rows.length) break;
         lastId = rows[rows.length - 1].id;
-        await pool(rows, this.thumbRunning ? 1 : 2, async (r) => {
+        await this.bg.each(rows, async (r) => {
           if (this.stopped) return;
           const folder = safe(() => this.lib.folderRow(r.folder_id));
           const abs = folder ? this.abs(folder, r.dir, r.name) : null;
           const st = abs ? await fsp.stat(abs).catch(() => null) : null;
           if (!abs || !st) {
-            this.db.run('UPDATE media SET meta_v = ? WHERE id = ?', META_V, r.id);
+            this.write(() => this.db.run('UPDATE media SET meta_v = ? WHERE id = ?', META_V, r.id));
             return;
           }
           try {
-            const m = await extractMeta(abs, r, this.ffmpeg);
+            // dimensions are known: JPEGs only need their EXIF / XMP read again
+            const m = await extractMeta(abs, r, this.ffmpeg, r);
             if (this.stopped) return;
             // keep known dimensions (thumbnail pass may have filled them)
             if (!m.width || !m.height) {
@@ -584,29 +650,36 @@ export class Scanner {
               m.height = r.height;
             }
             const g = groupColumns(r, m, this.geo, this.homeTimeZone);
-            this.db.run(
-              `UPDATE media SET meta_v = ?, width = COALESCE(width, ?), height = COALESCE(height, ?), ${GROUP_SET_SQL} WHERE id = ?`,
-              META_V,
-              m.width,
-              m.height,
-              ...groupParams(g),
-              r.id,
+            this.write(
+              () =>
+                this.db.run(
+                  `UPDATE media SET meta_v = ?, width = COALESCE(width, ?), height = COALESCE(height, ?), ${GROUP_SET_SQL} WHERE id = ? AND ${UNCHANGED}`,
+                  META_V,
+                  m.width,
+                  m.height,
+                  ...groupParams(g),
+                  r.id,
+                  r.size,
+                  r.mtime,
+                ),
+              () => {
+                changed = true;
+                if (g.taken_local !== r.taken_local || (!r.width && m.width)) {
+                  let set = touched.get(r.folder_id);
+                  if (!set) touched.set(r.folder_id, (set = new Set()));
+                  set.add(r.dir);
+                }
+              },
             );
-            changed = true;
-            // result sets of place/camera/flag filters may change → new generation, no event
-            this.events.bump();
-            if (g.taken_local !== r.taken_local || (!r.width && m.width)) {
-              let set = touched.get(r.folder_id);
-              if (!set) touched.set(r.folder_id, (set = new Set()));
-              set.add(r.dir);
-            }
           } catch {
-            if (!this.stopped) this.db.run('UPDATE media SET meta_v = ? WHERE id = ?', META_V, r.id);
+            this.write(() => this.db.run(`UPDATE media SET meta_v = ? WHERE id = ? AND ${UNCHANGED}`, META_V, r.id, r.size, r.mtime));
           }
-        });
+        }, () => this.stopped || this.metaRunning || this.scanning.size > 0);
+        this.flushWrites();
         if (Date.now() - lastFlush > ENRICH_FLUSH_MS) flush();
       }
     } finally {
+      this.flushWrites();
       this.enrichRunning = false;
       flush();
     }

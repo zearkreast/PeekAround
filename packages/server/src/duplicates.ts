@@ -91,16 +91,19 @@ export class DuplicateService {
       if (!rows.length) break;
       for (const r of rows) {
         if (this.stopped) break;
-        let hash: string;
-        try {
-          const folder = this.ctx.lib.folderRow(r.folder_id);
-          const abs = this.ctx.scanner.abs(folder, r.dir, r.name);
-          const st = await fsp.stat(abs);
-          hash = st.size === r.size ? await contentHash(abs, st.size) : `x:${r.id}`;
-        } catch {
-          hash = `x:${r.id}`;
-        }
-        if (this.stopped) break;
+        // one file at a time, in a slot of the shared background budget (yields to on-demand work)
+        const hash = await this.ctx.thumbs.bg.run(async () => {
+          if (this.stopped) return null;
+          try {
+            const folder = this.ctx.lib.folderRow(r.folder_id);
+            const abs = this.ctx.scanner.abs(folder, r.dir, r.name);
+            const st = await fsp.stat(abs);
+            return st.size === r.size ? await contentHash(abs, st.size) : `x:${r.id}`;
+          } catch {
+            return `x:${r.id}`;
+          }
+        });
+        if (this.stopped || hash === null) break;
         this.ctx.db.run('UPDATE media SET chash = ? WHERE id = ? AND size = ?', hash, r.id, r.size);
         wrote++;
       }

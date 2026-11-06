@@ -183,7 +183,7 @@ export function InfoPanel({ item, onClose }: { item: MediaItem; onClose: () => v
       onClick={(e) => e.stopPropagation()}
       data-no-gesture
     >
-      <div className="flex h-16 items-center justify-between px-5">
+      <div className="wco-r flex h-16 items-center justify-between pl-5">
         <h3 className="font-display text-lg font-semibold">{t('viewer.details')}</h3>
         <IconButton label={t('common.close')} size="sm" onClick={onClose}>
           <X />

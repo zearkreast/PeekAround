@@ -1,10 +1,10 @@
-import type { Job, RemoteCopySpec, RemoteFolderCreate, RemoteImportSpec, RemoteInspect } from '@peekaround/shared';
+import type { Job, MegaAccountStatus, MegaLoginRequest, MegaLoginResult, RemoteCopySpec, RemoteFolderCreate, RemoteImportSpec, RemoteInspect } from '@peekaround/shared';
 import { FS_LIMIT, HEAVY_LIMIT, isLoopbackIp } from '../security.js';
 import { inspectTree, megaError, parseMegaUrl } from '../remote/mega.js';
 import { startRemoteImport } from '../remote/import.js';
 import { HttpError } from '../paths.js';
 import { isLanRequest } from '../devices/access.js';
-import { folderPath, requireWritable, type Plugin } from './util.js';
+import { folderPath, requireLocal, requireWritable, type Plugin } from './util.js';
 
 /**
  * Remote links (MEGA).
@@ -17,6 +17,13 @@ import { folderPath, requireWritable, type Plugin } from './util.js';
  *   GET    /api/remote/folders/:id/link             → { url } — the link WITH its key: local clients only
  *   POST   /api/remote/copy RemoteCopySpec          → Job (copy to a local folder; also /api/fs/move copy=true)
  *   DELETE /api/folders/:id                         → removes the link (core routes)
+ *
+ * Optional MEGA account (remote/account.ts) — transfers then count against the account's quota:
+ *   GET  /api/remote/account                         → MegaAccountStatus (never the session id)
+ *   POST /api/remote/account/login MegaLoginRequest  → MegaLoginResult (only the sid is stored, never the password)
+ *   POST /api/remote/account/logout                  → MegaAccountStatus
+ * All three: not from the desktop's LAN listener (requireLocal → 403). Server / Docker mode has no LAN
+ * listener: whoever can reach the server may use them (README security note).
  */
 export const remoteRoutes: Plugin = (app, ctx) => {
   app.post<{ Body: { url: string } }>('/api/remote/inspect', HEAVY_LIMIT, async (req, reply): Promise<RemoteInspect> => {
@@ -71,5 +78,21 @@ export const remoteRoutes: Plugin = (app, ctx) => {
     if (!b.to?.folderId) throw new HttpError(400, 'to.folderId required');
     folderPath(ctx, b.to.folderId, b.to.dir ?? ''); // a local, writable target
     return ctx.remote.copy(b);
+  });
+
+  app.get('/api/remote/account', FS_LIMIT, async (req): Promise<MegaAccountStatus> => {
+    requireLocal(req);
+    return ctx.megaAccount.refreshedStatus();
+  });
+
+  // the body holds the password: never logged (Fastify logs no bodies), never echoed in errors
+  app.post<{ Body: MegaLoginRequest }>('/api/remote/account/login', HEAVY_LIMIT, async (req): Promise<MegaLoginResult> => {
+    requireLocal(req);
+    return ctx.megaAccount.login(req.body ?? ({} as MegaLoginRequest));
+  });
+
+  app.post('/api/remote/account/logout', HEAVY_LIMIT, async (req): Promise<MegaAccountStatus> => {
+    requireLocal(req);
+    return ctx.megaAccount.logout();
   });
 };

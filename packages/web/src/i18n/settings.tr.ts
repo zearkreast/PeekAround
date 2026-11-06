@@ -26,6 +26,8 @@ const settingsTr = {
   // ── language & format ──
   'pref.format': 'Dil ve biçim',
   'pref.dateFormat': 'Tarih biçimi',
+  'pref.wideSidebar': 'Geniş kenar çubuğu',
+  'pref.wideSidebarHint': 'Albümleri, kütüphaneleri, telefonları ve araçları solda uzun bir listede gösterir. Kapalıyken sade gezinme çubuğu kullanılır; hepsi Kitaplık sayfasındadır.',
   'pref.dateFormat.locale': 'Dile göre',
   'pref.dateFormat.iso': 'ISO (2024-07-05)',
   'pref.hourCycle': 'Saat biçimi',

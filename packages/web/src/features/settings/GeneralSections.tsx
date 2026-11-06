@@ -2,6 +2,7 @@ import { CalendarDays, MapPinOff, Clapperboard, Compass, Eye, Film, Grid3x3, Ima
 import type { SlideTransition, SortKey } from '@peekaround/shared';
 import { useLang, useT, type MessageKey } from '@/i18n';
 import { formatDate, formatLocal } from '@/lib/format';
+import { useIsMobile } from '@/lib/useMedia';
 import { ACCENTS, usePrefs, type DateFormatPref, type GroupByPref, type HourCyclePref, type InfoDefault, type ViewerBg, type WeekStart } from '@/store/prefs';
 import { ColorSwatches, Segmented, Slider, Switch } from '@/components/ui';
 import { useSlideshow } from '@/features/slideshow/store';
@@ -21,12 +22,13 @@ function PrefSwitch({ k, hint, pref, kw }: { k: MessageKey; hint?: MessageKey; p
   );
 }
 
-type BoolPref = 'hoverPreview' | 'dateHeaders' | 'tileNames' | 'tileDuration' | 'tileFavorites' | 'confirmDelete' | 'filmstrip' | 'videoAutoplay' | 'videoMuted' | 'rememberVolume' | 'showMemories' | 'hideLocation';
+type BoolPref = 'hoverPreview' | 'dateHeaders' | 'tileNames' | 'tileDuration' | 'tileFavorites' | 'confirmDelete' | 'filmstrip' | 'videoAutoplay' | 'videoMuted' | 'rememberVolume' | 'showMemories' | 'hideLocation' | 'wideSidebar';
 
 export function AppearanceSection() {
   const t = useT();
   const lang = useLang();
   const prefs = usePrefs();
+  const mobile = useIsMobile();
   const sample = Date.UTC(2024, 6, 5, 14, 30);
   return (
     <Section id="appearance" title="pref.sec.appearance" icon={<Palette />}>
@@ -66,6 +68,7 @@ export function AppearanceSection() {
             ]}
           />
         </Row>
+        {!mobile && <PrefSwitch k="pref.wideSidebar" hint="pref.wideSidebarHint" pref="wideSidebar" kw="sidebar kenar çubuğu rail menu panel sol left" />}
       </Card>
       <Card title={t('pref.format')} titleKey="pref.format" icon={<CalendarDays />} scope="device">
         <Row label={t('pref.dateFormat')} k="pref.dateFormat" hint={t('pref.preview', { date: formatLocal(sample, lang, { dateStyle: 'medium', timeStyle: 'short' }) })} kw="iso tarih date" setting="dateFormat">

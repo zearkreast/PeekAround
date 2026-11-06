@@ -4,6 +4,7 @@ import type { MediaItem } from '@peekaround/shared';
 import { useLang, useT } from '@/i18n';
 import { formatBytes, formatDayKey, formatLocal, formatMonthKey } from '@/lib/format';
 import { usePrefs, type GridMode } from '@/store/prefs';
+import { useChrome } from '@/store/chrome';
 import { useSelecting, useSelection } from '@/store/selection';
 import { ContextMenu } from '@/components/ui';
 import { MediaMenu } from './actions';
@@ -142,6 +143,11 @@ export function MediaGrid({
   const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const phone = width > 0 && width < 700;
   const level = Math.max(0, Math.min(ZOOM_LEVELS - 1, phone ? levelMobile : levelDesktop));
+  // the top bar's view options change the density level this grid really uses (phone levels below 700 px)
+  const measured = width > 0;
+  useEffect(() => {
+    if (measured) useChrome.getState().set({ gridPhone: phone });
+  }, [phone, measured]);
 
   useLayoutEffect(() => {
     const el = gridRef.current;

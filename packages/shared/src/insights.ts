@@ -73,7 +73,10 @@ export interface ExploreStats {
   /** year span of the capture dates (null when empty) */
   firstYear: number | null;
   lastYear: number | null;
+  /** total size of the images + videos (local + cloud) */
   bytes: number;
+  /** part of `bytes` in cloud folders (MEGA links streamed, not on this device); missing from older servers */
+  cloudBytes?: number;
   withLocation: number;
 }
 
@@ -207,6 +210,8 @@ export interface InsightRow {
   /** added to the library (ms), falls back to mtime */
   addedAt?: number | null;
   mtime: number;
+  /** lives in a cloud (remote / MEGA) folder, not on this device */
+  cloud?: boolean;
 }
 
 export interface InsightOptions {
@@ -235,7 +240,8 @@ function topK(list: RankedItem[], k: number, it: RankedItem) {
 export function computeInsights(rows: InsightRow[], opts: InsightOptions = {}): ExploreExtras {
   const covers = opts.covers ?? 4;
   const ranked = opts.ranked ?? 20;
-  const stats: ExploreStats = { photos: 0, videos: 0, countries: 0, cities: 0, firstYear: null, lastYear: null, bytes: 0, withLocation: 0 };
+  const stats: ExploreStats = { photos: 0, videos: 0, countries: 0, cities: 0, firstYear: null, lastYear: null, bytes: 0, cloudBytes: 0, withLocation: 0 };
+  let cloudBytes = 0;
   const facet = <T extends string>() => new Map<T, FacetGroup<T>>();
   const add = <T extends string>(m: Map<T, FacetGroup<T>>, v: T, id: string) => {
     const g = m.get(v);
@@ -260,6 +266,7 @@ export function computeInsights(rows: InsightRow[], opts: InsightOptions = {}): 
     if (r.kind === 'video') stats.videos++;
     else stats.photos++;
     stats.bytes += r.size || 0;
+    if (r.cloud) cloudBytes += r.size || 0;
     const y = new Date(r.localAt).getUTCFullYear();
     let yl = years.get(y);
     if (!yl) years.set(y, (yl = []));
@@ -306,6 +313,7 @@ export function computeInsights(rows: InsightRow[], opts: InsightOptions = {}): 
   stats.firstYear = yearList.length ? yearList[yearList.length - 1] : null;
   stats.lastYear = yearList.length ? yearList[0] : null;
   stats.countries = countries.size;
+  stats.cloudBytes = cloudBytes;
   let cityCount = 0;
   for (const c of countries.values()) cityCount += c.citySet.size;
   stats.cities = cityCount;

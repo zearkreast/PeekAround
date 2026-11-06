@@ -26,7 +26,8 @@ export interface Prefs {
   order: SortDir;
   kind: KindFilter;
   recursive: boolean;
-  sidebarCollapsed: boolean;
+  /** desktop: the full sidebar (albums, libraries, tools …) instead of the slim navigation rail */
+  wideSidebar: boolean;
   infoOpen: boolean;
   hoverPreview: boolean;
   /** grid density level 0 (big) … 3 (month overview); phones and desktop separately */
@@ -99,7 +100,7 @@ const defaults: Prefs = {
   order: 'desc',
   kind: 'all',
   recursive: false,
-  sidebarCollapsed: false,
+  wideSidebar: false,
   infoOpen: false,
   hoverPreview: true,
   gridZoomMobile: 1,

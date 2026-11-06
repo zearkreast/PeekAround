@@ -9,6 +9,8 @@ const libraryTr = {
   'nav2.section.toggle': '{name} bölümünü aç/kapat',
   'nav2.reorderHint': 'Sıralamak için sürükle',
   'nav2.dropToAlbum': '“{name}” albümüne ekle',
+  'nav2.dropAlbums': 'Bir albüme bırakın',
+  'nav2.dropLibraries': 'Bir kütüphaneye bırakın',
 
   // ── library hub ──
   'lib2.hub.title': 'Kitaplık',

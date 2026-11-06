@@ -46,6 +46,7 @@ export function Card({
   scope,
   children,
   testId,
+  id,
 }: {
   icon?: ReactNode;
   title: ReactNode;
@@ -54,11 +55,13 @@ export function Card({
   scope?: 'device' | 'server';
   children: ReactNode;
   testId?: string;
+  /** element id `settings-<id>`: deep link /settings#<id> scrolls to the card */
+  id?: string;
 }) {
   const q = useSettingsQuery();
   const all = !!q && matchesQuery(`${bothLangs([titleKey])} ${typeof title === 'string' ? title : ''}`, q);
   return (
-    <div data-card data-testid={testId} className="rounded-3xl border border-line bg-elev p-5 sm:p-6">
+    <div id={id ? `settings-${id}` : undefined} data-card data-testid={testId} className="scroll-mt-32 rounded-3xl border border-line bg-elev p-5 sm:p-6 @3xl:scroll-mt-6">
       <h3 className="mb-4 flex items-center gap-2.5 font-display text-[17px] font-semibold">
         {icon && <span className="grid size-8 place-items-center rounded-xl bg-surface-2 text-accent [&>svg]:size-4">{icon}</span>}
         {title}

@@ -426,7 +426,7 @@ export function Popover({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ x: number; y: number; origin: string } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; origin: string; maxH?: number } | null>(null);
   useBackHandler(open, onClose, BACK.sheet, 'popover');
   useLayoutEffect(() => {
     if (!open || !anchor.current) return;
@@ -434,13 +434,18 @@ export function Popover({
       const r = anchor.current!.getBoundingClientRect();
       const el = ref.current;
       const w = el?.offsetWidth ?? 240;
-      const h = el?.offsetHeight ?? 200;
+      // natural height (without a previous max-height)
+      const h = el?.scrollHeight ?? 200;
+      const vh = window.innerHeight;
       let x = align === 'end' ? r.right - w : align === 'center' ? r.left + r.width / 2 - w / 2 : r.left;
       x = Math.max(8, Math.min(window.innerWidth - w - 8, x));
-      let y = side === 'top' ? r.top - h - 8 : r.bottom + 8;
-      if (side === 'bottom' && y + h > window.innerHeight - 8) y = Math.max(8, r.top - h - 8);
-      if (side === 'top' && y < 8) y = r.bottom + 8;
-      setPos({ x, y, origin: `${align === 'end' ? 'right' : align === 'center' ? 'center' : 'left'} ${y < r.top ? 'bottom' : 'top'}` });
+      const below = vh - 8 - (r.bottom + 8);
+      const above = r.top - 8 - 8;
+      // the roomier side when it fits nowhere: never over the anchor (it would hide the button that opened it)
+      const down = side === 'bottom' ? h <= below || below >= above : !(h <= above || above >= below);
+      const maxH = Math.max(120, down ? below : above);
+      const y = down ? r.bottom + 8 : Math.max(8, r.top - 8 - Math.min(h, maxH));
+      setPos({ x, y, maxH: h > maxH ? maxH : undefined, origin: `${align === 'end' ? 'right' : align === 'center' ? 'center' : 'left'} ${down ? 'top' : 'bottom'}` });
     };
     place();
     const raf = requestAnimationFrame(place);
@@ -474,7 +479,7 @@ export function Popover({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96 }}
           transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-          style={{ left: pos?.x ?? -9999, top: pos?.y ?? -9999, transformOrigin: pos?.origin }}
+          style={{ left: pos?.x ?? -9999, top: pos?.y ?? -9999, transformOrigin: pos?.origin, ...(pos?.maxH ? { maxHeight: pos.maxH, overflowY: 'auto', overscrollBehavior: 'contain' } : null) }}
           className={cn('fixed z-[90] min-w-48 rounded-2xl border border-line bg-elev p-1.5 shadow-soft', className)}
         >
           {children}

@@ -24,8 +24,23 @@ function exploreScope(ctx: Ctx, raw: Record<string, string>) {
   return resolveScope(ctx, eq).s;
 }
 
-/** per-library metadata diagnostics (Settings → Location & metadata) */
-export function metaStatus(ctx: Ctx): MetaStatus {
+const statusMemo = new WeakMap<Ctx, { at: number; ms: number; v: MetaStatus }>();
+
+/**
+ * per-library metadata diagnostics (Settings → Location & metadata). The aggregate reads every row
+ * (~100 ms for 100k items) and the settings card polls it while indexing: a slow result is reused
+ * for 10× its compute time (fresh = true skips that).
+ */
+export function metaStatus(ctx: Ctx, fresh = false): MetaStatus {
+  const m = statusMemo.get(ctx);
+  if (!fresh && m && m.ms >= 30 && Date.now() - m.at < Math.min(10_000, m.ms * 10)) return m.v;
+  const t0 = performance.now();
+  const v = metaStatusNow(ctx);
+  statusMemo.set(ctx, { at: Date.now(), ms: performance.now() - t0, v });
+  return v;
+}
+
+function metaStatusNow(ctx: Ctx): MetaStatus {
   const rows = ctx.db.all<{ lib: number; name: string; total: number; loc: number; pending: number; bad: number; msg: number }>(
     `SELECT l.id lib, l.name name, count(m.id) total,
        coalesce(sum(m.lat IS NOT NULL), 0) loc,
@@ -166,6 +181,6 @@ export const exploreRoutes: Plugin = (app, ctx) => {
   app.post<{ Body: { libraryId?: string } }>('/api/meta/reread', FS_LIMIT, async (req) => {
     const id = req.body?.libraryId;
     const queued = rereadMeta(ctx, id ? String(id) : undefined);
-    return { queued, status: metaStatus(ctx) };
+    return { queued, status: metaStatus(ctx, true) };
   });
 };

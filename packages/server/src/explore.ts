@@ -34,15 +34,43 @@ interface Row extends InsightRow {
 /** min spacing of {type:'explore'} events */
 const EXPLORE_EVENT_MS = 10_000;
 const MAX_TRIPS = 24;
-/** derived insight columns computed per step (≈ 150 ms for 20k rows) */
-const FILL_CHUNK = 20_000;
+/**
+ * derived insight columns computed per step: ≈ 15 ms for 2k rows, so the event loop (desktop: the
+ * app's main process) never stalls; the rest follows in the background
+ */
+const FILL_CHUNK = 2_000;
+const FILL_GAP_MS = 25;
+/**
+ * A result that took long to compute (a big library: ~1 s for 100k items, all of it blocking the
+ * event loop) is served stale for STALE_FACTOR × its compute time after an invalidation, so a running
+ * indexing pass (which invalidates constantly) recomputes it at most every ~20 s instead of on every
+ * request. Cheap results (< STALE_MIN_COMPUTE_MS) are always recomputed.
+ */
+const STALE_FACTOR = 20;
+/** rows read between two yields to the event loop (≈ 15 ms) */
+const YIELD_ROWS = 4_000;
+const yieldNow = () => new Promise<void>((r) => setImmediate(r));
+const STALE_MIN_COMPUTE_MS = 250;
+const STALE_MAX_MS = 60_000;
+
+interface CacheEntry {
+  r: ExploreResult;
+  /** data generation it was computed for */
+  gen: number;
+  at: number;
+  /** compute time (ms) */
+  ms: number;
+}
 
 /**
  * Explore (automatic grouping) results, cached in memory per query and invalidated whenever media
  * are added/removed or their metadata changes; clients are told with a throttled {type:'explore'}.
  */
 export class ExploreService {
-  private cache = new Map<string, ExploreResult>();
+  private cache = new Map<string, CacheEntry>();
+  /** bumped on every invalidation; cached results of an older generation are stale */
+  private gen = 0;
+  private refreshTimer: NodeJS.Timeout | null = null;
   private timer: NodeJS.Timeout | null = null;
   private lastEvent = 0;
   private dirty = false;
@@ -54,14 +82,14 @@ export class ExploreService {
     this.dups.onChanged = () => this.invalidate(true);
     ctx.events.on((e) => {
       if (e.type === 'media' && e.reason !== 'thumb') this.invalidate(e.reason === 'add' || e.reason === 'remove');
-      else if (e.type === 'folders') this.invalidate(false);
+      else if (e.type === 'folders' && !e.status) this.invalidate(false);
     });
     ctx.scanner.onGroupsChanged = () => this.invalidate(true);
   }
 
-  /** Drop cached results; `notify` also schedules a (throttled) explore event. */
+  /** Mark cached results stale; `notify` also schedules a (throttled) explore event. */
   invalidate(notify = true) {
-    this.cache.clear();
+    this.gen++;
     if (!notify) return;
     this.dirty = true;
     if (this.timer) return;
@@ -78,7 +106,7 @@ export class ExploreService {
 
   private filling: NodeJS.Timeout | null = null;
 
-  /** keep computing colour / sun columns in chunks, then refresh Explore */
+  /** keep computing colour / sun columns in small chunks, then refresh Explore */
   private fillLater() {
     if (this.filling) return;
     const step = () => {
@@ -90,45 +118,102 @@ export class ExploreService {
         return; // closed
       }
       if (done) this.invalidate(true);
-      else this.filling = setTimeout(step, 50);
+      else {
+        this.filling = setTimeout(step, FILL_GAP_MS);
+        this.filling.unref?.();
+      }
     };
-    this.filling = setTimeout(step, 50);
+    this.filling = setTimeout(step, FILL_GAP_MS);
     this.filling.unref?.();
+  }
+
+  /** a stale result was served: make sure clients hear about the fresh one once it may be computed */
+  private refreshLater(ms: number) {
+    if (this.refreshTimer) return;
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      this.invalidate(true);
+    }, ms);
+    this.refreshTimer.unref?.();
   }
 
   close() {
     if (this.filling) clearTimeout(this.filling);
     this.filling = null;
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     void this.dups.stop();
   }
 
-  get(q: BrowseQuery, now = Date.now()): ExploreResult {
+  /** computations in progress per cache key (concurrent requests share one) */
+  private computing = new Map<string, Promise<ExploreResult>>();
+
+  async get(q: BrowseQuery, now = Date.now()): Promise<ExploreResult> {
     const nowLocal = instantToLocal(now, this.ctx.scanner.homeTimeZone);
     const key = `${localDayKey(nowLocal)}|${JSON.stringify(q)}`;
-    let r = this.cache.get(key);
+    const hit = this.cache.get(key);
+    if (hit && hit.gen !== this.gen) {
+      // stale: an expensive result is reused for a while (see STALE_FACTOR)
+      const keep = hit.ms >= STALE_MIN_COMPUTE_MS ? Math.min(STALE_MAX_MS, hit.ms * STALE_FACTOR) : 0;
+      const left = hit.at + keep - Date.now();
+      if (left > 0) {
+        this.refreshLater(left + 50);
+        return { ...hit.r, indexing: this.ctx.scanner.indexing() };
+      }
+    }
+    let r = hit && hit.gen === this.gen ? hit.r : null;
     if (!r) {
-      r = this.compute(q, nowLocal);
-      if (this.cache.size > 32) this.cache.clear();
-      this.cache.set(key, r);
+      let job = this.computing.get(key);
+      if (!job) {
+        const gen = this.gen;
+        const t0 = performance.now();
+        const timing = { yielded: 0 };
+        job = this.compute(q, nowLocal, timing)
+          .then((res) => {
+            if (this.cache.size > 32) this.cache.clear();
+            // ms = time spent computing (waits while yielding to other work excluded)
+            this.cache.set(key, { r: res, gen, at: Date.now(), ms: performance.now() - t0 - timing.yielded });
+            return res;
+          })
+          .finally(() => this.computing.delete(key));
+        this.computing.set(key, job);
+      }
+      r = await job;
     }
     return { ...r, indexing: this.ctx.scanner.indexing() };
   }
 
-  compute(q: BrowseQuery, nowLocal: number): ExploreResult {
+  /**
+   * One pass over the scope's rows. A 100k library takes ~0.7 s of CPU; the rows are read on the
+   * reader connection in chunks with a yield in between, so requests / IPC are served meanwhile.
+   */
+  async compute(q: BrowseQuery, nowLocal: number, timing: { yielded: number } = { yielded: 0 }): Promise<ExploreResult> {
+    const breath = async () => {
+      const t = performance.now();
+      await yieldNow();
+      timing.yielded += performance.now() - t;
+    };
     const { s } = resolveScope(this.ctx, { ...q, kind: q.kind && q.kind !== 'all' ? q.kind : ('image-video' as BrowseQuery['kind']), recursive: true });
     // derived colour / sun columns: a first chunk now, the rest in the background (first run after an upgrade)
     if (!fillInsightColumns(this.ctx.db, 0, FILL_CHUNK)) this.fillLater();
+    // cloud (remote / MEGA) folders: their sizes are shown apart from the local ones in the stats
+    const cloud = new Set(this.ctx.db.all<{ id: number }>('SELECT id FROM folders WHERE remote IS NOT NULL').map((f) => f.id));
     // rows as arrays (≈ 2× faster than objects for 100k rows), turned into one object per item
-    const arr = this.ctx.db.allArrays(
-      `SELECT id, kind, taken_local, lat, lon, cc, admin1, city, make, model, flags, size, width, height, duration, color, sun, time_src, added_at, mtime FROM media ${whereSql(s)} ORDER BY taken_local DESC, id DESC`,
+    const it = this.ctx.db.iterateArrays(
+      `SELECT id, kind, taken_local, lat, lon, cc, admin1, city, make, model, flags, size, width, height, duration, color, sun, time_src, added_at, mtime, folder_id FROM media ${whereSql(s)} ORDER BY taken_local DESC, id DESC`,
       ...s.params,
-    ) as [number, string, number, number | null, number | null, string | null, string | null, string | null, string | null, string | null, number, number, number | null, number | null, number | null, number | null, number | null, number, number | null, number][];
-    const rows: Row[] = new Array(arr.length);
-    for (let i = 0; i < arr.length; i++) {
-      const [id, k, t, lat, lon, cc, a1, city, make, model, flags, size, width, height, duration, color, sun, src, added, mtime] = arr[i];
-      rows[i] = {
+    ) as Iterable<[number, string, number, number | null, number | null, string | null, string | null, string | null, string | null, string | null, number, number, number | null, number | null, number | null, number | null, number | null, number, number | null, number, number]>;
+    const rows: Row[] = [];
+    let sinceYield = 0;
+    for (const a of it) {
+      if (++sinceYield >= YIELD_ROWS) {
+        sinceYield = 0;
+        await breath();
+      }
+      const [id, k, t, lat, lon, cc, a1, city, make, model, flags, size, width, height, duration, color, sun, src, added, mtime, folderId] = a;
+      rows.push({
         id: String(id),
         k,
         t,
@@ -152,8 +237,10 @@ export class ExploreService {
         addedAt: added,
         mtime,
         placeKey: cc ? placeKey(cc, a1) : null,
-      };
+        cloud: cloud.size > 0 && cloud.has(folderId),
+      });
     }
+    await breath();
     const geo = this.ctx.geo;
 
     // ── memories ──
@@ -170,6 +257,7 @@ export class ExploreService {
         cc: r.cc,
       })),
     ).slice(0, MAX_TRIPS);
+    await breath();
 
     // ── places (country + admin1) ──
     const places = new Map<string, { g: PlaceGroup; lat: number; lon: number; n: number; cities: Map<string, number> }>();
@@ -249,6 +337,7 @@ export class ExploreService {
     }
 
     // ── insights (stats, year in review, countries, colours, time of day, orientation, …) ──
+    await breath();
     const insights = computeInsights(rows);
     const duplicates = this.dups.summary(whereSql(s), s.params);
     if (duplicates.pending) this.dups.kick();

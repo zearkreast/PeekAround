@@ -144,7 +144,7 @@ function EditorTopBar({ item, onExport, busy, disabled }: { item: MediaDetails; 
     else nav(`${folderHref(item.folderId, item.dir)}${withView('', item.id)}`);
   };
   return (
-    <header className="app-drag relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-bg/80 px-2 backdrop-blur-xl sm:px-3">
+    <header className="app-drag wco-r relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-bg/80 pl-2 [--wco-base:0.5rem] backdrop-blur-xl sm:pl-3 sm:[--wco-base:0.75rem]">
       <IconButton label={t('common.back')} onClick={back}>
         <ArrowLeft />
       </IconButton>

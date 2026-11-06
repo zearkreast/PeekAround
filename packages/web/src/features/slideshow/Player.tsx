@@ -218,7 +218,7 @@ export function Player() {
 
       {/* progress */}
       <motion.div
-        className="absolute inset-x-0 top-0 z-20 flex items-center gap-3 bg-gradient-to-b from-black/55 to-transparent px-4 pt-3 pb-10 sm:px-6"
+        className="wco-r absolute inset-x-0 top-0 z-20 flex items-center gap-3 bg-gradient-to-b from-black/55 to-transparent pt-3 pb-10 pl-4 [--wco-base:1rem] sm:pl-6 sm:[--wco-base:1.5rem]"
         animate={{ opacity: visible ? 1 : 0.35 }}
         transition={{ duration: 0.4 }}
       >

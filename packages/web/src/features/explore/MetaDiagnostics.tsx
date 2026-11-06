@@ -81,7 +81,7 @@ export function MetaDiagnostics({ delay = 0.15 }: { delay?: number }) {
     enabled: !!backend.metaStatus,
     refetchInterval: (query) => {
       const d = query.state.data;
-      return d && (d.enriching || d.libraries.some((l) => l.pending > 0)) ? 2000 : 15_000;
+      return d && (d.enriching || d.libraries.some((l) => l.pending > 0)) ? 4000 : 30_000;
     },
   });
   if (!backend.metaStatus) return null;

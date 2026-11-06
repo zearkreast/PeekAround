@@ -659,8 +659,10 @@ function ViewerInner({ id }: { id: string }) {
         </>
       ) : (
         <>
+          {/* with the info panel open the bar ends at the panel (which takes the window-button corner):
+              its right buttons would otherwise sit under the panel, out of reach */}
           <motion.div
-            className="relative z-10 flex h-16 shrink-0 items-center gap-2 px-5"
+            className={cn('relative z-10 flex h-16 shrink-0 items-center gap-2 pl-5 transition-[margin] duration-300', infoOpen ? 'mr-[340px] pr-3' : 'wco-r')}
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: showChrome ? 1 : 0, y: showChrome ? 0 : -20 }}
             exit={{ opacity: 0, y: -20 }}

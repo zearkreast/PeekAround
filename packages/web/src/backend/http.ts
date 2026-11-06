@@ -16,6 +16,9 @@ import type {
   RemoteCopySpec,
   RemoteFolderCreate,
   RemoteFolderCreated,
+  MegaAccountStatus,
+  MegaLoginRequest,
+  MegaLoginResult,
   BrowseQuery,
   BrowseResult,
   FileRef,
@@ -296,6 +299,15 @@ export class HttpBackend implements Backend {
   }
   async remoteCacheSize() {
     return (await this.req<{ remoteBytes?: number }>('GET', '/api/cache')).remoteBytes ?? 0;
+  }
+  megaAccount() {
+    return this.req<MegaAccountStatus>('GET', '/api/remote/account');
+  }
+  megaLogin(req: MegaLoginRequest) {
+    return this.req<MegaLoginResult>('POST', '/api/remote/account/login', req);
+  }
+  megaLogout() {
+    return this.req<MegaAccountStatus>('POST', '/api/remote/account/logout', {});
   }
   timeline(libraryId?: string) {
     return this.req<{ buckets: TimelineBucket[] }>('GET', `/api/timeline${qs({ libraryId })}`);

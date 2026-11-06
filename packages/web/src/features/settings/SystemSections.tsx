@@ -16,6 +16,7 @@ import { LogoMark, LogoWordmark } from '@/components/Logo';
 import { useSlideshow } from '@/features/slideshow/store';
 import { DEFAULT_SETTINGS as SLIDE_DEFAULTS } from '@/features/slideshow/show';
 import { RemoteCacheRow } from '@/features/remote/RemoteSettings';
+import { MegaAccountCard } from '@/features/remote/MegaAccount';
 import { AndroidConnectionCard } from '@/features/android/ConnectionCard';
 import { DevicesCard } from '@/features/devices/DevicesCard';
 import { PhoneShareCard } from '@/features/devices/PhoneShareCard';
@@ -293,6 +294,8 @@ export function NetworkSection() {
       <Opaque keys={['devices.title']} kw="phone telefon devices cihaz pair eşleştir">
         <DevicesCard />
       </Opaque>
+      {/* optional MEGA account: transfers count against its quota instead of the per-IP one */}
+      <MegaAccountCard />
     </Section>
   );
 }

@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import os from 'node:os';
 
 export interface ProbeResult {
   duration: number | null;
@@ -26,6 +27,8 @@ export class Ffmpeg {
   available = true;
   /** a working ffprobe binary (Docker image); otherwise probe() parses `ffmpeg -i` output */
   probeAvailable = true;
+  /** decoder threads for thumbnail frames (Settings.indexIntensity); 0 = ffmpeg's default (one per core) */
+  decodeThreads = 0;
 
   constructor(
     public ffmpegPath: string,
@@ -74,6 +77,7 @@ export class Ffmpeg {
   /** Grab a single frame as PNG. */
   async frame(file: string, atSeconds: number, maxWidth = 1600): Promise<Buffer> {
     const args = [
+      ...(this.decodeThreads > 0 ? ['-threads', String(this.decodeThreads)] : []),
       ...(atSeconds > 0 ? ['-ss', atSeconds.toFixed(3)] : []),
       '-i',
       file,
@@ -259,10 +263,25 @@ export function parseFfmpegInfo(stderr: string): ProbeResult | null {
   };
 }
 
+/**
+ * Probes, thumbnail frames and previews run below normal priority (Windows: BELOW_NORMAL priority
+ * class, elsewhere nice 10): they still get every idle cycle, but never take the CPU away from the
+ * app's UI or the user's other programs. Export jobs (JobService) keep the normal priority.
+ */
+export function lowerPriority(p: ChildProcess) {
+  if (!p.pid) return;
+  try {
+    os.setPriority(p.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
+  } catch {
+    /* already exited / not permitted */
+  }
+}
+
 /** stderr of a process, whatever its exit code (`ffmpeg -i` without output exits 1) */
 function runStderr(bin: string, args: string[], timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const p = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
+    lowerPriority(p);
     let err = '';
     const timer = setTimeout(() => p.kill('SIGKILL'), timeoutMs);
     p.stderr.on('data', (c) => {
@@ -300,6 +319,7 @@ function canRun(bin: string, args: string[]): Promise<boolean> {
 export function runCollect(bin: string, args: string[], opts: { timeoutMs?: number; input?: Buffer } = {}): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const p = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    lowerPriority(p);
     const chunks: Buffer[] = [];
     let err = '';
     let timer: NodeJS.Timeout | undefined;

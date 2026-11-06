@@ -38,7 +38,7 @@ export class EventHub {
 
   emit(e: ServerEvent) {
     // folders added/removed (cascade deletes) change result sets without a media event
-    if (e.type === 'folders') this.counter++;
+    if (e.type === 'folders' && !e.status) this.counter++;
     for (const l of this.listeners) {
       try {
         l(e);
@@ -61,9 +61,37 @@ export class EventHub {
     this.counter++;
   }
 
-  /** Queue a media event for a folder dir. Events of one reason are coalesced per folder. */
+  /** min spacing of generation changes caused by background metadata writes (ms) */
+  metaGenMs = 1500;
+  private metaGenAt = 0;
+  private metaGenTimer: NodeJS.Timeout | null = null;
+
+  /** bump() for bulk writes: right away, or once at the end of the current window */
+  bumpThrottled() {
+    const now = Date.now();
+    if (now - this.metaGenAt >= this.metaGenMs) {
+      this.metaGenAt = now;
+      this.counter++;
+      return;
+    }
+    if (this.metaGenTimer) return;
+    this.metaGenTimer = setTimeout(() => {
+      this.metaGenTimer = null;
+      this.metaGenAt = Date.now();
+      this.counter++;
+    }, this.metaGenAt + this.metaGenMs - now);
+    this.metaGenTimer.unref?.();
+  }
+
+  /**
+   * Queue a media event for a folder dir. Events of one reason are coalesced per folder.
+   * The generation moves right away for structural changes; for 'meta' (background passes write a
+   * row every few ms while indexing) at most every `metaGenMs` (leading + trailing edge): a per-row
+   * generation made every page look inconsistent with its skeleton, so clients refetched it endlessly.
+   */
   mediaChanged(folderId: string, dir: string, reason: MediaReason = 'change') {
-    if (reason !== 'thumb') this.counter++;
+    if (reason === 'meta') this.bumpThrottled();
+    else if (reason !== 'thumb') this.counter++;
     const key = `${folderId}\u0000${reason}`;
     let p = this.pending.get(key);
     if (!p) this.pending.set(key, (p = { dirs: new Set(), timer: null, last: 0 }));
@@ -86,6 +114,8 @@ export class EventHub {
 
   /** Drop pending timers (shutdown). */
   close() {
+    if (this.metaGenTimer) clearTimeout(this.metaGenTimer);
+    this.metaGenTimer = null;
     for (const p of this.pending.values()) if (p.timer) clearTimeout(p.timer);
     this.pending.clear();
   }
