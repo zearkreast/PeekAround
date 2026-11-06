@@ -234,3 +234,47 @@ export function createGeoIndex(bytes: Uint8Array): GeoIndex {
     },
   };
 }
+
+/**
+ * One GPS coordinate from EXIF / XMP in any of the forms cameras and editors write:
+ * numbers, [deg, min, sec] arrays, "41.0123", "41,0.738N" (XMP DD,MM.mmmk), "41,0,44.28N" (DD,MM,SSk),
+ * "41 0 44.28", "41°0'44.28\"N", "N 41.0123". `ref` ('N'/'S'/'E'/'W') applies when the value has none.
+ */
+export function parseGpsCoordinate(v: unknown, ref?: unknown): number | null {
+  let sign = 1;
+  let val: number | null = null;
+  const refOf = (r: unknown): string => (typeof r === 'string' ? r.trim().charAt(0).toUpperCase() : '');
+  let hemi = refOf(ref);
+  if (typeof v === 'number') val = v;
+  else if (Array.isArray(v)) {
+    const p = v.map(Number);
+    if (p.length && p.every(Number.isFinite)) val = (p[0] ?? 0) + (p[1] ?? 0) / 60 + (p[2] ?? 0) / 3600;
+  } else if (typeof v === 'string') {
+    let s = v.trim();
+    if (!s || s.length > 64) return null;
+    const lead = /^([NSEW])\s*/i.exec(s);
+    if (lead) {
+      hemi = lead[1].toUpperCase();
+      s = s.slice(lead[0].length);
+    }
+    const trail = /\s*([NSEW])$/i.exec(s);
+    if (trail) {
+      hemi = trail[1].toUpperCase();
+      s = s.slice(0, -trail[0].length);
+    }
+    if (s.startsWith('-')) {
+      sign = -1;
+      s = s.slice(1);
+    } else if (s.startsWith('+')) s = s.slice(1);
+    // decimal comma ("41,0123") vs DD,MM: XMP always has a hemisphere letter with the comma form
+    const parts = s.split(/[,\s°'′"″:]+/).filter(Boolean);
+    if (!parts.length || parts.length > 3 || !parts.every((x) => /^\d+(\.\d+)?$/.test(x))) return null;
+    const n = parts.map(Number);
+    if (n.length > 1 && (n[1] >= 60 || (n[2] ?? 0) >= 60)) return null;
+    val = n[0] + (n[1] ?? 0) / 60 + (n[2] ?? 0) / 3600;
+  }
+  if (val === null || !Number.isFinite(val)) return null;
+  const abs = Math.abs(val);
+  if (hemi === 'S' || hemi === 'W') return -abs;
+  return val < 0 ? -abs : sign * abs;
+}

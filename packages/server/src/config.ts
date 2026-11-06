@@ -31,9 +31,12 @@ export interface ServerOptions {
   version?: string;
   /** tests: replace the MEGA client */
   mega?: import('./remote/mega.js').MegaClient;
+  /** outgoing HTTP for map tiles (desktop: Electron's net.fetch, which honours the system proxy) */
+  fetch?: typeof fetch;
 }
 
-export interface ResolvedConfig extends Required<Omit<ServerOptions, 'hooks' | 'webDir' | 'roots' | 'mega' | 'security'>> {
+export interface ResolvedConfig extends Required<Omit<ServerOptions, 'hooks' | 'webDir' | 'roots' | 'mega' | 'security' | 'fetch'>> {
+  fetch?: typeof fetch;
   hooks: DesktopHooks;
   webDir: string | null;
   roots: { path: string; name?: string }[];
@@ -63,7 +66,8 @@ export function resolveConfig(opts: ServerOptions): ResolvedConfig {
     maxUploadBytes: opts.maxUploadBytes ?? 20 * 1024 * 1024 * 1024,
     logger: opts.logger ?? false,
     hooks: opts.hooks ?? {},
-    version: opts.version ?? '1.1.0',
+    fetch: opts.fetch,
+    version: opts.version ?? '1.2.0',
     cacheDir,
     thumbDir: path.join(cacheDir, 'thumbs'),
     tempDir: path.join(dataDir, 'temp'),

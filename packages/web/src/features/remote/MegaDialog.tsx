@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Archive, Check, ChevronRight, Clock3, Cloud, File, FileImage, FileVideo, Folder, FolderInput, Minus, Music, TriangleAlert } from 'lucide-react';
+import { Archive, Check, ChevronRight, Clock3, Cloud, File, FileImage, FileVideo, Folder, FolderInput, HardDriveDownload, Library as LibraryIcon, Minus, Music, Play, TriangleAlert } from 'lucide-react';
 import type { RemoteInspect, UploadZipMode } from '@peekaround/shared';
 import { ApiError, useBackend, useInfo } from '@/backend';
 import { useT } from '@/i18n';
@@ -8,20 +8,27 @@ import { cn } from '@/lib/cn';
 import { formatBytes } from '@/lib/format';
 import { useLibraries, useSettings } from '@/lib/queries';
 import { useLocation } from '@/store/location';
+import { useNavigate } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { libraryHref } from '@/lib/routes';
 import { toast } from '@/store/toasts';
 import { Button, Input, Modal, Segmented, Spinner } from '@/components/ui';
 import { FolderPicker, type PickedTarget } from '@/features/gallery/FolderPicker';
 import { watchJob } from '@/features/devices/DevicesHost';
-import { useRemote } from './RemoteHost';
+import { useRemote, type RemoteShowOptions } from './RemoteHost';
 import { buildTree, checkState, defaultSelection, findMegaUrl, importNodes, isMediaNode, looksLikeMega, megaErrorKey, toggleNode, totals, type Tree, type TreeNode } from './mega';
 
 type Stage = { kind: 'input' } | { kind: 'loading'; url: string } | { kind: 'tree'; url: string; data: RemoteInspect } | { kind: 'error'; url: string; message: string };
 
-/** "Add from link": MEGA file/folder link → inspect → choose files → import (transfer job). */
+/**
+ * MEGA link dialog: file/folder link → inspect → either
+ *  - "İndirmeden izle (akış)" (recommended): the link becomes a library folder, nothing downloaded;
+ *  - "Bilgisayara kopyala": choose files → import (transfer job).
+ */
 export function MegaDialog() {
   const t = useT();
   const backend = useBackend();
-  const { open, url, seq, close } = useRemote();
+  const { open, url, seq, close, opts } = useRemote();
   const [stage, setStage] = useState<Stage>({ kind: 'input' });
   const [text, setText] = useState('');
   const req = useRef(0);
@@ -60,7 +67,7 @@ export function MegaDialog() {
   };
 
   return (
-    <Modal open={open} onClose={close} title={t('remote.title')} width={640}>
+    <Modal open={open} onClose={close} title={opts.intent === 'stream' ? t('mega.addLink') : t('remote.title')} width={640}>
       <div data-testid="mega-dialog" className="pb-2">
         {unsupported ? (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
@@ -73,7 +80,7 @@ export function MegaDialog() {
             </Button>
           </div>
         ) : stage.kind === 'tree' ? (
-          <TreeStep key={stage.url} url={stage.url} data={stage.data} onDone={close} onBack={() => setStage({ kind: 'input' })} />
+          <TreeStep key={stage.url} url={stage.url} data={stage.data} opts={opts} onDone={close} onBack={() => setStage({ kind: 'input' })} />
         ) : (
           <form
             className="flex flex-col gap-3"
@@ -82,7 +89,7 @@ export function MegaDialog() {
               submitUrl();
             }}
           >
-            <p className="text-sm text-dim">{t('remote.intro')}</p>
+            <p className="text-sm text-dim">{opts.intent === 'stream' ? `${t('mega.addLinkHint')}. ${t('remote.intro')}` : t('remote.intro')}</p>
             <div className="flex gap-2">
               <Input autoFocus={stage.kind === 'input'} value={text} onChange={(e) => setText(e.target.value)} inputMode="url" placeholder="https://mega.nz/folder/…#…" className="flex-1" icon={<Cloud />} />
               <Button type="submit" variant="primary" loading={stage.kind === 'loading'} disabled={!text.trim()}>
@@ -116,9 +123,11 @@ export function MegaDialog() {
 
 const MAX_ROWS = 400;
 
-function TreeStep({ url, data, onDone, onBack }: { url: string; data: RemoteInspect; onDone: () => void; onBack: () => void }) {
+function TreeStep({ url, data, opts, onDone, onBack }: { url: string; data: RemoteInspect; opts: RemoteShowOptions; onDone: () => void; onBack: () => void }) {
   const t = useT();
   const backend = useBackend();
+  const canStream = !!backend.remoteAddFolder;
+  const [how, setHow] = useState<'stream' | 'copy'>(canStream && opts.intent !== 'copy' ? 'stream' : 'copy');
   const info = useInfo();
   const settings = useSettings();
   const libs = useLibraries();
@@ -194,6 +203,17 @@ function TreeStep({ url, data, onDone, onBack }: { url: string; data: RemoteInsp
         </button>
       </div>
 
+      {canStream && (
+        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" data-testid="mega-how">
+          <HowCard active={how === 'stream'} onClick={() => setHow('stream')} icon={<Play className="size-4" />} title={t('mega.choose.stream')} badge={t('mega.choose.recommended')} hint={t('mega.choose.streamHint')} />
+          <HowCard active={how === 'copy'} onClick={() => setHow('copy')} icon={<HardDriveDownload className="size-4" />} title={t('mega.choose.copy')} hint={t('mega.choose.copyHint')} />
+        </div>
+      )}
+
+      {how === 'stream' ? (
+        <StreamOptions url={url} data={data} libraryId={opts.libraryId} onDone={onDone} />
+      ) : (
+        <>
       <div className="rounded-2xl border border-line bg-surface">
         {data.kind === 'folder' && (
           <button type="button" onClick={() => setSel(toggleNode(tree.root, sel))} className="flex min-h-11 w-full items-center gap-3 border-b border-line px-3 text-left text-sm font-medium">
@@ -281,6 +301,104 @@ function TreeStep({ url, data, onDone, onBack }: { url: string; data: RemoteInsp
           setTarget(tg);
         }}
       />
+        </>
+      )}
+    </div>
+  );
+}
+
+function HowCard({ active, onClick, icon, title, hint, badge }: { active: boolean; onClick: () => void; icon: React.ReactNode; title: string; hint: string; badge?: string }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={cn('flex flex-col gap-1 rounded-2xl border p-3 text-left transition-colors', active ? 'border-accent bg-[color-mix(in_oklab,var(--accent)_10%,transparent)]' : 'border-line hover:bg-surface')}
+    >
+      <span className="flex items-center gap-2 text-sm font-medium">
+        <span className={cn('grid size-6 place-items-center rounded-lg', active ? 'bg-accent text-white' : 'bg-surface-2 text-dim')}>{icon}</span>
+        <span className="min-w-0 flex-1">{title}</span>
+        {badge && <span className="shrink-0 rounded-full bg-ok/15 px-1.5 py-px text-[10px] font-semibold text-ok">{badge}</span>}
+      </span>
+      <span className="text-xs text-faint">{hint}</span>
+    </button>
+  );
+}
+
+/** "watch without downloading": the link becomes a folder of a new or an existing library */
+function StreamOptions({ url, data, libraryId, onDone }: { url: string; data: RemoteInspect; libraryId?: string; onDone: () => void }) {
+  const t = useT();
+  const backend = useBackend();
+  const info = useInfo();
+  const libs = useLibraries();
+  const qc = useQueryClient();
+  const nav = useNavigate();
+  const existing = libs.data?.libraries ?? [];
+  const [where, setWhere] = useState<'new' | 'existing'>(libraryId ? 'existing' : 'new');
+  const [picked, setLib] = useState(libraryId ?? '');
+  // the libraries may load after this step opened: default to the first one (what the <select> shows)
+  const lib = picked || existing[0]?.id || '';
+  const [name, setName] = useState(data.name);
+  const [busy, setBusy] = useState(false);
+  const media = data.nodes.filter((n) => !n.dir && isMediaNode(n)).length;
+  const ro = !!info?.caps.readonly;
+
+  const add = async () => {
+    setBusy(true);
+    try {
+      const r = await backend.remoteAddFolder!(where === 'existing' && lib ? { url, libraryId: lib } : { url, libraryName: name.trim() || data.name });
+      await qc.invalidateQueries({ queryKey: ['libraries'] });
+      toast.success(t('mega.added'), t('mega.addedBody', { name: r.folder.name }));
+      onDone();
+      nav(libraryHref(r.library.id));
+    } catch (e) {
+      const err = e as ApiError;
+      const m = megaErrorKey(err.status ?? 0, err.message ?? '');
+      toast.error(t('common.error'), t(m.key, m.vars));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3" data-testid="mega-stream">
+      <div className="flex items-center gap-2 rounded-2xl bg-surface px-3 py-2.5 text-sm text-dim">
+        <FileImage className="size-4 shrink-0 text-faint" />
+        <span className="tabular-nums">{t('remote.summary', { n: media, size: formatBytes(data.size) })}</span>
+      </div>
+      {existing.length > 0 && (
+        <Segmented
+          value={where}
+          onChange={setWhere}
+          options={[
+            { value: 'new', label: t('mega.lib.new'), icon: <LibraryIcon /> },
+            { value: 'existing', label: t('mega.lib.existing'), icon: <Folder /> },
+          ]}
+        />
+      )}
+      {where === 'new' || !existing.length ? (
+        <label className="flex flex-col gap-1.5 text-xs text-faint">
+          {t('mega.lib.name')}
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+      ) : (
+        <label className="flex flex-col gap-1.5 text-xs text-faint">
+          {t('mega.lib.pick')}
+          <select value={lib} onChange={(e) => setLib(e.target.value)} className="h-10 rounded-xl border border-line bg-surface px-3 text-sm text-fg">
+            {existing.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <div className="flex justify-end border-t border-line pt-4">
+        <Button variant="primary" icon={<Cloud className="size-4" />} loading={busy} disabled={ro || (where === 'existing' && !lib)} onClick={() => void add()}>
+          {t('mega.add')}
+        </Button>
+      </div>
     </div>
   );
 }

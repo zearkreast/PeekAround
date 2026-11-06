@@ -1,0 +1,13 @@
+Input #0, matroska,webm, from 'eski_kayit.mkv':
+  Metadata:
+    ENCODER         : Lavf60.16.100
+  Duration: 00:00:10.02, start: -0.023000, bitrate: 7186 kb/s
+  Stream #0:0: Video: h264 (High), yuv420p(tv, progressive), 640x360 [SAR 1:1 DAR 16:9], 25 fps, 25 tbr, 1k tbn
+    Metadata:
+      ENCODER         : Lavc60.31.102 libx264
+      DURATION        : 00:00:10.000000000
+  Stream #0:1: Audio: aac (LC), 44100 Hz, mono, fltp
+    Metadata:
+      ENCODER         : Lavc60.31.102 aac
+      DURATION        : 00:00:10.023000000
+At least one output file must be specified

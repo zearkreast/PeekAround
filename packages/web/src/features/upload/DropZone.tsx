@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Archive, Clock3, Copy, FolderInput, Link2, Package, UploadCloud } from 'lucide-react';
 import { useBackend, useInfo } from '@/backend';
 import { desktop } from '@/backend/desktop';
+import { isOwnNativeDrag } from '@/features/library/dnd';
 import { useT } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { useLocation } from '@/store/location';
@@ -14,7 +15,8 @@ import { collectFromDataTransfer } from './collect';
 import { openMegaFrom } from '@/features/remote/RemoteHost';
 
 function hasFiles(e: DragEvent) {
-  return !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+  // our own native drag of media files (desktop, features/library/dnd) is not an upload
+  return !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files') && !isOwnNativeDrag();
 }
 
 /** a dragged link / text without files */

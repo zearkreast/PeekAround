@@ -1,10 +1,21 @@
 import type {
+  Album,
+  AlbumOrder,
+  LibraryOptions,
+  LibraryStats,
+  CalendarYear,
+  DuplicateGroup,
+  MapTileStyle,
+  MetaStatus,
   BrowseSkeleton,
   DeviceInfo,
   ExploreResult,
   GeoPoints,
   RemoteImportSpec,
   RemoteInspect,
+  RemoteCopySpec,
+  RemoteFolderCreate,
+  RemoteFolderCreated,
   BrowseQuery,
   BrowseResult,
   FileRef,
@@ -57,7 +68,24 @@ export interface SaveEditOptions {
   quality?: number;
 }
 
+export interface DuplicatesPage {
+  groups: DuplicateGroup[];
+  total: number;
+  items: MediaItem[];
+  /** same-size files still being compared */
+  pending: number;
+  /** item id → "Folder/sub/dir" */
+  paths: Record<string, string>;
+}
+
 export type ConnectionState = 'connecting' | 'online' | 'offline';
+
+export type CacheKind = 'thumbs' | 'tiles' | 'remote';
+export interface CacheDetails {
+  thumbs: { bytes: number };
+  tiles: { bytes: number; files: number; limitMb: number };
+  remote: { bytes: number; limitMb: number };
+}
 
 /**
  * Everything the UI needs from "where the media lives".
@@ -76,7 +104,7 @@ export interface Backend {
   /** devices: linked phones (http backends only; desktop window / paired devices) */
   libraries(): Promise<{ libraries: Library[]; temp: FolderRef[]; devices?: DeviceInfo[] }>;
   createLibrary(input: { name: string; color?: string; icon?: string; folders?: string[] }): Promise<Library>;
-  updateLibrary(id: string, patch: { name?: string; color?: string; icon?: string; sort?: number }): Promise<Library>;
+  updateLibrary(id: string, patch: { name?: string; color?: string; icon?: string; sort?: number; coverId?: string | null; options?: Partial<LibraryOptions> }): Promise<Library>;
   deleteLibrary(id: string): Promise<void>;
   addFolder(libraryId: string, path: string, name?: string): Promise<FolderRef>;
   renameFolder(folderId: string, name: string): Promise<void>;
@@ -145,9 +173,59 @@ export interface Backend {
   // ── remote links (MEGA) ──
   remoteInspect?(url: string): Promise<RemoteInspect>;
   remoteImport?(spec: RemoteImportSpec): Promise<Job>;
+  /** remote (streaming) folders: a MEGA link in a library without downloading (http backends only) */
+  remoteAddFolder?(spec: RemoteFolderCreate): Promise<RemoteFolderCreated>;
+  remoteRefresh?(folderId: string): Promise<void>;
+  /** the link with its key — refused (403) for LAN clients */
+  remoteLink?(folderId: string): Promise<string>;
+  /** copy remote media / dirs into a local folder (transfer job) */
+  remoteCopy?(spec: RemoteCopySpec): Promise<Job>;
+  /** bytes in the MEGA stream cache (Settings.remoteCacheMb caps it) */
+  remoteCacheSize?(): Promise<number>;
 
   cacheSize(): Promise<number>;
   clearCache(): Promise<void>;
+  /** cache usage per kind (http backends; settings → performance & cache) */
+  cacheDetails?(): Promise<CacheDetails>;
+  /** clear one cache kind (refused for LAN clients of the desktop app) */
+  clearCacheKind?(kind: CacheKind): Promise<void>;
+
+  // ── maps + Explore insights (optional; a missing method hides its UI) ──
+  /** tile URL template through the server ('{z}/{x}/{y}' placeholders); undefined → tiles load from upstream directly */
+  tileUrl?(style: MapTileStyle): string;
+  tileCache?(): Promise<{ bytes: number; files: number; limitMb: number }>;
+  clearTileCache?(): Promise<void>;
+  /** items per day of a year (calendar heatmap) */
+  calendar?(year: number): Promise<CalendarYear>;
+  /** exact duplicate groups (+ their items and folder paths) */
+  duplicates?(offset?: number, limit?: number): Promise<DuplicatesPage>;
+  /** metadata diagnostics per library */
+  metaStatus?(): Promise<MetaStatus>;
+  /** re-read metadata (GPS, dates, cameras) of a library — or of everything */
+  rereadMeta?(libraryId?: string): Promise<void>;
+
+  // ── libraries (1.2, optional; a missing method hides its UI) ──
+  /** header numbers of a library page */
+  libraryStats?(id: string): Promise<LibraryStats>;
+  /** new library order (ids first → last) */
+  orderLibraries?(ids: string[]): Promise<void>;
+  /** rescan every folder of a library */
+  rescanLibrary?(id: string): Promise<void>;
+
+  // ── albums (1.2, optional: the Android local backend has none → albums are hidden) ──
+  albums?(): Promise<Album[]>;
+  album?(id: string): Promise<Album>;
+  createAlbum?(name: string, ids?: string[]): Promise<Album>;
+  updateAlbum?(id: string, patch: { name?: string; coverId?: string | null; order?: AlbumOrder }): Promise<Album>;
+  deleteAlbum?(id: string): Promise<void>;
+  addToAlbum?(id: string, ids: string[]): Promise<{ added: number; album: Album }>;
+  removeFromAlbum?(id: string, ids: string[]): Promise<{ removed: number; album: Album }>;
+  /** move ids before `before` (null = end); switches the album to its custom order */
+  reorderAlbum?(id: string, ids: string[], before: string | null): Promise<void>;
+  orderAlbums?(ids: string[]): Promise<void>;
+  /** album id → how many of these items it holds */
+  albumMembership?(ids: string[]): Promise<Record<string, number>>;
+  albumDownloadUrl?(id: string, name?: string): string;
 
   subscribe(fn: (e: ServerEvent) => void): () => void;
   onConnection(fn: (s: ConnectionState) => void): () => void;

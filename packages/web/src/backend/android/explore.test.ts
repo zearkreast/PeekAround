@@ -188,6 +188,32 @@ describe('android local explore', () => {
     expect(filterExplore(library(), { flag: 'panorama' })[0].flags).toBeGreaterThan(0);
   });
 
+  it('insights the native index can feed: stats, countries/cities, shapes, rankings, insight filters', async () => {
+    const items = library();
+    const r = await buildExplore(items, NOW);
+    expect(r.stats).toMatchObject({ photos: 40, videos: 1, countries: 1, withLocation: 34 });
+    expect(r.countries).toEqual([expect.objectContaining({ cc: 'TR', count: 34, regions: 2 })]);
+    expect(r.cities!.map((c) => c.placeKey)).toEqual(expect.arrayContaining(['TR-34', 'TR-07']));
+    expect(r.noLocation).toBe(7);
+    expect(r.orientations!.find((g) => g.value === 'landscape')!.count).toBeGreaterThan(30);
+    expect(r.orientations!.find((g) => g.value === 'panorama')!.count).toBe(1);
+    expect(r.largest).toHaveLength(20);
+    expect(r.calendarYears).toEqual([2025, 2024]);
+    expect(r.yearReviews!.map((m) => m.id)).toEqual(['year-2024']);
+    // not computable locally → omitted
+    expect(r.colors).toBeUndefined();
+    expect(r.dayTimes).toBeUndefined();
+    expect(r.duplicates).toBeUndefined();
+    const names = (q: Parameters<typeof filterExplore>[1]) => filterExplore(library(), q).map((i) => i.name);
+    expect(names({ gps: 'none', kind: 'image-video' as never }).sort()).toEqual(['Screenshot_20250101-101500.png', 'clip.mp4', 'funny.gif', 'otd_0.jpg', 'otd_1.jpg', 'otd_2.jpg', 'otd_3.jpg']);
+    expect(names({ gps: 'any' })).toHaveLength(34);
+    expect(names({ orient: 'panorama' })).toEqual(['pano.jpg']);
+    expect(names({ color: 'red' })).toEqual([]);
+    expect(names({ place: 'TR-07', city: r.cities!.find((c) => c.placeKey === 'TR-07')!.name })).toHaveLength(12);
+    const recent = filterExplore(library(), { byAdded: true });
+    expect(recent[0].mtime).toBe(Math.max(...library().map((i) => i.mtime)));
+  });
+
   it('map points only for items with valid GPS', async () => {
     const items = library();
     await buildExplore(items, NOW);

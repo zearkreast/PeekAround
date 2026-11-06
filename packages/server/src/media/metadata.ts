@@ -1,6 +1,11 @@
+import fsp from 'node:fs/promises';
+import path from 'node:path';
 import sharp from 'sharp';
 import exifr from 'exifr';
 import {
+  matchSidecar,
+  parseGpsCoordinate,
+  parseTakeoutJson,
   BROWSER_IMAGE_EXT,
   classify,
   isValidGps,
@@ -21,8 +26,9 @@ import type { MediaRow } from './mapper.js';
 /**
  * Version of the grouping metadata (GPS, camera, flags, time zone handling).
  * Rows with meta_v < META_V are re-read by the background enrichment loop.
+ * 2 (1.2): XMP GPS strings, Google Takeout JSON sidecars, more video location tags.
  */
-export const META_V = 1;
+export const META_V = 2;
 
 /** time_src column */
 export const TIME_SRC = { mtime: 0, local: 1, localOffset: 2, instant: 3 } as const;
@@ -93,6 +99,14 @@ const empty = (): ExtractedMeta => ({
 });
 
 export async function extractMeta(abs: string, row: Pick<MediaRow, 'kind' | 'ext'>, ffmpeg: Ffmpeg): Promise<ExtractedMeta> {
+  const m = await extractEmbedded(abs, row, ffmpeg);
+  if ((row.kind === 'image' || row.kind === 'video') && (m.lat === null || (m.local === null && m.instant === null))) {
+    await applySidecar(m, abs).catch(() => {});
+  }
+  return m;
+}
+
+async function extractEmbedded(abs: string, row: Pick<MediaRow, 'kind' | 'ext'>, ffmpeg: Ffmpeg): Promise<ExtractedMeta> {
   if (row.kind === 'image') return imageMeta(abs, row.ext);
   if (row.kind === 'video' || row.kind === 'audio') {
     const p = await ffmpeg.probe(abs);
@@ -112,10 +126,48 @@ export async function extractMeta(abs: string, row: Pick<MediaRow, 'kind' | 'ext
   return empty();
 }
 
-/** GPS / camera / capture time from ffprobe tags (QuickTime, Android, generic). */
+/** container tags that carry an ISO 6709 location, most specific first (keys are lower-cased) */
+const VIDEO_LOCATION_TAGS = [
+  'com.apple.quicktime.location.iso6709',
+  'location',
+  'location-eng',
+  '©xyz',
+  'xyz',
+  'com.android.location',
+  'com.samsung.android.location',
+  'com.samsung.location',
+  'gps',
+  'gpscoordinates',
+];
+
+/** "+41.0123+028.9744/" (ISO 6709) or "41.0123, 28.9744" / "41.0123 28.9744" (decimal pair) */
+export function parseVideoLocation(v: unknown): { lat: number; lon: number } | null {
+  const iso = parseIso6709(v);
+  if (iso) return iso;
+  if (typeof v !== 'string' || v.length > 80) return null;
+  const m = /^\s*([+-]?\d{1,2}(?:\.\d+)?)\s*[,; ]\s*([+-]?\d{1,3}(?:\.\d+)?)(?:\s*[,; ]\s*[+-]?\d+(?:\.\d+)?)?\s*$/.exec(v);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lon = Number(m[2]);
+  return isValidGps(lat, lon) ? { lat, lon } : null;
+}
+
+/** GPS / camera / capture time from ffprobe tags (QuickTime, Android, Samsung, generic). */
 export function videoGroupMeta(p: ProbeResult | null): Pick<ExtractedMeta, 'local' | 'offset' | 'instant' | 'lat' | 'lon' | 'make' | 'model'> {
   const t = p?.tags ?? {};
-  const loc = parseIso6709(t['com.apple.quicktime.location.iso6709'] ?? t.location ?? t['location-eng']);
+  let loc: { lat: number; lon: number } | null = null;
+  for (const k of VIDEO_LOCATION_TAGS) {
+    loc = parseVideoLocation(t[k]);
+    if (loc) break;
+  }
+  // vendor variants we don't know by name ("com.xyz.location", "location-tur" …)
+  if (!loc) {
+    for (const [k, v] of Object.entries(t)) {
+      if (!/location|xyz|gps/.test(k)) continue;
+      loc = parseVideoLocation(v);
+      if (loc) break;
+    }
+  }
   // Apple writes the local time with offset: "2024-07-03T21:00:00+0300"
   const apple = parseDateTimeWithOffset(t['com.apple.quicktime.creationdate']);
   return {
@@ -191,8 +243,13 @@ export function applyExif(m: ExtractedMeta, ex: Record<string, any>) {
       if (Number(ex.Orientation) >= 5) [m.width, m.height] = [h, w];
     }
   }
-  const lat = Number(ex.latitude);
-  const lon = Number(ex.longitude);
+  let lat = Number(ex.latitude);
+  let lon = Number(ex.longitude);
+  if (!isValidGps(lat, lon)) {
+    // XMP (Lightroom, Photos exports, some phone apps): exif:GPSLatitude="41,0.738N" — Number() gives NaN
+    lat = parseGpsCoordinate(ex.GPSLatitude, ex.GPSLatitudeRef) ?? NaN;
+    lon = parseGpsCoordinate(ex.GPSLongitude, ex.GPSLongitudeRef) ?? NaN;
+  }
   if (isValidGps(lat, lon)) {
     m.lat = Math.round(lat * 1e6) / 1e6;
     m.lon = Math.round(lon * 1e6) / 1e6;
@@ -208,6 +265,67 @@ export function applyExif(m: ExtractedMeta, ex: Record<string, any>) {
   const proj = String(ex.ProjectionType ?? '').toLowerCase();
   const usePano = ex.UsePanoramaViewer;
   m.gpano = proj === 'equirectangular' || proj === 'cylindrical' || usePano === true || String(usePano).toLowerCase() === 'true';
+}
+
+// ───────────────────────── Google Takeout sidecars ─────────────────────────
+
+/** JSON names per directory, briefly cached (the meta pass reads a directory's files one after another) */
+const jsonDirs = new Map<string, { at: number; names: string[] }>();
+const JSON_DIR_TTL = 20_000;
+
+async function jsonNamesIn(dir: string): Promise<string[]> {
+  const now = Date.now();
+  const hit = jsonDirs.get(dir);
+  if (hit && now - hit.at < JSON_DIR_TTL) return hit.names;
+  let names: string[] = [];
+  try {
+    names = (await fsp.readdir(dir)).filter((n) => n.length > 5 && n.slice(-5).toLowerCase() === '.json');
+  } catch {
+    names = [];
+  }
+  if (jsonDirs.size > 256) jsonDirs.clear();
+  jsonDirs.set(dir, { at: now, names });
+  return names;
+}
+
+/** forget cached directory listings (tests, rescans) */
+export function clearSidecarCache() {
+  jsonDirs.clear();
+}
+
+/**
+ * Fill time / location from a Google Takeout JSON next to the file ("IMG_1.jpg.json",
+ * "IMG_1.jpg.supplemental-metadata.json", cut and "(1)" variants, "-edited" copies) — only what the
+ * file itself lacks. Pseudo paths (linked phones, remote folders) have no directory to read.
+ */
+export async function applySidecar(m: ExtractedMeta, abs: string): Promise<boolean> {
+  if (!path.isAbsolute(abs) || /^[a-z]+:\/\//i.test(abs)) return false;
+  const dir = path.dirname(abs);
+  const names = await jsonNamesIn(dir);
+  if (!names.length) return false;
+  const pick = matchSidecar(path.basename(abs), names);
+  if (!pick) return false;
+  let j: unknown;
+  try {
+    const raw = await fsp.readFile(path.join(dir, pick), 'utf8');
+    if (raw.length > 1_000_000) return false;
+    j = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  const t = parseTakeoutJson(j);
+  if (!t) return false;
+  let used = false;
+  if (m.lat === null && t.lat !== null && t.lon !== null && isValidGps(t.lat, t.lon)) {
+    m.lat = t.lat;
+    m.lon = t.lon;
+    used = true;
+  }
+  if (m.local === null && m.instant === null && t.takenAt !== null) {
+    m.instant = t.takenAt;
+    used = true;
+  }
+  return used;
 }
 
 /** Turn extracted metadata into DB columns (time resolution, reverse geocoding, camera, flags). */

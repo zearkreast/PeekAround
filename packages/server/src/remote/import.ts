@@ -23,7 +23,20 @@ const MAX_IMPORT_NODES = 200_000;
  * Only selected nodes (and everything below selected folders) are fetched. Each file streams
  * (megajs decrypting, 4 connections) → `.part` → unique name → index; zips per spec.zip.
  */
-export function startRemoteImport(ctx: Ctx, spec: RemoteImportSpec): Job {
+export interface RemoteImportOptions {
+  /** the already loaded tree (remote folders): no second listing */
+  root?: () => Promise<MegaNode>;
+  /**
+   * copy semantics: every selected node lands directly in folderId/dir (a selected folder keeps its
+   * name and tree), instead of a new folder named after the link
+   */
+  relative?: boolean;
+  title?: string;
+  /** every MEGA error of a file (quota bookkeeping of remote folders) */
+  onError?: (e: unknown) => void;
+}
+
+export function startRemoteImport(ctx: Ctx, spec: RemoteImportSpec, opts: RemoteImportOptions = {}): Job {
   requireWritable(ctx);
   const link = parseMegaUrl(spec?.url);
   if (spec.mode !== 'extract' && spec.mode !== 'temp') throw new HttpError(400, "mode must be 'extract' or 'temp'");
@@ -37,16 +50,17 @@ export function startRemoteImport(ctx: Ctx, spec: RemoteImportSpec): Job {
   const selected = Array.isArray(spec.nodes) ? new Set(spec.nodes.map(String)) : null;
   if (selected && !selected.size) throw new HttpError(400, 'Nothing selected');
 
-  return ctx.jobs.enqueue('transfer', 'MEGA', async (jc) => {
+  return ctx.jobs.enqueue('transfer', opts.title ?? 'MEGA', async (jc) => {
     let root: MegaNode;
     try {
-      root = await ctx.mega.load(link);
+      root = opts.root ? await opts.root() : await ctx.mega.load(link);
     } catch (e) {
       throw megaError(e);
     }
-    jc.job.title = root.name;
+    jc.job.title = opts.title ?? root.name;
     const { nodes } = flatten(root, MAX_IMPORT_NODES);
-    const files = nodes.filter((n) => !n.node.directory && (!selected || n.chain.some((id) => selected.has(id))));
+    let files = nodes.filter((n) => !n.node.directory && (!selected || n.chain.some((id) => selected.has(id))));
+    if (opts.relative && selected) files = files.map((f) => relativeToSelection(f, selected));
     if (!files.length) throw new Error('Nothing to import');
     const totalBytes = files.reduce((a, f) => a + f.node.size, 0);
     jc.transfer({ bytes: { done: 0, total: totalBytes }, files: { done: 0, total: files.length } });
@@ -57,7 +71,7 @@ export function startRemoteImport(ctx: Ctx, spec: RemoteImportSpec): Job {
     let tempRow: FolderRow | null = null;
     if (target) {
       folderId = target.folder.id;
-      baseAbs = root.directory ? await uniquePath(target.abs, sanitizeName(root.name)) : target.abs;
+      baseAbs = root.directory && !opts.relative ? await uniquePath(target.abs, sanitizeName(root.name)) : target.abs;
       await fsp.mkdir(baseAbs, { recursive: true });
       baseRel = toPosix(path.relative(target.folder.path, baseAbs));
     } else {
@@ -98,6 +112,7 @@ export function startRemoteImport(ctx: Ctx, spec: RemoteImportSpec): Job {
           }
         } catch (e) {
           if (jc.signal.aborted) throw e;
+          opts.onError?.(e);
           const err = megaError(e);
           failures.push(err);
           // quota: every further request fails the same way → count the rest as failed
@@ -137,7 +152,7 @@ export function startRemoteImport(ctx: Ctx, spec: RemoteImportSpec): Job {
 
     let result: Job['result'] = null;
     if (tempRow) result = landed ? { folderId: String(folderId), dir: '', name: root.name } : lastSession ? { folderId: lastSession.id, dir: '', name: '' } : null;
-    else if (root.directory) {
+    else if (root.directory && !opts.relative) {
       const dir = path.posix.dirname(baseRel) === '.' ? '' : path.posix.dirname(baseRel);
       result = landed ? { folderId: String(folderId), dir, name: path.posix.basename(baseRel) } : { folderId: String(folderId), dir: target!.dir, name: '' };
     } else result = { folderId: String(folderId), dir: target!.dir, name: files.length === 1 && landed ? sanitizeName(files[0].node.name) : '' };
@@ -157,9 +172,21 @@ export function startRemoteImport(ctx: Ctx, spec: RemoteImportSpec): Job {
         return;
       }
       if (tempRow) ctx.events.emit({ type: 'folders' });
-      if (tempRow || root.directory) await pruneEmptyDirs(baseAbs, !tempRow);
+      if (tempRow || (root.directory && !opts.relative)) await pruneEmptyDirs(baseAbs, !tempRow);
     }
   });
+}
+
+/**
+ * Path of a file relative to the parent of its outermost selected ancestor (or itself):
+ * selecting "Trip/2024" copies "2024/…", selecting a photo copies just the photo.
+ */
+function relativeToSelection(f: FlatNode, selected: Set<string>): FlatNode {
+  const j = f.chain.findIndex((id) => selected.has(id));
+  if (j <= 0) return f; // the link root itself: keep the whole path (a file link has path '')
+  const segs = f.path.split('/');
+  // chain[k] ↔ path segment k-1
+  return { ...f, path: segs.slice(j - 1).join('/') };
 }
 
 /** Remove empty directories below `dir` (and `dir` itself when `self`); returns whether `dir` is gone. */

@@ -589,8 +589,12 @@ import mobileTr from './mobile.tr';
 import devicesTr from './devices.tr';
 import exploreTr from './explore.tr';
 import remoteTr from './remote.tr';
+import mapTr from './map.tr';
+import megaTr from './mega.tr';
+import settingsTr from './settings.tr';
+import libraryTr from './library.tr';
 
-const tr = { ...base, ...mobileTr, ...devicesTr, ...exploreTr, ...remoteTr };
+const tr = { ...base, ...mobileTr, ...devicesTr, ...exploreTr, ...remoteTr, ...mapTr, ...megaTr, ...settingsTr, ...libraryTr };
 
 export type MessageKey = keyof typeof tr;
 export type Messages = Record<MessageKey, string>;

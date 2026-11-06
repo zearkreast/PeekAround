@@ -1,9 +1,11 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { motion, type MotionValue } from 'motion/react';
-import { Play } from 'lucide-react';
+import { Music, Play } from 'lucide-react';
 import type { MediaItem } from '@peekaround/shared';
 import { useBackend } from '@/backend';
 import { cn } from '@/lib/cn';
+import { formatDuration } from '@/lib/format';
+import { usePrefs } from '@/store/prefs';
 import { thumbhashUrl } from '@/lib/thumbhash';
 import { decodeImage, isDecoded } from './imageCache';
 import { VideoPlayer } from './VideoPlayer';
@@ -62,6 +64,7 @@ export const Slide = memo(function Slide({
   const [natAspect, setNatAspect] = useState<number | null>(null);
   const aspect = natAspect ?? aspectOfItem(item);
   const fit = fitContain(W, H, aspect);
+  const audio = item.kind === 'audio';
   const thumb = backend.thumbUrl(item.id, 640);
   const midUrl = backend.thumbUrl(item.id, 1600);
   const zoomUrl = item.kind === 'image' ? backend.zoomUrl(item) : null;
@@ -70,12 +73,13 @@ export const Slide = memo(function Slide({
   const placeholder = thumbhashUrl(item.thumbhash);
 
   useEffect(() => {
+    if (audio) return; // audio has no renditions
     let on = true;
     void decodeImage(midUrl).then((ok) => on && ok && setMid(true));
     return () => {
       on = false;
     };
-  }, [midUrl]);
+  }, [midUrl, audio]);
 
   useEffect(() => {
     if (!hiRes || !zoomUrl || hi) return;
@@ -85,6 +89,8 @@ export const Slide = memo(function Slide({
       on = false;
     };
   }, [hiRes, zoomUrl, hi]);
+
+  if (audio) return <AudioSlide item={item} active={active} paused={paused} />;
 
   if (item.kind === 'video' && active) {
     return (
@@ -125,3 +131,44 @@ export const Slide = memo(function Slide({
     </motion.div>
   );
 });
+
+/**
+ * Audio has no picture (the server makes no thumbnails for it): a cover placeholder with the
+ * name / duration and a native <audio> player on the active slide. The card is the slide's
+ * [data-zoom-target] so a click beside it still closes the viewer (desktop); the player itself
+ * is [data-no-gesture] so seeking / volume never page or dismiss.
+ */
+function AudioSlide({ item, active, paused }: { item: MediaItem; active: boolean; paused: boolean }) {
+  const backend = useBackend();
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    if (paused) ref.current?.pause();
+  }, [paused]);
+  return (
+    <div className="absolute inset-0 grid place-items-center p-6">
+      <div data-zoom-target data-viewer-audio className="flex w-full max-w-sm flex-col items-center gap-5 rounded-3xl border border-white/10 bg-white/[0.06] p-6 text-center">
+        <div className="grid aspect-square w-40 max-w-[60%] place-items-center rounded-2xl bg-gradient-to-br from-[color-mix(in_oklab,var(--accent)_55%,transparent)] to-[color-mix(in_oklab,var(--accent-2)_25%,transparent)]">
+          <Music className="size-16 text-white/85" />
+        </div>
+        <div className="w-full min-w-0">
+          <div className="truncate text-base font-semibold" title={item.name}>
+            {item.name}
+          </div>
+          {item.duration ? <div className="mt-0.5 text-sm text-white/60 tabular-nums">{formatDuration(item.duration)}</div> : null}
+        </div>
+        {active && (
+          <audio
+            ref={ref}
+            key={item.id}
+            src={backend.fileUrl(item.id)}
+            controls
+            autoPlay={!paused && usePrefs.getState().videoAutoplay}
+            preload="metadata"
+            className="w-full"
+            data-no-gesture
+          />
+        )}
+      </div>
+    </div>
+  );
+}

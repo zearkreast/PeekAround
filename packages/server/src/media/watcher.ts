@@ -15,7 +15,7 @@ export class WatcherService {
   ) {}
 
   sync() {
-    const rows = this.lib.allFolderRows().filter((f) => !f.temp && !f.device_id);
+    const rows = this.lib.allFolderRows().filter((f) => !f.temp && !f.device_id && !f.remote);
     const want = new Set(rows.map((r) => r.id));
     for (const [id, w] of this.watchers) {
       if (!want.has(id)) {
@@ -39,7 +39,7 @@ export class WatcherService {
       ignored: (p: string) => {
         const r = rel(p);
         if (!r || r.startsWith('..')) return false;
-        return r.split('/').some((s) => this.scanner.skipName(s) || s.endsWith('.part'));
+        return this.scanner.skipDir(folderId, r) || r.split('/').some((s) => s.endsWith('.part'));
       },
     });
     w.on('add', (p) => void this.scanner.upsertFile(folderId, rel(p)).catch(() => {}));

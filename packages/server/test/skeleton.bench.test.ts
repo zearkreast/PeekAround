@@ -79,5 +79,23 @@ describe('skeleton performance (100k rows)', () => {
     console.log(`page ${p.ms.toFixed(0)} ms, filtered skeleton ${f.ms.toFixed(0)} ms, geo ${g.ms.toFixed(0)} ms, explore (cold) ${exMs.toFixed(0)} ms`);
     expect(ex.places).toHaveLength(3);
     expect(exMs).toBeLessThan(2000);
+    // insights come with the same pass
+    expect(ex.stats!.photos + ex.stats!.videos).toBe(N);
+    expect(ex.countries!.map((c) => c.cc).sort()).toEqual(['DE', 'TR']);
+    expect(ex.noLocation).toBe(N / 4);
+    expect(ex.calendarYears!.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('insight filters stay fast', async () => {
+    const out: string[] = [];
+    for (const q of ['gps=none', 'orient=landscape', 'daytime=night', 'daytime=golden', 'color=blue', 'dup=1', 'byAdded=1&sort=mtime', 'place=TR-34&city=Kad%C4%B1k%C3%B6y']) {
+      const { ms, r } = await timed(`/api/browse/skeleton?${q}`);
+      expect(r.statusCode).toBe(200);
+      out.push(`${q} ${ms.toFixed(0)} ms`);
+      expect(ms, q).toBeLessThan(400);
+    }
+    const c = await timed('/api/explore/calendar?year=2020');
+    expect(c.ms).toBeLessThan(150);
+    console.log(out.join(', '), `calendar ${c.ms.toFixed(0)} ms`);
   });
 });

@@ -4,6 +4,7 @@ import { Check, Heart, Music, Play } from 'lucide-react';
 import type { MediaItem } from '@peekaround/shared';
 import { useBackend } from '@/backend';
 import { useT } from '@/i18n';
+import { cn } from '@/lib/cn';
 import { formatDuration } from '@/lib/format';
 import { thumbhashUrl } from '@/lib/thumbhash';
 import { useSelection } from '@/store/selection';
@@ -31,7 +32,16 @@ export interface TileProps {
   /** hover video preview (mouse only) */
   preview: boolean;
   selecting: boolean;
+  /** tile decorations (Settings → gallery), TILE_DECO bits; default: duration + favourite */
+  deco?: number;
 }
+
+/** MediaTile `deco` bits */
+export const TILE_DECO = { duration: 1, favorite: 2, name: 4 } as const;
+const DEFAULT_DECO = TILE_DECO.duration | TILE_DECO.favorite;
+
+/** mouse / trackpad: tiles can be dragged (albums, out of the window); never on touch (long press selects) */
+const DRAGGABLE = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
 
 function markLoaded(el: HTMLImageElement | null) {
   if (el && el.complete && el.naturalWidth) el.dataset.loaded = '1';
@@ -42,7 +52,7 @@ function markLoaded(el: HTMLImageElement | null) {
  * delegation (data-index), so tiles have no per-tile callbacks and memo always holds.
  * No backdrop-filter, no filter animations — just an opacity fade.
  */
-function TileImpl({ index, item, x, y, w, h, size, fast, preview, selecting }: TileProps) {
+function TileImpl({ index, item, x, y, w, h, size, fast, preview, selecting, deco = DEFAULT_DECO }: TileProps) {
   if (typeof window !== 'undefined') window.__peekTileRenders = (window.__peekTileRenders ?? 0) + 1;
   const t = useT();
   const backend = useBackend();
@@ -62,6 +72,7 @@ function TileImpl({ index, item, x, y, w, h, size, fast, preview, selecting }: T
     <div
       className="tile group"
       data-tile={item.id}
+      draggable={DRAGGABLE || undefined}
       data-index={index}
       data-selected={selected ? '1' : undefined}
       role="button"
@@ -101,17 +112,28 @@ function TileImpl({ index, item, x, y, w, h, size, fast, preview, selecting }: T
             className="tile-img absolute inset-0"
           />
         )}
-        {(isVideo || isAudio) && (
+        {(isVideo || isAudio) && deco & TILE_DECO.duration ? (
           <span className="tile-badge">
             {isVideo && <Play className="size-3 fill-current" />}
             {formatDuration(item.duration)}
           </span>
-        )}
-        {item.favorite && (
-          <span className="absolute bottom-1.5 left-1.5 text-white drop-shadow">
+        ) : null}
+        {deco & TILE_DECO.name && w >= 72 ? (
+          <span
+            className={cn(
+              'pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent pt-5 pb-1.5 pl-2 text-left text-[11px] leading-tight font-medium text-white',
+              (isVideo || isAudio) && deco & TILE_DECO.duration ? 'pr-16' : 'pr-2',
+            )}
+            data-tile-name
+          >
+            {item.name}
+          </span>
+        ) : null}
+        {item.favorite && deco & TILE_DECO.favorite ? (
+          <span className={cn('absolute text-white drop-shadow', deco & TILE_DECO.name ? 'top-1.5 right-1.5' : 'bottom-1.5 left-1.5')}>
             <Heart className="size-4 fill-[var(--accent-2)] text-[var(--accent-2)]" />
           </span>
-        )}
+        ) : null}
       </div>
       <span data-check aria-hidden className="tile-check" data-on={selected ? '1' : undefined} data-show={selecting ? '1' : undefined}>
         <Check className="size-3.5" strokeWidth={3.5} />

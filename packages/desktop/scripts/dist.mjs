@@ -32,8 +32,26 @@ await build({
     publish: null,
     nodeGypRebuild: false,
     asar: true,
-    asarUnpack: ['node_modules/sharp/**', 'node_modules/@img/**', 'node_modules/ffmpeg-static/**', 'node_modules/ffprobe-static/**'],
-    files: ['**/*', '!**/*.map'],
+    asarUnpack: ['node_modules/sharp/**', 'node_modules/@img/**', 'node_modules/ffmpeg-static/**'],
+    // only the UI languages we ship (≈ 7.5 MB of Chromium locales less)
+    electronLanguages: ['en-US', 'tr'],
+    compression: 'maximum',
+    files: [
+      '**/*',
+      '!**/*.map',
+      '!**/*.d.ts',
+      '!**/{test,tests,__tests__,docs,doc,example,examples,.github}/**',
+      '!**/{README,CHANGELOG,HISTORY}*',
+      '!**/example.js',
+      // heic-decode loads libheif-js/wasm-bundle (wasm inlined); the asm.js build, the ESM copy and the loose wasm are unused
+      '!node_modules/libheif-js/libheif/**',
+      '!node_modules/libheif-js/libheif-wasm/{libheif-bundle.mjs,libheif.js,libheif.wasm}',
+      // sharp's WebAssembly fallback (+ its runtime): the native build for the target platform is always installed
+      '!node_modules/@img/sharp-wasm32/**',
+      '!node_modules/@emnapi/**',
+      '!node_modules/@types/**',
+      '!node_modules/ffmpeg-static/{*.README,install.js}',
+    ],
     artifactName: '${productName}-${version}-${arch}.${ext}',
     win: {
       icon: 'build/icon.ico',

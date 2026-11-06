@@ -1,0 +1,6 @@
+Input #0, avi, from 'noaudio.avi':
+  Metadata:
+    software        : Lavf60.16.100
+  Duration: 00:00:01.00, start: 0.000000, bitrate: 303 kb/s
+  Stream #0:0: Video: mpeg4 (Simple Profile) (FMP4 / 0x34504D46), yuv420p, 320x180 [SAR 1:1 DAR 16:9], 15 fps, 15 tbr, 15 tbn
+At least one output file must be specified

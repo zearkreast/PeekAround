@@ -81,7 +81,8 @@ export function FolderPicker({ open, title, onClose, onPick, confirmLabel }: { o
           <motion.div key={stack.length + (cur?.dir ?? '')} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.16 }}>
             {!cur &&
               libs.data?.libraries.flatMap((l) =>
-                l.folders.map((f) => (
+                // remote (MEGA) folders are read-only: never a destination
+                l.folders.filter((f) => !f.remote).map((f) => (
                   <Row
                     key={f.id}
                     icon={

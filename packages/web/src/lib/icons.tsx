@@ -1,6 +1,7 @@
 import {
   Baby,
   Camera,
+  Cloud,
   Film,
   Flower2,
   Folder,
@@ -35,6 +36,8 @@ export const LIBRARY_ICONS: Record<string, LucideIcon> = {
   paw: PawPrint,
   trophy: Trophy,
   folder: Folder,
+  // MEGA (streamed) libraries
+  cloud: Cloud,
 };
 
 export function LibraryIcon({ name, className }: { name: string; className?: string }) {

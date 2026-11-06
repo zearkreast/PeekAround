@@ -2,7 +2,7 @@
  * Explore labels — pure helpers (no React) so they can be unit tested.
  * Dates are localAt values (wall clock encoded as UTC) → always formatted with timeZone 'UTC'.
  */
-import { DAY_MS, type BrowseQuery, type MediaFlagName, type Memory, type PlaceGroup } from '@peekaround/shared';
+import { DAY_MS, type BrowseQuery, type ColorBucket, type DayTime, type MediaFlagName, type Memory, type Orientation, type PlaceGroup, type VideoLength } from '@peekaround/shared';
 import { locale, translate, type MessageKey } from '@/i18n';
 import type { Lang } from '@/store/prefs';
 
@@ -77,6 +77,14 @@ export interface MemoryLabel {
 /** "2 yıl önce bugün" · "5 Kas 2023"  /  "Antalya gezisi" · "Türkiye · 2–6 Tem 2024" */
 export function memoryLabel(m: Memory, lang: Lang): MemoryLabel {
   const t = (k: MessageKey, v?: Record<string, string | number>) => translate(lang, k, v);
+  if (m.kind === 'year') {
+    const year = new Date(m.from).getUTCFullYear();
+    const months = m.months ? m.months.filter((n) => n > 0).length : 0;
+    return {
+      title: t('insights.yearReviewTitle', { year }),
+      subtitle: m.count ? (months ? t('insights.yearReviewSub', { n: m.count, months }) : t('explore.count', { n: m.count })) : String(year),
+    };
+  }
   if (m.kind === 'onthisday') {
     // the window is ±3 days around the anniversary → its middle day is the actual date
     const mid = m.from + Math.floor((m.to - m.from) / 2 / DAY_MS) * DAY_MS;
@@ -91,6 +99,7 @@ export function memoryLabel(m: Memory, lang: Lang): MemoryLabel {
 /** short title for small cards: "1 yıl önce" / "Antalya · Ağu 2024" */
 export function memoryShort(m: Memory, lang: Lang): string {
   if (m.kind === 'onthisday') return translate(lang, 'explore.memory.onthisdayShort', { n: m.yearsAgo ?? 1 });
+  if (m.kind === 'year') return String(new Date(m.from).getUTCFullYear());
   return [m.place, monthYear(m.from, lang)].filter(Boolean).join(' · ');
 }
 
@@ -138,3 +147,74 @@ export const cameraHref = (key: string) => `/explore/camera/${encodeURIComponent
 export const placeHref = (key: string) => `/explore/place/${encodeURIComponent(key)}`;
 export const memoryHref = (id: string) => `/explore/memory/${encodeURIComponent(id)}`;
 export const playHref = (id: string) => `/explore/memory/${encodeURIComponent(id)}/play`;
+
+// ───────────────────────── insights ─────────────────────────
+
+export const COLOR_KEYS: Record<ColorBucket, MessageKey> = {
+  red: 'insights.color.red',
+  orange: 'insights.color.orange',
+  yellow: 'insights.color.yellow',
+  green: 'insights.color.green',
+  blue: 'insights.color.blue',
+  purple: 'insights.color.purple',
+  pink: 'insights.color.pink',
+  bw: 'insights.color.bw',
+};
+export const ORIENT_KEYS: Record<Orientation, MessageKey> = {
+  portrait: 'insights.orient.portrait',
+  landscape: 'insights.orient.landscape',
+  square: 'insights.orient.square',
+  panorama: 'insights.orient.panorama',
+};
+export const VLEN_KEYS: Record<VideoLength, MessageKey> = { short: 'insights.vlen.short', long: 'insights.vlen.long' };
+export const VLEN_SUB_KEYS: Record<VideoLength, MessageKey> = { short: 'insights.vlen.shortSub', long: 'insights.vlen.longSub' };
+export const DAYTIME_KEYS: Record<DayTime, MessageKey> = { night: 'insights.daytime.night', golden: 'insights.daytime.golden' };
+export const DAYTIME_SUB_KEYS: Record<DayTime, MessageKey> = { night: 'insights.daytime.nightSub', golden: 'insights.daytime.goldenSub' };
+
+export const countryHref = (cc: string) => `/explore/country/${encodeURIComponent(cc.toUpperCase())}`;
+export const cityHref = (key: string) => `/explore/city/${encodeURIComponent(key)}`;
+export const colorHref = (c: ColorBucket) => `/explore/color/${c}`;
+export const orientHref = (o: Orientation) => `/explore/shape/${o}`;
+export const vlenHref = (v: VideoLength) => `/explore/length/${v}`;
+export const daytimeHref = (d: DayTime) => `/explore/time/${d}`;
+export const dayHref = (key: string) => `/explore/day/${key}`;
+export const NO_GPS_HREF = '/explore/no-location';
+export const LARGEST_HREF = '/explore/largest';
+export const RECENT_HREF = '/explore/recent';
+export const DUPLICATES_HREF = '/explore/duplicates';
+
+/** "/explore/map?focus=<id>&lat=..&lon=.." — the map centred on one item */
+export const mapFocusHref = (id: string, lat: number, lon: number) => `/explore/map?focus=${encodeURIComponent(id)}&lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`;
+
+/** "2024-03-05" → localAt range of that day */
+export function dayRange(key: string): { from: number; to: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!m) return null;
+  const from = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (!Number.isFinite(from) || new Date(from).toISOString().slice(0, 10) !== key) return null;
+  return { from, to: from + DAY_MS };
+}
+
+/** "5 Mart 2024" for a 'YYYY-MM-DD' key */
+export function dayLabel(key: string, lang: Lang, weekday = false): string {
+  const r = dayRange(key);
+  if (!r) return key;
+  return fmt(lang, { day: 'numeric', month: 'long', year: 'numeric', ...(weekday ? { weekday: 'long' } : {}) }).format(new Date(r.from));
+}
+
+/** "12,3 GB" — locale-aware bytes */
+export function bytesLabel(n: number, lang: Lang): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let v = n;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
+  return `${new Intl.NumberFormat(locale(lang), { maximumFractionDigits: v >= 100 || u === 0 ? 0 : 1 }).format(v)} ${units[u]}`;
+}
+
+/** "1.234" — locale-aware integer */
+export function numLabel(n: number, lang: Lang): string {
+  return new Intl.NumberFormat(locale(lang)).format(n);
+}

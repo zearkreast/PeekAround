@@ -41,11 +41,28 @@ export function SelectionBar({ source }: { source: GridItems | null }) {
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         void selectAll(source);
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && useSelection.getState().ids.size) {
-        const del = a.for(useSelection.getState().selected()).find((x) => x.id === 'delete');
+      } else if (e.key === 'F2') {
+        // rename: the one selected item, else the focused tile
+        const sel = useSelection.getState().selected();
+        const idx = Number((document.activeElement as HTMLElement | null)?.closest?.('[data-index]')?.getAttribute('data-index') ?? -1);
+        const target = sel.length === 1 ? sel : !sel.length && idx >= 0 && source?.getAt(idx) ? [source.getAt(idx)!] : [];
+        const ren = target.length ? a.for(target, 'menu').find((x) => x.id === 'rename') : undefined;
+        if (ren) {
+          e.preventDefault();
+          void a.run(ren, target);
+        }
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        // the selection, else the focused tile (Delete only — Backspace alone is too easy to hit)
+        let list = useSelection.getState().selected();
+        if (!list.length && e.key === 'Delete') {
+          const idx = Number((document.activeElement as HTMLElement | null)?.closest?.('[data-index]')?.getAttribute('data-index') ?? -1);
+          const it = idx >= 0 ? source?.getAt(idx) : undefined;
+          if (it) list = [it];
+        }
+        const del = list.length ? a.for(list).find((x) => x.id === 'delete') : undefined;
         if (del) {
           e.preventDefault();
-          void a.run(del, useSelection.getState().selected());
+          void a.run(del, list);
         }
       }
     };

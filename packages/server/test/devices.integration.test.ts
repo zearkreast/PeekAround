@@ -482,6 +482,16 @@ describe('linked phones (device tunnel)', () => {
     expect(await j(await fetch(`${lan}/api/devices`))).toEqual([]);
     expect((await fetch(`${lan}/api/browse?folderId=${devFolder}`)).status).toBe(404);
     expect((await fetch(`${lan}/api/media/${vidId}/file`)).status).toBe(404);
+    // albums holding phone items: LAN viewers get neither the items nor their map points
+    const photoId = (await j(await api(`/api/browse?folderId=${libFolder}`))).items[0].id;
+    const al = await j(await api('/api/albums', json('POST', { name: 'Mixed', ids: [photoId, imgId] })));
+    srv.ctx.db.run('UPDATE media SET lat = 41, lon = 29 WHERE id IN (?, ?)', Number(photoId), Number(imgId));
+    srv.ctx.events.bump();
+    expect((await j(await api(`/api/geo/points?albumId=${al.id}`))).points.map((p: string[]) => p[0]).sort()).toEqual([photoId, imgId].sort());
+    expect((await j(await fetch(`${lan}/api/browse?albumId=${al.id}`))).items.map((i: any) => i.id)).toEqual([photoId]);
+    expect((await j(await fetch(`${lan}/api/geo/points?albumId=${al.id}`))).points.map((p: string[]) => p[0])).toEqual([photoId]);
+    srv.ctx.db.run('UPDATE media SET lat = NULL, lon = NULL WHERE id IN (?, ?)', Number(photoId), Number(imgId));
+    await api(`/api/albums/${al.id}`, { method: 'DELETE' });
     // a paired phone does (but not its own)
     const auth = { Authorization: `Bearer ${p3.token}`, 'X-Peek-Device': p3.id };
     const seen = (await j(await fetch(`${lan}/api/libraries`, { headers: auth }))).devices as DeviceInfo[];

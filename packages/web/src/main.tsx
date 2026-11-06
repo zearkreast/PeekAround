@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { MotionConfig } from 'motion/react';
+import { MotionConfig, MotionGlobalConfig } from 'motion/react';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/bricolage-grotesque';
 import './styles.css';
@@ -13,6 +13,8 @@ import { usePrefs } from './store/prefs';
 
 function Root() {
   const motion = usePrefs((s) => s.motion);
+  // Settings → animations "off": every motion animation (page fades, springs, exits) completes instantly
+  MotionGlobalConfig.skipAnimations = motion === 'off';
   return (
     <MotionConfig reducedMotion={motion === 'full' ? 'user' : 'always'}>
       <App />

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { Link, useSearchParams } from 'react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import Supercluster from 'supercluster';
-import { ChevronDown, ChevronUp, Maximize2, Minus, PanelRightClose, PanelRightOpen, Plus, WifiOff, MapPin } from 'lucide-react';
-import type { MediaItem, Settings } from '@peekaround/shared';
+import { ChevronDown, ChevronUp, Layers, Maximize2, Minus, PanelRightClose, PanelRightOpen, Plus, WifiOff, MapPin, MapPinOff, RotateCw, ShieldAlert } from 'lucide-react';
+import { MAP_TILE_STYLES, tileStyleOf, type MediaItem, type Settings } from '@peekaround/shared';
 import { useBackend } from '@/backend';
 import { useT } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -19,8 +19,8 @@ import { IconButton, Spinner } from '@/components/ui';
 import { MediaGrid } from '@/features/gallery/MediaGrid';
 import { StaticSource } from '@/features/gallery/grid/source';
 import { useExplore, useOpenViewer } from './data';
-import { exploreQuery } from './labels';
-import { boundsFilter, normalizeBbox, tileConfig, type Point } from './mapUtil';
+import { exploreQuery, NO_GPS_HREF } from './labels';
+import { boundsFilter, normalizeBbox, tileConfig, tileProblemOf, type Point, type TileProblem } from './mapUtil';
 
 type PointProps = { id: string };
 type ClusterProps = { cover: string };
@@ -71,6 +71,11 @@ export function MapPage() {
   const mobile = useIsMobile();
   const [sp] = useSearchParams();
   const place = sp.get('place') ?? undefined;
+  // "Show on map" from the viewer: centre on one item
+  const focusId = sp.get('focus') ?? undefined;
+  const focusLat = Number(sp.get('lat'));
+  const focusLon = Number(sp.get('lon'));
+  const focus = focusId && Number.isFinite(focusLat) && Number.isFinite(focusLon) && Math.abs(focusLat) <= 90 && Math.abs(focusLon) <= 180 ? { id: focusId, lat: focusLat, lon: focusLon } : null;
   const setChrome = useChrome((s) => s.set);
   const setView = useLocation((s) => s.setView);
   const motionPref = usePrefs((s) => s.motion);
@@ -131,8 +136,11 @@ export function MapPage() {
   const mapRef = useRef<L.Map | null>(null);
   const markers = useRef(new Map<string, L.Marker>());
   const [inView, setInView] = useState<string[]>([]);
-  const [tileError, setTileError] = useState(false);
+  const [tileProblem, setTileProblem] = useState<TileProblem | null>(null);
+  const [tileNonce, setTileNonce] = useState(0);
+  const tileError = !!tileProblem;
   const fitted = useRef(false);
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (!el.current) return;
@@ -161,36 +169,80 @@ export function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // tiles (theme / setting); offline → banner, markers keep working
+  // tiles (style setting / theme): through the server's tile proxy for HTTP backends, upstream on
+  // Android local mode. Failures → banner that says WHY (offline vs. refused); markers keep working.
+  const proxy = useMemo(() => (backend.tileUrl ? (st: Parameters<NonNullable<typeof backend.tileUrl>>[0]) => backend.tileUrl!(st) : undefined), [backend]);
+  const cfg = useMemo(() => tileConfig(tiles, dark, proxy), [tiles, dark, proxy]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    setTileError(false);
-    const cfg = tileConfig(tiles, dark);
+    setTileProblem(null);
     if (!cfg) return;
+    map.setMaxZoom(Math.max(cfg.maxZoom, 2));
     let ok = 0;
     let bad = 0;
-    const layer = L.tileLayer(cfg.url, { attribution: cfg.attribution, subdomains: cfg.subdomains ?? 'abc', className: cfg.className, maxZoom: 19, detectRetina: false, crossOrigin: false });
+    let probing = false;
+    let disposed = false;
+    const layer = L.tileLayer(cfg.url, {
+      attribution: cfg.attribution,
+      subdomains: cfg.subdomains ?? 'abc',
+      className: cfg.className,
+      maxZoom: cfg.maxZoom,
+      maxNativeZoom: cfg.maxZoom,
+      detectRetina: false,
+      crossOrigin: false,
+    });
     layer.on('tileload', () => {
       ok++;
-      setTileError(false);
+      bad = 0;
+      setTileProblem(null);
     });
-    layer.on('tileerror', () => {
+    layer.on('tileerror', (e: L.TileErrorEvent) => {
       bad++;
-      if (bad >= 2 && ok === 0) setTileError(true);
+      if (bad < 2 || probing) return;
+      if (typeof navigator !== 'undefined' && navigator.onLine === false && !cfg.proxied) return setTileProblem({ kind: 'offline' });
+      if (!cfg.proxied) {
+        if (ok === 0) setTileProblem({ kind: 'unknown' });
+        return;
+      }
+      // ask the server why: X-Peek-Tile-Error = offline | refused:<status>
+      probing = true;
+      const url = (e.tile as HTMLImageElement | undefined)?.src || layer.getTileUrl(e.coords);
+      void fetch(url, { cache: 'no-store' })
+        .then((r) => (r.ok ? null : tileProblemOf(r.headers.get('X-Peek-Tile-Error'), r.status)))
+        .catch(() => ({ kind: 'offline' }) as TileProblem)
+        .then((p) => {
+          if (!disposed && p) setTileProblem(p);
+        })
+        .finally(() => {
+          probing = false;
+        });
     });
     layer.addTo(map);
-    const offline = () => setTileError(true);
+    const offline = () => !cfg.proxied && setTileProblem({ kind: 'offline' });
     const online = () => layer.redraw();
     window.addEventListener('offline', offline);
     window.addEventListener('online', online);
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) setTileError(true);
+    if (typeof navigator !== 'undefined' && navigator.onLine === false && !cfg.proxied) setTileProblem({ kind: 'offline' });
     return () => {
+      disposed = true;
       window.removeEventListener('offline', offline);
       window.removeEventListener('online', online);
       layer.remove();
     };
-  }, [tiles, dark]);
+  }, [cfg, tileNonce]);
+
+  // quick style switch on the map (saved as the setting)
+  const cycleStyle = useCallback(async () => {
+    const cur = tileStyleOf(tiles) ?? 'osm';
+    const next = MAP_TILE_STYLES[(MAP_TILE_STYLES.indexOf(cur) + 1) % MAP_TILE_STYLES.length];
+    try {
+      const s2 = await backend.updateSettings({ mapTiles: next });
+      qc.setQueryData(['settings', backend.id], s2);
+    } catch {
+      /* read-only server: keep the current style */
+    }
+  }, [tiles, backend, qc]);
 
   const fitAll = useCallback(
     (anim = animate) => {
@@ -268,14 +320,42 @@ export function MapPage() {
     if (!map) return;
     for (const m of markers.current.values()) m.remove();
     markers.current.clear();
-    if (points.length && !fitted.current) {
+    if (focus && !fitted.current) {
+      // re-centre once the points (and with them the side panel) are there
+      if (points.length) fitted.current = true;
+      map.invalidateSize({ pan: false });
+      map.setView([focus.lat, focus.lon], 16, { animate: false });
+    } else if (points.length && !fitted.current) {
       fitted.current = true;
       fitAll(false);
     }
     refresh();
     map.on('moveend', refresh);
     return () => void map.off('moveend', refresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh, fitAll, points.length]);
+
+  // "Show on map" again while the map is open (viewer on top of it): centre on the new item
+  const focusKey = focus ? `${focus.id}@${focus.lat},${focus.lon}` : '';
+  const lastFocus = useRef(focusKey);
+  useEffect(() => {
+    if (focusKey === lastFocus.current) return;
+    lastFocus.current = focusKey;
+    if (focus) mapRef.current?.setView([focus.lat, focus.lon], 16, { animate });
+  }, [focusKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // a ring around the focused item
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus) return;
+    const ring = L.marker([focus.lat, focus.lon], {
+      icon: L.divIcon({ className: 'pm-focus', html: '<span></span>', iconSize: [96, 96], iconAnchor: [48, 48] }),
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: -1000,
+    }).addTo(map);
+    return () => void ring.remove();
+  }, [focus?.lat, focus?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── in-view list (newest first) ──
   const visible = useMemo(() => {
@@ -330,10 +410,32 @@ export function MapPage() {
               </div>
             </div>
           </div>
+          {!place && !!explore.result.noLocation && (
+            <Link
+              to={NO_GPS_HREF}
+              className="pointer-events-auto flex h-10 shrink-0 items-center gap-1.5 self-start rounded-2xl border border-line bg-elev px-3 text-xs font-medium text-dim shadow-soft transition-colors hover:text-fg"
+              data-nogps={explore.result.noLocation}
+            >
+              <MapPinOff className="size-4 text-faint" />
+              <span className="max-w-[46vw] truncate">{t('map.noLocation', { n: explore.result.noLocation })}</span>
+            </Link>
+          )}
           <div className="pointer-events-auto ml-auto flex flex-col gap-2">
             <IconButton label={t('explore.map.fit')} title={t('explore.map.fit')} onClick={() => fitAll()} className="border border-line bg-elev shadow-soft" data-action="fit">
               <Maximize2 />
             </IconButton>
+            {tiles !== 'off' && (
+              <IconButton
+                label={`${t('map.style')}: ${t(`map.style.${tileStyleOf(tiles) ?? 'osm'}`)}`}
+                title={`${t('map.style')}: ${t(`map.style.${tileStyleOf(tiles) ?? 'osm'}`)}`}
+                onClick={() => void cycleStyle()}
+                className="border border-line bg-elev shadow-soft"
+                data-action="map-style"
+                data-style={tileStyleOf(tiles) ?? 'osm'}
+              >
+                <Layers />
+              </IconButton>
+            )}
             {!mobile && (
               <>
                 <IconButton label={t('explore.map.zoomIn')} onClick={() => mapRef.current?.zoomIn()} className="border border-line bg-elev shadow-soft">
@@ -355,10 +457,24 @@ export function MapPage() {
         </div>
 
         {(tileError || tiles === 'off') && (
-          <div className="pointer-events-none absolute inset-x-0 top-[76px] z-[500] flex justify-center px-3" role="status" data-offline={tileError ? '' : undefined}>
-            <div className="flex max-w-md items-center gap-2 rounded-xl border border-line bg-elev px-3 py-2 text-xs text-dim shadow-soft">
-              <WifiOff className="size-4 shrink-0 text-warn" />
-              {tiles === 'off' ? t('explore.map.tilesOff') : t('explore.map.offline')}
+          <div className="pointer-events-none absolute inset-x-0 top-[76px] z-[500] flex justify-center px-3" role="status" data-offline={tileProblem?.kind === 'offline' ? '' : undefined} data-tile-problem={tileProblem?.kind}>
+            <div className="pointer-events-auto flex max-w-md items-center gap-2 rounded-xl border border-line bg-elev px-3 py-2 text-xs text-dim shadow-soft">
+              {tileProblem?.kind === 'refused' ? <ShieldAlert className="size-4 shrink-0 text-warn" /> : <WifiOff className="size-4 shrink-0 text-warn" />}
+              <span className="min-w-0 flex-1">
+                {tiles === 'off'
+                  ? t('explore.map.tilesOff')
+                  : tileProblem?.kind === 'refused'
+                    ? t('map.error.refused', { status: tileProblem.status || '?' })
+                    : tileProblem?.kind === 'offline'
+                      ? t('map.error.offline')
+                      : t('map.error.refusedDirect')}
+              </span>
+              {tiles !== 'off' && (
+                <button type="button" onClick={() => setTileNonce((n) => n + 1)} className="flex h-7 shrink-0 items-center gap-1 rounded-lg px-2 font-medium text-accent hover:bg-surface-2" data-action="tiles-retry">
+                  <RotateCw className="size-3.5" />
+                  {t('map.retry')}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -373,6 +489,15 @@ export function MapPage() {
             <div className="max-w-sm rounded-2xl border border-line bg-elev p-5 text-center text-sm text-dim shadow-soft">
               <MapPin className="mx-auto mb-2 size-6 text-faint" />
               {t('explore.map.empty')}
+              {!place && !!explore.result.noLocation && (
+                <>
+                  <p className="mt-2 text-xs text-faint">{t('map.noLocationHint')}</p>
+                  <Link to={NO_GPS_HREF} className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium text-accent hover:bg-surface-2">
+                    <MapPinOff className="size-4" />
+                    {t('map.noLocation', { n: explore.result.noLocation })}
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}

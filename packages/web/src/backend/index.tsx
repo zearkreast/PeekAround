@@ -75,7 +75,11 @@ export function BackendProvider({ initial, children }: { initial: Backend; child
               forFolders(pending.struct, (s) => s.refresh());
               void qc.invalidateQueries(nonSkeleton);
               void qc.invalidateQueries({ queryKey: ['timeline'] });
-              later('libraries', 3000, () => void qc.invalidateQueries({ queryKey: ['libraries'] }));
+              later('libraries', 3000, () => {
+                void qc.invalidateQueries({ queryKey: ['libraries'] });
+                // deleted / moved media leave albums (counts, covers)
+                void qc.invalidateQueries({ queryKey: ['albums'] });
+              });
             });
           }
           break;
@@ -86,6 +90,11 @@ export function BackendProvider({ initial, children }: { initial: Backend; child
           break;
         case 'fonts':
           void qc.invalidateQueries({ queryKey: ['fonts'] });
+          break;
+        case 'albums':
+          // album list / covers / counts + open album grids
+          void qc.invalidateQueries({ queryKey: ['albums'] });
+          for (const src of liveSources()) if (src.query.albumId && (!e.ids || e.ids.includes(src.query.albumId))) src.refresh();
           break;
         case 'scan':
           useScan.getState().set(e);

@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Ctx } from '../context.js';
-import { isDeviceFolder, type FolderRow } from '../library.js';
+import { isDeviceFolder, isRemoteFolder, type FolderRow } from '../library.js';
 import type { MediaRow } from '../media/mapper.js';
 import { HttpError, resolveInRoot } from '../paths.js';
 
@@ -21,7 +21,11 @@ export const DEVICE_READONLY = 'Files on a linked device can only be viewed and 
  */
 export function requireLocalFolder(folder: FolderRow, message = DEVICE_READONLY) {
   if (isDeviceFolder(folder)) throw new HttpError(403, message);
+  // remote (MEGA streaming) folders: same default-deny — they have no host path and are read-only
+  if (isRemoteFolder(folder)) throw new HttpError(403, REMOTE_READONLY);
 }
+
+export const REMOTE_READONLY = 'Files in a MEGA link can only be viewed and copied to this computer';
 
 /** Local file of a media row (403 for device media — use mediaSource for read paths that support devices). */
 export function mediaAbs(ctx: Ctx, r: MediaRow): { folder: FolderRow; abs: string } {
@@ -30,10 +34,13 @@ export function mediaAbs(ctx: Ctx, r: MediaRow): { folder: FolderRow; abs: strin
   return { folder, abs: ctx.scanner.abs(folder, r.dir, r.name) };
 }
 
-/** Like mediaAbs but also for device media: abs is then the pseudo path `device://<id>/<key>/<rel>`. */
-export function mediaSource(ctx: Ctx, r: MediaRow): { folder: FolderRow; abs: string; device: boolean } {
+/**
+ * Like mediaAbs but also for device and remote media: abs is then the pseudo path
+ * `device://<id>/<key>/<rel>` or `remote://mega/<linkId>/<rel>` (no key).
+ */
+export function mediaSource(ctx: Ctx, r: MediaRow): { folder: FolderRow; abs: string; device: boolean; remote: boolean } {
   const folder = ctx.lib.folderRow(r.folder_id);
-  return { folder, abs: ctx.scanner.abs(folder, r.dir, r.name), device: isDeviceFolder(folder) };
+  return { folder, abs: ctx.scanner.abs(folder, r.dir, r.name), device: isDeviceFolder(folder), remote: isRemoteFolder(folder) };
 }
 
 export function folderPath(ctx: Ctx, folderId: string | number, rel: string): { folder: FolderRow; abs: string } {

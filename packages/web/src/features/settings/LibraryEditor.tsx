@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowUp, Folder, FolderPlus, HardDrive, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { ArrowUp, Cloud, Folder, FolderPlus, HardDrive, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { useRemote } from '@/features/remote/RemoteHost';
 import type { Library } from '@peekaround/shared';
 import { useBackend, useInfo } from '@/backend';
 import { desktop } from '@/backend/desktop';
@@ -227,12 +228,13 @@ export function LibraryEditor({ value, onClose }: { value: Library | 'new' | nul
             <div className="flex flex-col gap-1.5">
               {lib?.folders.map((f) => (
                 <div key={f.id} className="flex items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2">
-                  <Folder className="size-4 shrink-0 text-accent" />
+                  {f.remote ? <Cloud className="size-4 shrink-0 text-[#e5484d]" /> : <Folder className="size-4 shrink-0 text-accent" />}
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm">{f.name}</div>
-                    <div className="truncate font-mono text-[11px] text-faint">{f.path}</div>
+                    {/* MEGA folders: the link without its key */}
+                    <div className="truncate font-mono text-[11px] text-faint">{f.remote ? f.remote.label : f.path}</div>
                   </div>
-                  <IconButton label={t('gallery.rescan')} size="sm" onClick={() => backend.rescanFolder(f.id)}>
+                  <IconButton label={f.remote ? t('mega.refresh') : t('gallery.rescan')} size="sm" onClick={() => (f.remote && backend.remoteRefresh ? backend.remoteRefresh(f.id).catch(() => {}) : backend.rescanFolder(f.id))}>
                     <RefreshCw />
                   </IconButton>
                   <IconButton
@@ -259,9 +261,25 @@ export function LibraryEditor({ value, onClose }: { value: Library | 'new' | nul
                   </motion.div>
                 ))}
               </AnimatePresence>
-              <Button variant="secondary" icon={<Plus className="size-4" />} onClick={pickFolder} className="self-start">
-                {t('lib.addFolder')}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" icon={<Plus className="size-4" />} onClick={pickFolder}>
+                  {t('lib.addFolder')}
+                </Button>
+                {/* a MEGA link as a streamed folder of this (or a new) library — nothing is downloaded */}
+                {backend.remoteAddFolder && (
+                  <Button
+                    variant="ghost"
+                    icon={<Cloud className="size-4 text-[#e5484d]" />}
+                    title={t('mega.addLinkHint')}
+                    onClick={() => {
+                      onClose();
+                      useRemote.getState().show(null, { intent: 'stream', libraryId: lib?.id });
+                    }}
+                  >
+                    {t('mega.addLink')}
+                  </Button>
+                )}
+              </div>
             </div>
           </Field>
         </div>

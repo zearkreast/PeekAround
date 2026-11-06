@@ -22,10 +22,10 @@ const platform = args.platform ?? process.platform;
 const arch = args.arch ?? process.arch;
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 
+// no ffprobe-static (61 MB per platform): the server parses `ffmpeg -i` output instead (ffmpeg.ts probe)
 const NATIVE = {
   sharp: '^0.35.5',
   'ffmpeg-static': '^5.3.0',
-  'ffprobe-static': '^3.1.0',
   'heic-decode': '^2.1.0',
 };
 
@@ -89,13 +89,5 @@ if (!args['no-install']) {
     stdio: 'inherit',
     env: { ...process.env, npm_config_platform: platform, npm_config_arch: arch },
   });
-  // ffprobe-static ships every platform; keep only ours (~300 MB → ~70 MB)
-  const probeBin = path.join(stage, 'node_modules/ffprobe-static/bin');
-  if (fs.existsSync(probeBin)) {
-    for (const p of fs.readdirSync(probeBin)) {
-      if (p !== platform) fs.rmSync(path.join(probeBin, p), { recursive: true, force: true });
-      else for (const a of fs.readdirSync(path.join(probeBin, p))) if (a !== arch) fs.rmSync(path.join(probeBin, p, a), { recursive: true, force: true });
-    }
-  }
 }
 console.log(`✓ staged in ${stage}`);

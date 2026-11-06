@@ -3,13 +3,14 @@ import { useNavigate, useSearchParams, useLocation as useRouterLocation } from '
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'motion/react';
 import { useGesture } from '@use-gesture/react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ChevronLeft, ChevronRight, Info, Maximize, MoreVertical, Presentation, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Info, Maximize, MoreVertical, Music, Presentation, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { MediaItem } from '@peekaround/shared';
 import { useBackend } from '@/backend';
 import { ApiError } from '@/backend/types';
 import { useLang, useT } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { formatDate, formatLocal } from '@/lib/format';
+import { hasPicture, mobileBarOrder, viewable } from '@/lib/mediaKinds';
 import { thumbhashUrl } from '@/lib/thumbhash';
 import { withView } from '@/lib/routes';
 import { BACK, useBackHandler } from '@/lib/backStack';
@@ -29,9 +30,8 @@ const MAX_ZOOM = 8;
 const HIRES_AT = 1.5;
 const spring = { type: 'spring', stiffness: 340, damping: 36 } as const;
 
-const viewable = (i: MediaItem | undefined) => !!i && (i.kind === 'image' || i.kind === 'video');
 
-/** nearest viewable item from index `i` in direction `d` (skips audio); null when not loaded yet */
+/** nearest viewable item from index `i` in direction `d`; null when not loaded yet */
 function step(src: GridItems, i: number, d: 1 | -1): { item: MediaItem; index: number } | null {
   for (let k = i + d, n = 0; k >= 0 && k < src.total && n < 50; k += d, n++) {
     const it = src.getAt(k);
@@ -60,6 +60,16 @@ function ViewerInner({ id }: { id: string }) {
   useSourceVersion(source);
   const infoOpen = usePrefs((s) => s.infoOpen);
   const setPrefs = usePrefs((s) => s.set);
+  // Settings → viewer
+  const viewerBg = usePrefs((s) => s.viewerBg);
+  const filmstrip = usePrefs((s) => s.filmstrip);
+  const zoomStep = usePrefs((s) => s.zoomStep);
+  const dblZoom = usePrefs((s) => s.dblZoom);
+  const hideLocation = usePrefs((s) => s.hideLocation);
+  useEffect(() => {
+    const d = usePrefs.getState().infoDefault;
+    if (d !== 'remember') usePrefs.getState().set({ infoOpen: d === 'open' });
+  }, []);
   const activeId = useViewer((s) => s.activeId);
   const mobile = useIsMobile();
   const actions = useMediaActions('viewer');
@@ -102,7 +112,7 @@ function ViewerInner({ id }: { id: string }) {
     const t0 = setTimeout(() => {
       for (const k of [1, -1, 2, -2]) {
         const it = source.getAt(index + k);
-        if (it && viewable(it)) void decodeImage(backend.thumbUrl(it.id, 1600));
+        if (it && hasPicture(it)) void decodeImage(backend.thumbUrl(it.id, 1600));
       }
     }, 120);
     return () => clearTimeout(t0);
@@ -312,7 +322,7 @@ function ViewerInner({ id }: { id: string }) {
       if (scale.get() > 1.02) resetZoom();
       else {
         const [cx, cy] = center(x, y);
-        zoomTo(2.5, cx, cy);
+        zoomTo(dblZoom, cx, cy);
         if (mobile) setChrome(false);
       }
       return;
@@ -448,19 +458,21 @@ function ViewerInner({ id }: { id: string }) {
   // ── keyboard ──
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (/input|textarea/i.test((e.target as HTMLElement).tagName) || document.querySelector('[role=dialog]')) return;
+      // (a focused native <audio> player seeks with the arrow keys itself)
+      const tag = (e.target as HTMLElement).tagName;
+      if (/input|textarea/i.test(tag) || (tag === 'AUDIO' && e.key !== 'Escape') || document.querySelector('[role=dialog]')) return;
       if (e.key === 'Escape') close();
       else if (e.key === 'ArrowRight') page(1);
       else if (e.key === 'ArrowLeft') page(-1);
       else if (e.key === 'i') setPrefs({ infoOpen: !usePrefs.getState().infoOpen });
       else if (e.key === 'f' && item?.kind === 'image') void document.documentElement.requestFullscreen?.();
-      else if ((e.key === '+' || e.key === '=') && item?.kind === 'image') zoomBy(1.4);
-      else if (e.key === '-' && item?.kind === 'image') zoomBy(1 / 1.4);
+      else if ((e.key === '+' || e.key === '=') && item?.kind === 'image') zoomBy(zoomStep);
+      else if (e.key === '-' && item?.kind === 'image') zoomBy(1 / zoomStep);
       else if (e.key === '0') resetZoom();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [close, page, setPrefs, item?.kind, zoomTo, zoomBy, resetZoom, scale]);
+  }, [close, page, setPrefs, item?.kind, zoomTo, zoomBy, resetZoom, scale, zoomStep]);
 
   useEffect(() => {
     const el = strip.current?.querySelector<HTMLElement>(`[data-strip="${id}"]`);
@@ -482,10 +494,10 @@ function ViewerInner({ id }: { id: string }) {
     return () => clearTimeout(tm);
   }, [id]);
   const details = useQuery({ queryKey: ['media', backend.id, id], queryFn: () => backend.media(id), enabled: mobile && settled === id && !!item, staleTime: 60_000 });
-  const place = details.data?.place ? [details.data.place.city, details.data.place.admin1].filter(Boolean).join(', ') : null;
+  const place = !hideLocation && details.data?.place ? [details.data.place.city, details.data.place.admin1].filter(Boolean).join(', ') : null;
 
   const stripItems = useMemo(() => {
-    if (!source || index < 0 || mobile) return [];
+    if (!source || index < 0 || mobile || !filmstrip) return [];
     const out: { item: MediaItem; index: number }[] = [];
     for (let k = Math.max(0, index - 30); k <= Math.min(source.total - 1, index + 30); k++) {
       const it = source.getAt(k);
@@ -493,7 +505,7 @@ function ViewerInner({ id }: { id: string }) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, index, mobile, source?.version]);
+  }, [source, index, mobile, filmstrip, source?.version]);
 
   const slides: { item: MediaItem; role: -1 | 0 | 1 }[] = [];
   if (prev) slides.push({ item: prev.item, role: -1 });
@@ -508,7 +520,7 @@ function ViewerInner({ id }: { id: string }) {
   const slideshowFromHere = async () => {
     if (!item) return;
     const listItems = source && index >= 0 ? await source.itemsInRange(index, index + 1000) : [item];
-    void actions.run('slideshow', listItems.filter(viewable));
+    void actions.run('slideshow', listItems.filter(hasPicture));
   };
   const local = item ? item.localAt : 0;
   const showChrome = chrome && !closing;
@@ -516,9 +528,9 @@ function ViewerInner({ id }: { id: string }) {
   return (
     <motion.div className="fixed inset-0 z-[60] flex flex-col overflow-hidden text-white" onPointerMove={poke} initial={{ opacity: 1 }} exit={{ opacity: 1 }} data-viewer>
       <motion.div className="absolute inset-0" style={{ opacity: bgOpacity }}>
-      <motion.div className="absolute inset-0 bg-[rgb(6_6_9)]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.28 } }} transition={{ duration: 0.3 }} />
+      <motion.div className={cn('absolute inset-0', viewerBg === 'tint' ? 'bg-[color-mix(in_oklab,var(--accent)_16%,rgb(6_6_9))]' : viewerBg === 'black' ? 'bg-black' : 'bg-[rgb(6_6_9)]')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.28 } }} transition={{ duration: 0.3 }} />
       {/* ambient backdrop: upscaled thumbhash (naturally blurry — no CSS filter) */}
-      {item?.thumbhash && (
+      {item?.thumbhash && viewerBg === 'blur' && (
         <motion.img
           key={`bg-${item.id}`}
           src={thumbhashUrl(item.thumbhash)}
@@ -586,7 +598,7 @@ function ViewerInner({ id }: { id: string }) {
           >
             <div className="flex items-stretch justify-around px-1 pb-1">
               {item &&
-                [...bottom.slice(0, 2), ...bottom.slice(2).filter((a) => a.id !== 'delete'), INFO, ...bottom.filter((a) => a.id === 'delete')].map((a) => (
+                mobileBarOrder(bottom, INFO).map((a) => (
                   <button
                     key={a.id}
                     type="button"
@@ -670,10 +682,10 @@ function ViewerInner({ id }: { id: string }) {
               <div className="flex items-center gap-1.5">
                 {item.kind === 'image' && (
                   <>
-                    <IconButton label={t('viewer.zoomOut')} tone="glass" onClick={() => zoomBy(1 / 1.4)}>
+                    <IconButton label={t('viewer.zoomOut')} tone="glass" onClick={() => zoomBy(1 / zoomStep)}>
                       <ZoomOut />
                     </IconButton>
-                    <IconButton label={t('viewer.zoomIn')} tone="glass" onClick={() => zoomBy(1.4)}>
+                    <IconButton label={t('viewer.zoomIn')} tone="glass" onClick={() => zoomBy(zoomStep)}>
                       <ZoomIn />
                     </IconButton>
                   </>
@@ -739,7 +751,13 @@ function ViewerInner({ id }: { id: string }) {
                   className={cn('relative h-14 shrink-0 overflow-hidden rounded-lg transition-all duration-300', m.id === id ? 'w-20 opacity-100 ring-2 ring-white' : 'w-10 opacity-50 hover:opacity-90')}
                   title={String(k + 1)}
                 >
-                  <img src={backend.thumbUrl(m.id, 320)} alt="" className="size-full object-cover" draggable={false} />
+                  {m.kind === 'audio' ? (
+                    <span className="grid size-full place-items-center bg-white/10">
+                      <Music className="size-5 text-white/70" />
+                    </span>
+                  ) : (
+                    <img src={backend.thumbUrl(m.id, 320)} alt="" className="size-full object-cover" draggable={false} />
+                  )}
                 </button>
               ))}
             </motion.div>

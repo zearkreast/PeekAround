@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
+import { heroNavigate } from '@/features/library/vt';
 import { motion } from 'motion/react';
-import { Archive, Eye, Folder, FolderInput, Pencil, Presentation, Trash2 } from 'lucide-react';
+import { Archive, Cloud, Eye, Folder, FolderInput, Pencil, Presentation, Trash2 } from 'lucide-react';
+import { RemoteBadge } from '@/features/remote/RemoteFolders';
 import type { FolderRef, MediaItem, SubFolder } from '@peekaround/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBackend, useInfo } from '@/backend';
@@ -40,7 +42,7 @@ function Covers({ ids, className }: { ids: string[]; className?: string }) {
   );
 }
 
-export function FolderCard({ folderId, f, index, onSlideshow }: { folderId: string; f: SubFolder; index: number; onSlideshow: () => void }) {
+export function FolderCard({ folderId, f, index, onSlideshow, animate = true }: { folderId: string; f: SubFolder; index: number; onSlideshow: () => void; animate?: boolean }) {
   const t = useT();
   const backend = useBackend();
   const info = useInfo();
@@ -49,12 +51,13 @@ export function FolderCard({ folderId, f, index, onSlideshow }: { folderId: stri
   const writable = info && !info.caps.readonly;
   // folders on a linked phone: view + copy only
   const device = useDeviceFolder(folderId);
+  const nav = useNavigate();
   return (
     <>
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
+        initial={animate ? { opacity: 0, y: 16 } : false}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 28, delay: Math.min(index, 12) * 0.035 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 28, delay: animate ? Math.min(index, 12) * 0.035 : 0 }}
         whileHover={{ y: -4 }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -63,12 +66,15 @@ export function FolderCard({ folderId, f, index, onSlideshow }: { folderId: stri
       >
         <Link
           to={folderHref(folderId, f.dir)}
+          onClick={(e) => heroNavigate(e, nav, folderHref(folderId, f.dir), `dir-${folderId}-${f.dir}`, f.coverIds[0])}
           data-drop-folder={folderId}
           data-drop-dir={f.dir}
           data-drop-label={f.name}
           className="group block overflow-hidden rounded-2xl border border-line bg-elev shadow-sm transition-shadow hover:shadow-soft"
         >
-          <Covers ids={f.coverIds} className="aspect-[4/3] overflow-hidden" />
+          <div data-hero className="overflow-hidden">
+            <Covers ids={f.coverIds} className="aspect-[4/3] overflow-hidden" />
+          </div>
           <div className="flex items-center gap-2 px-3.5 py-3">
             <Folder className="size-4 shrink-0 text-accent" />
             <span className="min-w-0 flex-1 truncate text-sm font-medium">{f.name}</span>
@@ -104,12 +110,16 @@ export function RootCard({ f, index }: { f: FolderRef; index: number }) {
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 28, delay: index * 0.04 }} whileHover={{ y: -4 }}>
       <Link to={folderHref(f.id)} data-drop-folder={f.id} data-drop-dir="" data-drop-label={f.name} className="group flex items-center gap-3 rounded-2xl border border-line bg-elev p-4 transition-shadow hover:shadow-soft">
-        <span className="grid size-11 place-items-center rounded-xl bg-surface-2 text-accent">
-          <Folder className="size-5" />
+        <span className={f.remote ? 'grid size-11 place-items-center rounded-xl bg-[#d9272e]/15 text-[#e5484d]' : 'grid size-11 place-items-center rounded-xl bg-surface-2 text-accent'}>
+          {f.remote ? <Cloud className="size-5" /> : <Folder className="size-5" />}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{f.name}</span>
-          <span className="block truncate font-mono text-[11px] text-faint">{f.path}</span>
+          <span className="flex items-center gap-1.5 truncate font-medium">
+            <span className="truncate">{f.name}</span>
+            {f.remote && <RemoteBadge remote={f.remote} />}
+          </span>
+          {/* MEGA folders: the link without its key */}
+          <span className="block truncate font-mono text-[11px] text-faint">{f.remote ? f.remote.label : f.path}</span>
         </span>
         <span className="text-sm text-dim tabular-nums">{f.mediaCount}</span>
       </Link>

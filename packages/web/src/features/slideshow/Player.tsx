@@ -176,7 +176,7 @@ export function Player() {
               <Button variant="ghost" onClick={() => nav('/slideshow')}>
                 {t('common.back')}
               </Button>
-              <Button variant="primary" onClick={() => nav('/timeline')}>
+              <Button variant="primary" onClick={() => nav('/')}>
                 {t('slide.goTimeline')}
               </Button>
             </div>

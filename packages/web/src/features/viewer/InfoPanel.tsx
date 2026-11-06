@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
-import { Aperture, Calendar, Camera, Clock, FileImage, Film, FolderOpen, HardDrive, MapPin, Maximize, X } from 'lucide-react';
+import { Aperture, Calendar, Camera, Clock, FileImage, Film, FolderOpen, HardDrive, Map as MapIcon, MapPin, MapPinOff, Maximize, X } from 'lucide-react';
 import { Link } from 'react-router';
 import type { MediaItem } from '@peekaround/shared';
-import { cameraKey } from '@peekaround/shared';
-import { cameraHref, cameraLabel, countryName, placeHref } from '@/features/explore/labels';
+import { cameraKey, isMessagingName } from '@peekaround/shared';
+import { cameraHref, cameraLabel, countryName, flagEmoji, mapFocusHref, placeHref } from '@/features/explore/labels';
+import { MiniMap } from '@/features/explore/MiniMap';
 import { useBackend } from '@/backend';
 import { useLang, useT } from '@/i18n';
 import { formatBytes, formatDate, formatDuration, formatLocal } from '@/lib/format';
 import { IconButton, Spinner } from '@/components/ui';
+import { usePrefs } from '@/store/prefs';
 
 function Row({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
@@ -48,6 +51,10 @@ export function InfoContent({ item }: { item: MediaItem }) {
   const place = d?.place ? [d.place.city, d.place.admin1 !== d.place.city ? d.place.admin1 : null].filter(Boolean).join(', ') : null;
   const country = d?.place ? countryName(d.place.cc, lang) : '';
   const camKey = d?.camera?.model ? cameraKey(d.camera.make, d.camera.model) : null;
+  // Settings → privacy: location stays hidden until revealed (per item)
+  const hideLocation = usePrefs((s) => s.hideLocation);
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const locHidden = hideLocation && revealed !== item.id;
   return (
     <>
       <div className="mb-2 text-[15px] font-medium break-all">{item.name}</div>
@@ -88,7 +95,20 @@ export function InfoContent({ item }: { item: MediaItem }) {
           />
         )}
         {exposure && <Row icon={<Aperture />} label={t('viewer.exposure')} value={exposure} />}
-        {Number.isFinite(lat) && Number.isFinite(lon) && (
+        {Number.isFinite(lat) && Number.isFinite(lon) && locHidden ? (
+          <Row
+            icon={<MapPinOff />}
+            label={t('viewer.location')}
+            value={
+              <span className="flex items-center gap-2">
+                <span className="text-dim">{t('pref.locationHidden')}</span>
+                <button type="button" className="text-[13px] font-medium text-accent hover:underline" onClick={() => setRevealed(item.id)} data-info="reveal-location">
+                  {t('pref.locationReveal')}
+                </button>
+              </span>
+            }
+          />
+        ) : Number.isFinite(lat) && Number.isFinite(lon) ? (
           <Row
             icon={<MapPin />}
             label={t('viewer.location')}
@@ -96,21 +116,47 @@ export function InfoContent({ item }: { item: MediaItem }) {
               place && d?.place ? (
                 <Link to={placeHref(d.place.key)} className="hover:text-accent hover:underline" title={t('explore.info.placeLink')} data-info="place">
                   {place}
-                  {country && <span className="text-dim"> · {country}</span>}
+                  {country && (
+                    <span className="text-dim">
+                      {' '}
+                      · {flagEmoji(d.place.cc)} {country}
+                    </span>
+                  )}
                 </Link>
               ) : (
                 `${lat.toFixed(5)}, ${lon.toFixed(5)}`
               )
             }
             sub={
-              <span className="flex flex-wrap gap-x-3">
-                {place && <span className="tabular-nums">{`${lat.toFixed(4)}, ${lon.toFixed(4)}`}</span>}
-                <a className="text-accent hover:underline" href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`} target="_blank" rel="noreferrer">
-                  {t('viewer.openMap')}
-                </a>
+              <span className="flex flex-col gap-2">
+                <span className="flex flex-wrap gap-x-3">
+                  {place && (
+                    <span className="tabular-nums" title={t('map.info.coords')} data-info="coords">
+                      {`${lat.toFixed(5)}, ${lon.toFixed(5)}`}
+                    </span>
+                  )}
+                  <a className="text-accent hover:underline" href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`} target="_blank" rel="noreferrer">
+                    {t('viewer.openMap')}
+                  </a>
+                </span>
+                <MiniMap lat={lat} lon={lon} to={mapFocusHref(item.id, lat, lon)} label={t('map.info.showOnMap')} className="mt-1" />
+                <Link to={mapFocusHref(item.id, lat, lon)} className="inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-accent hover:underline" data-info="show-on-map">
+                  <MapIcon className="size-4" />
+                  {t('map.info.showOnMap')}
+                </Link>
               </span>
             }
           />
+        ) : (
+          d &&
+          (item.kind === 'image' || item.kind === 'video') && (
+            <Row
+              icon={<MapPinOff />}
+              label={t('viewer.location')}
+              value={<span className="text-dim">{t('map.info.noLocation')}</span>}
+              sub={isMessagingName(item.name, item.dir) ? t('map.info.noLocationMessaging') : undefined}
+            />
+          )
         )}
         <Row icon={<FolderOpen />} label={t('viewer.path')} value={<span className="font-mono text-xs break-all">{d?.path ?? '…'}</span>} />
         <Row icon={<FileImage />} label={t('viewer.modified')} value={formatDate(item.mtime, lang, { dateStyle: 'medium', timeStyle: 'short' })} />

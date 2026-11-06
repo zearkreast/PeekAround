@@ -1,11 +1,21 @@
 import { normalizeBase, seg } from '@/lib/safeUrl';
 import type {
+  Album,
+  AlbumOrder,
+  LibraryOptions,
+  LibraryStats,
+  CalendarYear,
+  MapTileStyle,
+  MetaStatus,
   BrowseSkeleton,
   DeviceInfo,
   ExploreResult,
   GeoPoints,
   RemoteImportSpec,
   RemoteInspect,
+  RemoteCopySpec,
+  RemoteFolderCreate,
+  RemoteFolderCreated,
   BrowseQuery,
   BrowseResult,
   FileRef,
@@ -24,7 +34,7 @@ import type {
   UploadZipMode,
   VideoEditSpec,
 } from '@peekaround/shared';
-import { ApiError, type Backend, type ConnectionState, type SaveEditOptions, type UploadOptions } from './types';
+import { ApiError, type Backend, type CacheDetails, type CacheKind, type ConnectionState, type DuplicatesPage, type SaveEditOptions, type UploadOptions } from './types';
 
 function qs(params: Record<string, string | number | boolean | undefined | null>): string {
   const u = new URLSearchParams();
@@ -53,6 +63,16 @@ export function browseQs(q: BrowseQuery) {
     place: q.place,
     camera: q.camera,
     flag: q.flag,
+    gps: q.gps,
+    color: q.color,
+    orient: q.orient,
+    daytime: q.daytime,
+    vlen: q.vlen,
+    dup: q.dup,
+    city: q.city,
+    byAdded: q.byAdded,
+    albumId: q.albumId,
+    byPosition: q.byPosition,
   });
 }
 
@@ -167,8 +187,51 @@ export class HttpBackend implements Backend {
   createLibrary(input: { name: string; color?: string; icon?: string; folders?: string[] }) {
     return this.req<Library>('POST', '/api/libraries', input);
   }
-  updateLibrary(id: string, patch: { name?: string; color?: string; icon?: string; sort?: number }) {
+  updateLibrary(id: string, patch: { name?: string; color?: string; icon?: string; sort?: number; coverId?: string | null; options?: Partial<LibraryOptions> }) {
     return this.req<Library>('PATCH', `/api/libraries/${seg(id)}`, patch);
+  }
+  libraryStats(id: string) {
+    return this.req<LibraryStats>('GET', `/api/libraries/${seg(id)}/stats`);
+  }
+  async orderLibraries(ids: string[]) {
+    await this.req('POST', '/api/libraries/order', { ids });
+  }
+  async rescanLibrary(id: string) {
+    await this.req('POST', `/api/libraries/${seg(id)}/rescan`, {});
+  }
+
+  async albums() {
+    return (await this.req<{ albums: Album[] }>('GET', '/api/albums')).albums;
+  }
+  album(id: string) {
+    return this.req<Album>('GET', `/api/albums/${seg(id)}`);
+  }
+  createAlbum(name: string, ids: string[] = []) {
+    return this.req<Album>('POST', '/api/albums', { name, ids });
+  }
+  updateAlbum(id: string, patch: { name?: string; coverId?: string | null; order?: AlbumOrder }) {
+    return this.req<Album>('PATCH', `/api/albums/${seg(id)}`, patch);
+  }
+  async deleteAlbum(id: string) {
+    await this.req('DELETE', `/api/albums/${seg(id)}`);
+  }
+  addToAlbum(id: string, ids: string[]) {
+    return this.req<{ added: number; album: Album }>('POST', `/api/albums/${seg(id)}/items`, { ids });
+  }
+  removeFromAlbum(id: string, ids: string[]) {
+    return this.req<{ removed: number; album: Album }>('POST', `/api/albums/${seg(id)}/items/remove`, { ids });
+  }
+  async reorderAlbum(id: string, ids: string[], before: string | null) {
+    await this.req('POST', `/api/albums/${seg(id)}/reorder`, { ids, before });
+  }
+  async orderAlbums(ids: string[]) {
+    await this.req('POST', '/api/albums/order', { ids });
+  }
+  async albumMembership(ids: string[]) {
+    return (await this.req<{ counts: Record<string, number> }>('POST', '/api/albums/membership', { ids })).counts;
+  }
+  albumDownloadUrl(id: string, name?: string) {
+    return this.murl(`/api/download${qs({ albumId: id, name })}`);
   }
   async deleteLibrary(id: string) {
     await this.req('DELETE', `/api/libraries/${seg(id)}`);
@@ -218,6 +281,21 @@ export class HttpBackend implements Backend {
   }
   remoteImport(spec: RemoteImportSpec) {
     return this.req<Job>('POST', '/api/remote/import', spec);
+  }
+  remoteAddFolder(spec: RemoteFolderCreate) {
+    return this.req<RemoteFolderCreated>('POST', '/api/remote/folders', spec);
+  }
+  async remoteRefresh(folderId: string) {
+    await this.req('POST', `/api/remote/folders/${seg(folderId)}/refresh`, {});
+  }
+  async remoteLink(folderId: string) {
+    return (await this.req<{ url: string }>('GET', `/api/remote/folders/${seg(folderId)}/link`)).url;
+  }
+  remoteCopy(spec: RemoteCopySpec) {
+    return this.req<Job>('POST', '/api/remote/copy', spec);
+  }
+  async remoteCacheSize() {
+    return (await this.req<{ remoteBytes?: number }>('GET', '/api/cache')).remoteBytes ?? 0;
   }
   timeline(libraryId?: string) {
     return this.req<{ buckets: TimelineBucket[] }>('GET', `/api/timeline${qs({ libraryId })}`);
@@ -359,11 +437,42 @@ export class HttpBackend implements Backend {
     return this.req<Job>('POST', '/api/jobs/slideshow', spec);
   }
 
+  cacheDetails() {
+    return this.req<CacheDetails>('GET', '/api/cache/details');
+  }
+  async clearCacheKind(kind: CacheKind) {
+    await this.req('DELETE', `/api/cache/${kind}`);
+  }
   async cacheSize() {
     return (await this.req<{ bytes: number }>('GET', '/api/cache')).bytes;
   }
   async clearCache() {
     await this.req('DELETE', '/api/cache');
+  }
+
+  // ── maps + Explore insights ──
+
+  /** tiles come through the server (proxy + disk cache + proper User-Agent; see server tiles.ts) */
+  tileUrl(style: MapTileStyle) {
+    return this.url(`/api/tiles/${style}/{z}/{x}/{y}.png`);
+  }
+  tileCache() {
+    return this.req<{ bytes: number; files: number; limitMb: number }>('GET', '/api/tiles/cache');
+  }
+  async clearTileCache() {
+    await this.req('DELETE', '/api/tiles/cache');
+  }
+  calendar(year: number) {
+    return this.req<CalendarYear>('GET', `/api/explore/calendar${qs({ year })}`);
+  }
+  duplicates(offset = 0, limit = 100) {
+    return this.req<DuplicatesPage>('GET', `/api/explore/duplicates${qs({ offset, limit })}`);
+  }
+  metaStatus() {
+    return this.req<MetaStatus>('GET', '/api/meta/status');
+  }
+  async rereadMeta(libraryId?: string) {
+    await this.req('POST', '/api/meta/reread', libraryId ? { libraryId } : {});
   }
 
   // ── live events ──

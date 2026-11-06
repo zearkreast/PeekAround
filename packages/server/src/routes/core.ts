@@ -3,13 +3,15 @@ import { FS_LIMIT, HEAVY_LIMIT } from '../security.js';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { HostDirEntry, ServerInfo, Settings } from '@peekaround/shared';
+import type { HostDirEntry, LibraryOptions, LibraryStats, ServerInfo, Settings } from '@peekaround/shared';
 import { APP_NAME, API_VERSION, isValidTimeZone } from '@peekaround/shared';
 import { lanUrls } from '../config.js';
 import { getSettings, saveSettings, type Ctx } from '../context.js';
 import { HttpError, isInside, resolveInRoot, sanitizeName, uniquePath, resolveHostPath } from '../paths.js';
 import { moveFile, requireLocal, requireLocalFolder, requireWritable, type Plugin } from './util.js';
 import { canSeePairing, viewerOf } from '../devices/access.js';
+import { tileService } from './tiles.js';
+import { pickRuntimeSettings } from '../runtime-settings.js';
 
 export function serverInfo(ctx: Ctx): ServerInfo {
   const desktop = ctx.cfg.mode === 'desktop';
@@ -55,9 +57,16 @@ export const coreRoutes: Plugin = (app, ctx) => {
       if (!isValidTimeZone(b.homeTimeZone)) throw new HttpError(400, 'Unknown time zone');
       patch.homeTimeZone = b.homeTimeZone;
     }
-    if (b.mapTiles && ['carto', 'osm', 'off'].includes(b.mapTiles)) patch.mapTiles = b.mapTiles;
+    if (b.mapTiles && ['carto', 'osm', 'topo', 'satellite', 'off'].includes(b.mapTiles)) patch.mapTiles = b.mapTiles;
+    if (typeof b.tileCacheMb === 'number' && Number.isFinite(b.tileCacheMb)) patch.tileCacheMb = Math.round(Math.max(32, Math.min(16384, b.tileCacheMb)));
+    // remote (MEGA) stream cache cap, MB (0 = keep nothing)
+    if (typeof b.remoteCacheMb === 'number' && Number.isFinite(b.remoteCacheMb)) patch.remoteCacheMb = Math.round(Math.max(0, Math.min(1024 * 1024, b.remoteCacheMb)));
+    // thumbnail quality, indexing intensity, ffmpeg hwaccel (runtime-settings.ts)
+    pickRuntimeSettings(b, patch);
     const s = saveSettings(ctx, patch);
+    if (patch.remoteCacheMb !== undefined) await ctx.remote.cache.setCap(patch.remoteCacheMb * 1024 * 1024);
     if (patch.showHidden !== undefined) void ctx.scanner.scanAll();
+    if (patch.tileCacheMb !== undefined) void tileService(ctx).trim();
     return s;
   });
 
@@ -79,12 +88,36 @@ export const coreRoutes: Plugin = (app, ctx) => {
     return lib;
   });
 
-  app.patch<{ Params: { id: string }; Body: { name?: string; color?: string; icon?: string; sort?: number } }>(
+  app.patch<{ Params: { id: string }; Body: { name?: string; color?: string; icon?: string; sort?: number; coverId?: string | null; options?: Partial<LibraryOptions> } }>(
     '/api/libraries/:id', FS_LIMIT, async (req) => {
       requireWritable(ctx);
-      return ctx.lib.updateLibrary(req.params.id, req.body ?? {});
+      const { rescan, ...lib } = ctx.lib.updateLibrary(req.params.id, req.body ?? {});
+      // exclusions / minimum size / hidden folders changed → re-walk (excluded rows drop out, re-included files come back)
+      if (rescan) {
+        ctx.scanner.invalidateRules();
+        for (const f of lib.folders) void ctx.scanner.scanFolder(Number(f.id));
+      }
+      return lib;
     },
   );
+
+  // new library order (sidebar drag): { ids } first → last
+  app.post<{ Body: { ids: string[] } }>('/api/libraries/order', FS_LIMIT, async (req) => {
+    requireWritable(ctx);
+    ctx.lib.reorderLibraries(Array.isArray(req.body?.ids) ? req.body.ids.map(String) : []);
+    return { libraries: ctx.lib.listLibraries() };
+  });
+
+  // header numbers of a library page
+  app.get<{ Params: { id: string } }>('/api/libraries/:id/stats', FS_LIMIT, async (req): Promise<LibraryStats> =>
+    ctx.lib.stats(req.params.id, (ids) => ctx.scanner.busyFor(ids)),
+  );
+
+  app.post<{ Params: { id: string } }>('/api/libraries/:id/rescan', HEAVY_LIMIT, async (req) => {
+    const lib = ctx.lib.library(req.params.id);
+    for (const f of lib.folders) void ctx.scanner.scanFolder(Number(f.id));
+    return { ok: true };
+  });
 
   app.delete<{ Params: { id: string } }>('/api/libraries/:id', FS_LIMIT, async (req) => {
     requireWritable(ctx);
@@ -105,7 +138,9 @@ export const coreRoutes: Plugin = (app, ctx) => {
 
   app.patch<{ Params: { id: string }; Body: { name: string } }>('/api/folders/:id', FS_LIMIT, async (req) => {
     requireWritable(ctx);
-    requireLocalFolder(ctx.lib.folderRow(req.params.id), 'Device folders are named on the phone');
+    const f = ctx.lib.folderRow(req.params.id);
+    // a remote folder's name is only a label in our database
+    if (!f.remote) requireLocalFolder(f, 'Device folders are named on the phone');
     ctx.lib.renameFolder(req.params.id, req.body.name);
     return { ok: true };
   });
@@ -113,9 +148,11 @@ export const coreRoutes: Plugin = (app, ctx) => {
   app.delete<{ Params: { id: string } }>('/api/folders/:id', FS_LIMIT, async (req) => {
     requireWritable(ctx);
     const row = ctx.lib.folderRow(req.params.id);
-    requireLocalFolder(row, 'Stop sharing the folder on the phone, or forget the device');
+    // remote (MEGA) folders: "remove link" — only our rows go, nothing on MEGA is touched
+    if (!row.remote) requireLocalFolder(row, 'Stop sharing the folder on the phone, or forget the device');
     if (row.temp) await ctx.lib.deleteTemp(row, ctx.cfg.tempDir);
     else ctx.lib.removeFolder(req.params.id);
+    if (row.remote) ctx.remote.forget(row.id);
     ctx.events.emit({ type: 'folders' });
     ctx.watcher.sync();
     return { ok: true };
@@ -200,11 +237,15 @@ export const coreRoutes: Plugin = (app, ctx) => {
   });
 
   // ── cache ──
-  app.get('/api/cache', FS_LIMIT, async () => ({ bytes: await ctx.thumbs.sizeBytes() }));
-  app.delete('/api/cache', FS_LIMIT, async () => {
+  // bytes = thumbnails; remoteBytes = streamed MEGA originals (LRU, Settings.remoteCacheMb)
+  app.get('/api/cache', FS_LIMIT, async () => ({ bytes: await ctx.thumbs.sizeBytes(), remoteBytes: await ctx.remote.cache.sizeBytes() }));
+  app.delete('/api/cache', FS_LIMIT, async (req) => {
+    requireLocal(req);
     await ctx.thumbs.clear();
+    await ctx.remote.cache.clear();
     ctx.db.run('UPDATE media SET thumb_state = 0');
     ctx.scanner.kick();
+    ctx.remote.kick();
     return { ok: true };
   });
 };

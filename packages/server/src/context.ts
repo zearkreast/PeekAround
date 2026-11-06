@@ -13,6 +13,8 @@ import type { WatcherService } from './media/watcher.js';
 import type { JobService } from './jobs/index.js';
 import type { DeviceHub } from './devices/hub.js';
 import type { MegaClient } from './remote/mega.js';
+import type { RemoteService } from './remote/folders.js';
+import { applyRuntimeSettings } from './runtime-settings.js';
 
 export interface Ctx {
   cfg: ResolvedConfig;
@@ -30,6 +32,8 @@ export interface Ctx {
   devices: DeviceHub;
   /** MEGA access (injectable for tests) */
   mega: MegaClient;
+  /** remote (streaming) folders — MEGA links shown without downloading */
+  remote: RemoteService;
   lan: { enabled: boolean; port: number };
 }
 
@@ -42,5 +46,6 @@ export function saveSettings(ctx: Ctx, patch: Partial<Settings>): Settings {
   ctx.db.setSetting('settings', next);
   ctx.scanner.showHidden = next.showHidden;
   if (patch.homeTimeZone) ctx.scanner.setHomeTimeZone(next.homeTimeZone);
+  applyRuntimeSettings(ctx, next);
   return next;
 }

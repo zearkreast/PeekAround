@@ -7,10 +7,12 @@ import { usePrefs, type GridMode } from '@/store/prefs';
 import { useSelecting, useSelection } from '@/store/selection';
 import { ContextMenu } from '@/components/ui';
 import { MediaMenu } from './actions';
-import { MediaTile } from './MediaTile';
+import { MediaTile, TILE_DECO } from './MediaTile';
 import { layoutGrid, nearestItem, rowAt, itemAt, type GridLayout, type GroupBy } from './grid/layout';
 import { useSourceVersion, type GridItems } from './grid/source';
 import { FastScroller, type FastScrollerTick } from './grid/FastScroller';
+import { useBackend } from '@/backend';
+import { dragGhost, endMediaDrag, startMediaDrag } from '@/features/library/dnd';
 
 export interface MediaGridHandle {
   scrollToItem(id: string): void;
@@ -123,6 +125,10 @@ export function MediaGrid({
   const levelMobile = usePrefs((s) => s.gridZoomMobile);
   const levelDesktop = usePrefs((s) => s.gridZoomDesktop);
   const hoverPreviewPref = usePrefs((s) => s.hoverPreview);
+  // Settings → gallery: headers, grouping, tile decorations
+  const dateHeaders = usePrefs((s) => s.dateHeaders);
+  const groupByPref = usePrefs((s) => s.groupBy);
+  const deco = usePrefs((s) => (s.tileDuration ? TILE_DECO.duration : 0) | (s.tileFavorites ? TILE_DECO.favorite : 0) | (s.tileNames ? TILE_DECO.name : 0));
   const selecting = useSelecting();
   const gridRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -166,15 +172,19 @@ export function MediaGrid({
   }, [scrollRef]);
 
   // ── exact layout of every item ──
-  const params = useMemo(() => gridParams(width, level, rowHeight, gridMode), [width, level, rowHeight, gridMode]);
+  const params = useMemo(() => {
+    const p = gridParams(width, level, rowHeight, gridMode);
+    return groupByPref === 'auto' ? p : { ...p, groupBy: groupByPref };
+  }, [width, level, rowHeight, gridMode, groupByPref]);
+  const withGroups = groups && dateHeaders;
   const layoutVersion = source.layoutVersion;
   const layout: GridLayout = useMemo(() => {
     const t0 = performance.now();
-    const l = layoutGrid(source.aspects, source.total, groups ? source.days : null, { ...params, width });
+    const l = layoutGrid(source.aspects, source.total, withGroups ? source.days : null, { ...params, width });
     window.__peekLayout = { ms: +(performance.now() - t0).toFixed(2), total: source.total, rows: l.rowCount };
     return l;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, layoutVersion, params, width, groups]);
+  }, [source, layoutVersion, params, width, withGroups]);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 
@@ -613,6 +623,22 @@ export function MediaGrid({
     onOpen(item, idx);
   };
 
+  // drag tiles (mouse): onto albums in the sidebar / album cards, or out of the window (features/library/dnd)
+  const backend = useBackend();
+  const onDragStart = (e: React.DragEvent) => {
+    const idx = tileIndex(e.target);
+    const item = idx >= 0 ? source.getAt(idx) : undefined;
+    if (!item || lasso) {
+      e.preventDefault();
+      return;
+    }
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    if (previewRef.current >= 0) setPreview(-1);
+    const sel = useSelection.getState();
+    const list = sel.ids.has(item.id) ? sel.selected() : [item];
+    if (!startMediaDrag(e, list, backend, dragGhost(backend.thumbUrl(item.id, 320), list.length))) e.preventDefault();
+  };
+
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     // Android fires contextmenu on long press — that gesture means "select" here
@@ -759,7 +785,7 @@ export function MediaGrid({
     const size = h * dpr > 330 ? 640 : 320;
     for (let i = layout.rowStart[r]; i < layout.rowEnd[r]; i++) {
       nodes.push(
-        <MediaTile key={i} index={i} item={source.getAt(i)} x={layout.itemX[i]} y={y} w={layout.itemW[i]} h={h} size={size} fast={fast} preview={preview === i} selecting={selecting} />,
+        <MediaTile key={i} index={i} item={source.getAt(i)} x={layout.itemX[i]} y={y} w={layout.itemW[i]} h={h} size={size} fast={fast} preview={preview === i} selecting={selecting} deco={deco} />,
       );
     }
   }
@@ -785,6 +811,8 @@ export function MediaGrid({
         onPointerLeave={onPointerLeave}
         onClick={onClick}
         onContextMenu={onContextMenu}
+        onDragStart={onDragStart}
+        onDragEnd={endMediaDrag}
         onKeyDown={onKeyDown}
       >
         {nodes}

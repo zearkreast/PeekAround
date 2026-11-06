@@ -1,5 +1,7 @@
 import {
   cameraKey,
+  computeInsights,
+  type InsightRow,
   findTrips,
   instantToLocal,
   localDayKey,
@@ -14,26 +16,26 @@ import {
   type YearGroup,
 } from '@peekaround/shared';
 import type { Ctx } from './context.js';
+import { DuplicateService } from './duplicates.js';
 import { placeKey } from './geo.js';
+import { fillInsightColumns, SUN_NA } from './insights.js';
+import { TIME_SRC } from './media/metadata.js';
 import { resolveScope, whereSql } from './routes/browse.js';
 
-interface Row {
-  id: number;
+/** one image/video row: the legacy short names used below + the InsightRow fields (same object) */
+interface Row extends InsightRow {
   k: string;
   t: number;
-  lat: number | null;
-  lon: number | null;
-  cc: string | null;
   a1: string | null;
-  city: string | null;
   make: string | null;
   model: string | null;
-  flags: number;
 }
 
 /** min spacing of {type:'explore'} events */
 const EXPLORE_EVENT_MS = 10_000;
 const MAX_TRIPS = 24;
+/** derived insight columns computed per step (≈ 150 ms for 20k rows) */
+const FILL_CHUNK = 20_000;
 
 /**
  * Explore (automatic grouping) results, cached in memory per query and invalidated whenever media
@@ -44,8 +46,12 @@ export class ExploreService {
   private timer: NodeJS.Timeout | null = null;
   private lastEvent = 0;
   private dirty = false;
+  /** exact duplicates (lazy content hashes of same-size files) */
+  readonly dups: DuplicateService;
 
   constructor(private ctx: Ctx) {
+    this.dups = new DuplicateService(ctx);
+    this.dups.onChanged = () => this.invalidate(true);
     ctx.events.on((e) => {
       if (e.type === 'media' && e.reason !== 'thumb') this.invalidate(e.reason === 'add' || e.reason === 'remove');
       else if (e.type === 'folders') this.invalidate(false);
@@ -70,9 +76,32 @@ export class ExploreService {
     this.timer.unref?.();
   }
 
+  private filling: NodeJS.Timeout | null = null;
+
+  /** keep computing colour / sun columns in chunks, then refresh Explore */
+  private fillLater() {
+    if (this.filling) return;
+    const step = () => {
+      this.filling = null;
+      let done = true;
+      try {
+        done = fillInsightColumns(this.ctx.db, 0, FILL_CHUNK);
+      } catch {
+        return; // closed
+      }
+      if (done) this.invalidate(true);
+      else this.filling = setTimeout(step, 50);
+    };
+    this.filling = setTimeout(step, 50);
+    this.filling.unref?.();
+  }
+
   close() {
+    if (this.filling) clearTimeout(this.filling);
+    this.filling = null;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    void this.dups.stop();
   }
 
   get(q: BrowseQuery, now = Date.now()): ExploreResult {
@@ -89,16 +118,46 @@ export class ExploreService {
 
   compute(q: BrowseQuery, nowLocal: number): ExploreResult {
     const { s } = resolveScope(this.ctx, { ...q, kind: q.kind && q.kind !== 'all' ? q.kind : ('image-video' as BrowseQuery['kind']), recursive: true });
-    const rows = this.ctx.db
-      .stmt(
-        `SELECT id, kind k, taken_local t, lat, lon, cc, admin1 a1, city, make, model, flags FROM media ${whereSql(s)} ORDER BY taken_local DESC, id DESC`,
-      )
-      .all(...s.params) as unknown as Row[];
+    // derived colour / sun columns: a first chunk now, the rest in the background (first run after an upgrade)
+    if (!fillInsightColumns(this.ctx.db, 0, FILL_CHUNK)) this.fillLater();
+    // rows as arrays (≈ 2× faster than objects for 100k rows), turned into one object per item
+    const arr = this.ctx.db.allArrays(
+      `SELECT id, kind, taken_local, lat, lon, cc, admin1, city, make, model, flags, size, width, height, duration, color, sun, time_src, added_at, mtime FROM media ${whereSql(s)} ORDER BY taken_local DESC, id DESC`,
+      ...s.params,
+    ) as [number, string, number, number | null, number | null, string | null, string | null, string | null, string | null, string | null, number, number, number | null, number | null, number | null, number | null, number | null, number, number | null, number][];
+    const rows: Row[] = new Array(arr.length);
+    for (let i = 0; i < arr.length; i++) {
+      const [id, k, t, lat, lon, cc, a1, city, make, model, flags, size, width, height, duration, color, sun, src, added, mtime] = arr[i];
+      rows[i] = {
+        id: String(id),
+        k,
+        t,
+        kind: k,
+        localAt: t,
+        lat,
+        lon,
+        cc,
+        a1,
+        city,
+        make,
+        model,
+        flags,
+        size,
+        width,
+        height,
+        duration,
+        color,
+        sun: sun === null || sun === SUN_NA ? null : sun,
+        clockKnown: src !== TIME_SRC.mtime,
+        addedAt: added,
+        mtime,
+        placeKey: cc ? placeKey(cc, a1) : null,
+      };
+    }
     const geo = this.ctx.geo;
 
     // ── memories ──
-    const memItems = rows.map((r) => ({ id: String(r.id), localAt: r.t }));
-    const otd = onThisDay(memItems, nowLocal);
+    const otd = onThisDay(rows, nowLocal);
     const groupName = (cc: string, a1: string | null, city: string | null) => geo.admin1Name(cc, a1) ?? city ?? cc;
     const trips = findTrips(
       rows.map((r) => ({
@@ -189,7 +248,14 @@ export class ExploreService {
       else years.set(y, { year: y, count: 1, coverId: String(r.id) });
     }
 
+    // ── insights (stats, year in review, countries, colours, time of day, orientation, …) ──
+    const insights = computeInsights(rows);
+    const duplicates = this.dups.summary(whereSql(s), s.params);
+    if (duplicates.pending) this.dups.kick();
+
     return {
+      ...insights,
+      duplicates: duplicates.groups || duplicates.pending ? duplicates : undefined,
       memories: [...otd, ...trips],
       places: placeList,
       types,

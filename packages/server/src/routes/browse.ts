@@ -1,7 +1,12 @@
 import fsp from 'node:fs/promises';
+import type { FastifyRequest } from 'fastify';
 import {
   aspectToByte,
   cameraKey,
+  isColorBucket,
+  isDayTime,
+  isOrientation,
+  isVideoLength,
   localDayKey,
   MEDIA_FLAG,
   parseSearch,
@@ -22,7 +27,9 @@ import type { Ctx } from '../context.js';
 import type { FolderRow } from '../library.js';
 import { ITEM_COLS, toItem } from '../media/mapper.js';
 import { normalizeRel, resolveInRoot } from '../paths.js';
+import { hasInsightFilters, insightClauses } from '../insights.js';
 import type { Plugin } from './util.js';
+import { hideDeviceMedia } from './albums.js';
 
 const SORT_SQL: Record<SortKey, string> = {
   takenAt: 'taken_local',
@@ -59,12 +66,23 @@ export function parseBrowseQuery(raw: Record<string, string | undefined>): Brows
     place: raw.place || undefined,
     camera: raw.camera || undefined,
     flag: raw.flag && FLAG_NAMES.has(raw.flag) ? (raw.flag as MediaFlagName) : undefined,
+    // Explore insights (insights.ts)
+    gps: raw.gps === 'none' || raw.gps === 'any' ? raw.gps : undefined,
+    color: isColorBucket(raw.color) ? raw.color : undefined,
+    orient: isOrientation(raw.orient) ? raw.orient : undefined,
+    daytime: isDayTime(raw.daytime) ? raw.daytime : undefined,
+    vlen: isVideoLength(raw.vlen) ? raw.vlen : undefined,
+    dup: raw.dup === '1' || raw.dup === 'true' || undefined,
+    city: raw.city ? raw.city.slice(0, 200) : undefined,
+    byAdded: raw.byAdded === '1' || raw.byAdded === 'true' || undefined,
+    albumId: raw.albumId && /^\d+$/.test(raw.albumId) ? raw.albumId : undefined,
+    byPosition: raw.byPosition === '1' || raw.byPosition === 'true' || undefined,
   };
 }
 
 /** true when the query narrows the result beyond a folder (→ flatten sub folders) */
 function hasFilters(q: BrowseQuery): boolean {
-  return !!(q.q || q.from !== undefined || q.to !== undefined || q.place || q.camera || q.flag);
+  return !!(q.q || q.from !== undefined || q.to !== undefined || q.place || q.camera || q.flag || hasInsightFilters(q));
 }
 
 function kindClause(kind: KindFilter | undefined, s: Scope) {
@@ -128,6 +146,7 @@ function filterClauses(ctx: Ctx, q: BrowseQuery, s: Scope) {
     }
   }
   if (q.flag) flagClause(q.flag, s);
+  insightClauses(ctx.db, q, s);
   if (q.q) {
     const p = parseSearch(q.q);
     if (p.flag && p.flag !== q.flag) flagClause(p.flag, s);
@@ -155,6 +174,16 @@ function cameraLookup(ctx: Ctx): Map<string, { make: string | null; model: strin
   return m;
 }
 
+/** internal: set by the routes for album queries of viewers without device access */
+type AlbumScopeQuery = BrowseQuery & { noDevices?: boolean };
+
+/** parse + album device visibility of the asking viewer */
+function queryOf(ctx: Ctx, req: FastifyRequest): BrowseQuery {
+  const q: AlbumScopeQuery = parseBrowseQuery(req.query as Record<string, string | undefined>);
+  if (q.albumId && hideDeviceMedia(ctx, req)) q.noDevices = true;
+  return q;
+}
+
 export interface ResolvedScope {
   s: Scope;
   /** false for a multi-folder library root without filters (only its folders are listed) */
@@ -171,6 +200,15 @@ export interface ResolvedScope {
 export function resolveScope(ctx: Ctx, q: BrowseQuery): ResolvedScope {
   const s: Scope = { where: [], params: [] };
   kindClause(q.kind, s);
+  if (q.albumId) {
+    // an album: its items wherever they live (libraries, temp sessions, phones, MEGA) — plus any filters
+    s.where.push('id IN (SELECT media_id FROM album_items WHERE album_id = ?)');
+    s.params.push(Number(q.albumId));
+    // viewers that may not see linked phones (LAN / the phone itself): no phone items
+    if ((q as AlbumScopeQuery).noDevices) s.where.push('+folder_id IN (SELECT id FROM folders WHERE device_id IS NULL)');
+    filterClauses(ctx, q, s);
+    return { s, items: true, folder: null, lib: null, dir: '' };
+  }
   let folderId = q.folderId;
   let lib = q.libraryId ? ctx.lib.library(q.libraryId) : null;
   if (!folderId && lib && lib.folders.length === 1) folderId = lib.folders[0].id;
@@ -204,6 +242,12 @@ export function whereSql(s: Scope): string {
 }
 
 export function orderSql(q: BrowseQuery): string {
+  // duplicates: copies next to each other, biggest first
+  if (q.dup) return 'ORDER BY size DESC, chash, id';
+  // album custom order (positions are unique per album; ties → when added)
+  if (q.albumId && q.byPosition)
+    return `ORDER BY (SELECT position FROM album_items WHERE album_id = ${Number(q.albumId)} AND media_id = media.id), id`;
+  if (q.byAdded) return 'ORDER BY coalesce(added_at, mtime) DESC, id DESC';
   const col = SORT_SQL[q.sort ?? 'takenAt'] ?? 'taken_local';
   const dir: SortDir = q.order === 'asc' ? 'asc' : 'desc';
   return `ORDER BY ${col} ${dir}, id ${dir}`;
@@ -244,7 +288,8 @@ export function buildSkeleton(ctx: Ctx, q: BrowseQuery): BrowseSkeleton {
 
 function computeSkeleton(ctx: Ctx, q: BrowseQuery): BrowseSkeleton {
   const { s } = resolveScope(ctx, q);
-  const withDays = (q.sort ?? 'takenAt') === 'takenAt';
+  // day groups only when the rows really come in capture-time order (see orderSql)
+  const withDays = (q.sort ?? 'takenAt') === 'takenAt' && !q.dup && !q.byAdded && !(q.albumId && q.byPosition);
   // one query, rows as arrays: [id, width, height, kind, taken_local, city]
   const rows = ctx.db.allArrays(
     `SELECT id, width, height, kind${withDays ? ', taken_local, city' : ''} FROM media ${whereSql(s)} ${orderSql(q)}`,
@@ -306,18 +351,19 @@ function deviceChildDirs(ctx: Ctx, folderId: number, dir: string): string[] {
   const names = new Set<string>();
   for (const r of rows) {
     const child = r.dir.slice(prefix.length).split('/')[0];
-    if (child && !ctx.scanner.skipName(child)) names.add(child);
+    if (child && !ctx.scanner.skipDir(folderId, prefix + child)) names.add(child);
   }
   return [...names];
 }
 
 async function subFolders(ctx: Ctx, folder: FolderRow, dir: string): Promise<SubFolder[]> {
   let names: string[];
-  if (folder.device_id) names = deviceChildDirs(ctx, folder.id, dir);
+  // device + remote folders cannot be read with readdir: dirs come from the index (device_dirs)
+  if (folder.device_id || folder.remote) names = deviceChildDirs(ctx, folder.id, dir);
   else {
     const abs = resolveInRoot(folder.path, dir);
     const entries = await fsp.readdir(abs, { withFileTypes: true }).catch(() => []);
-    names = entries.filter((e) => e.isDirectory() && !ctx.scanner.skipName(e.name)).map((e) => e.name);
+    names = entries.filter((e) => e.isDirectory() && !ctx.scanner.skipDir(folder.id, (dir ? `${dir}/` : '') + e.name)).map((e) => e.name);
   }
   // counts for all descendants grouped by immediate child
   const prefix = dir ? `${dir}/` : '';
@@ -337,14 +383,14 @@ async function subFolders(ctx: Ctx, folder: FolderRow, dir: string): Promise<Sub
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
     .map((name) => {
       const d = prefix + name;
-      const covers = ctx.db.all<{ id: number }>(
-        `SELECT id FROM media WHERE folder_id = ? AND kind IN ('image','video') AND (dir = ? OR substr(dir, 1, ?) = ?) ORDER BY taken_local DESC LIMIT 3`,
+      const covers = ctx.db.all<{ id: number; t: number | null }>(
+        `SELECT id, taken_local t FROM media WHERE folder_id = ? AND kind IN ('image','video') AND (dir = ? OR substr(dir, 1, ?) = ?) ORDER BY taken_local DESC LIMIT 3`,
         folder.id,
         d,
         d.length + 1,
         `${d}/`,
       );
-      return { name, dir: d, mediaCount: counts.get(name) ?? 0, coverIds: covers.map((c) => String(c.id)) };
+      return { name, dir: d, mediaCount: counts.get(name) ?? 0, coverIds: covers.map((c) => String(c.id)), latest: covers[0]?.t ?? null };
     });
 }
 
@@ -356,7 +402,7 @@ function archives(ctx: Ctx, folderId: number, dir: string) {
 
 export const browseRoutes: Plugin = (app, ctx) => {
   app.get<{ Querystring: Record<string, string> }>('/api/browse', async (req): Promise<BrowseResult> => {
-    const q = parseBrowseQuery(req.query);
+    const q = queryOf(ctx, req);
     const { s, folder, lib, dir } = resolveScope(ctx, q);
 
     // ── a specific folder (library folder or temp session) ──
@@ -378,7 +424,7 @@ export const browseRoutes: Plugin = (app, ctx) => {
         total,
         archives: q.offset ? [] : archives(ctx, folder.id, dir),
         // device folders: no uploads/drops (copy into them with /api/fs/move copy=true → transfer job)
-        target: ctx.cfg.readonly || folder.device_id ? null : { folderId: String(folder.id), dir },
+        target: ctx.cfg.readonly || folder.device_id || folder.remote ? null : { folderId: String(folder.id), dir },
         gen,
       };
     }
@@ -395,11 +441,12 @@ export const browseRoutes: Plugin = (app, ctx) => {
   });
 
   app.get<{ Querystring: Record<string, string> }>('/api/browse/skeleton', async (req): Promise<BrowseSkeleton> => {
-    return buildSkeleton(ctx, parseBrowseQuery(req.query));
+    return buildSkeleton(ctx, queryOf(ctx, req));
   });
 
   app.get<{ Querystring: Record<string, string> }>('/api/geo/points', async (req): Promise<GeoPoints> => {
-    const { s } = resolveScope(ctx, parseBrowseQuery(req.query));
+    // queryOf: album points follow the viewer's phone visibility like the album pages
+    const { s } = resolveScope(ctx, queryOf(ctx, req));
     const rows = ctx.db
       .stmt(`SELECT id, lat, lon FROM media ${whereSql({ where: [...s.where, 'lat IS NOT NULL', 'lon IS NOT NULL'], params: s.params })} ORDER BY id`)
       .all(...s.params) as { id: number; lat: number; lon: number }[];

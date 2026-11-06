@@ -194,10 +194,12 @@ export const fileRoutes: Plugin = (app, ctx) => {
       : 0;
     await fsp.rename(abs, dest);
     const relDest = relOf(folder.path, dest);
+    // rows move with the file (same media id → favourites, albums, covers, metadata stay)
     if (st.isDirectory()) {
+      ctx.scanner.relocateDir(folder.id, relSrc, folder.id, relDest);
       ctx.scanner.removeDir(folder.id, relSrc);
       await ctx.scanner.scanFolder(folder.id, relDest);
-    } else {
+    } else if (!ctx.scanner.relocateFile(folder.id, relSrc, folder.id, relDest)) {
       ctx.scanner.removeFile(folder.id, relSrc);
       const id = await ctx.scanner.upsertFile(folder.id, relDest);
       if (id && fav) ctx.db.run('UPDATE media SET favorite = 1 WHERE id = ?', id);
@@ -214,6 +216,14 @@ export const fileRoutes: Plugin = (app, ctx) => {
     requireWritable(ctx);
     const allRefs = req.body.refs ?? [];
     const target = ctx.lib.folderRow(req.body.to.folderId);
+    // remote (MEGA) sources: "copy to this computer" = the MEGA import job (nothing to move on MEGA)
+    const remoteRefs = allRefs.filter((r) => !!ctx.lib.folderRow(r.folderId).remote);
+    if (remoteRefs.length) {
+      if (!req.body.copy) throw new HttpError(403, 'Files in a MEGA link can only be copied');
+      if (remoteRefs.length !== allRefs.length) throw new HttpError(400, 'Copy MEGA files separately from local files');
+      folderPath(ctx, req.body.to.folderId, req.body.to.dir ?? ''); // local, writable target
+      return { moved: [], job: await ctx.remote.copy({ refs: remoteRefs, to: { folderId: req.body.to.folderId, dir: req.body.to.dir ?? '' } }) };
+    }
     const deviceRefs = allRefs.filter((r) => !!ctx.lib.folderRow(r.folderId).device_id);
     if (target.device_id || deviceRefs.length) {
       if (!req.body.copy) throw new HttpError(403, 'Files on a linked device can only be copied');
@@ -239,9 +249,12 @@ export const fileRoutes: Plugin = (app, ctx) => {
       if (req.body.copy) await fsp.cp(abs, dest, { recursive: true, errorOnExist: true, force: false, preserveTimestamps: true });
       else await moveFile(abs, dest);
       const relDest = relOf(toFolder.path, dest);
+      // moves keep the media id (favourites, albums, covers); copies are new items
       if (!req.body.copy) {
-        if (st.isDirectory()) ctx.scanner.removeDir(folder.id, relSrc);
-        else ctx.scanner.removeFile(folder.id, relSrc);
+        if (st.isDirectory()) {
+          ctx.scanner.relocateDir(folder.id, relSrc, toFolder.id, relDest);
+          ctx.scanner.removeDir(folder.id, relSrc);
+        } else if (!ctx.scanner.relocateFile(folder.id, relSrc, toFolder.id, relDest)) ctx.scanner.removeFile(folder.id, relSrc);
       }
       if (st.isDirectory()) await ctx.scanner.scanFolder(toFolder.id, relDest);
       else await ctx.scanner.upsertFile(toFolder.id, relDest);

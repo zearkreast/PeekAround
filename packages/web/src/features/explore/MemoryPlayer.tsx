@@ -31,6 +31,21 @@ function useMemoryItems(m: Memory | undefined) {
     enabled: !!m,
     staleTime: 60_000,
     queryFn: async () => {
+      // year in review: a few items from every month instead of the first 2000 of the year
+      if (m!.kind === 'year') {
+        const year = new Date(m!.from).getUTCFullYear();
+        const per = Math.ceil(MAX_SLIDES / Math.max(1, m!.months ? m!.months.filter((n) => n > 0).length : 12));
+        const out: MediaItem[] = [];
+        for (let mo = 0; mo < 12; mo++) {
+          if (m!.months && !m!.months[mo]) continue;
+          const q = { ...exploreQuery({ from: Date.UTC(year, mo, 1), to: Date.UTC(year, mo + 1, 1) }), order: 'asc' as const };
+          const r = await backend.browse({ ...q, offset: 0, limit: 400 });
+          const list = r.items.filter((i) => i.kind === 'image' || i.kind === 'video');
+          const keep = new Set(spreadPick(list, per));
+          out.push(...list.filter((i) => keep.has(i.id)));
+        }
+        return out.slice(0, MAX_SLIDES + 12);
+      }
       const q = { ...exploreQuery({ from: m!.from, to: m!.to }), order: 'asc' as const };
       const r = await backend.browse({ ...q, offset: 0, limit: 2000 });
       const list = r.items.filter((i) => i.kind === 'image' || i.kind === 'video');

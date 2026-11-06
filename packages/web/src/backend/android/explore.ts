@@ -8,7 +8,13 @@
  * use dates, kinds and names only (screenshots, panoramas by name, animations, years, on this day).
  */
 import {
+  calendarOf,
   classify,
+  computeInsights,
+  orientationOf,
+  videoLengthOf,
+  type CalendarYear,
+  type InsightRow,
   createGeoIndex,
   findTrips,
   foldText,
@@ -295,7 +301,54 @@ export function computeExplore(items: MediaItem[], now = Date.now()): Omit<Explo
     else years.set(y, { year: y, count: 1, coverId: it.id });
   }
 
-  return { memories: [...otd, ...trips], places: placeList, types, cameras, years: [...years.values()].sort((a, b) => b.year - a.year) };
+  // insights the native index can feed (no thumbhash colours / sun position here)
+  const insightRows: InsightRow[] = rows.map((it, i) => {
+    const r = R[i];
+    const gps = r.meta && isValidGps(r.meta.lat, r.meta.lon);
+    return {
+      id: it.id,
+      kind: it.kind,
+      localAt: it.localAt,
+      size: it.size,
+      width: it.width,
+      height: it.height,
+      duration: it.duration,
+      lat: gps ? (r.meta!.lat as number) : null,
+      lon: gps ? (r.meta!.lon as number) : null,
+      cc: r.place?.cc ?? null,
+      placeKey: r.place?.key ?? null,
+      city: r.place?.city ?? null,
+      flags: r.flags,
+      mtime: it.mtime,
+    };
+  });
+  const { stats, yearReviews, countries, cities, orientations, videoLengths, largest, recent, calendarYears, noLocation } = computeInsights(insightRows, { colors: false, dayTimes: false });
+
+  return {
+    memories: [...otd, ...trips],
+    places: placeList,
+    types,
+    cameras,
+    years: [...years.values()].sort((a, b) => b.year - a.year),
+    stats,
+    yearReviews,
+    countries,
+    cities,
+    orientations,
+    videoLengths,
+    largest,
+    recent,
+    calendarYears,
+    noLocation,
+  };
+}
+
+/** items per day of a year (calendar heatmap) */
+export function calendarFor(items: MediaItem[], year: number): CalendarYear {
+  return calendarOf(
+    year,
+    items.filter((i) => i.kind === 'image' || i.kind === 'video').map((i) => i.localAt),
+  );
 }
 
 export async function buildExplore(items: MediaItem[], now = Date.now()): Promise<ExploreResult> {
@@ -327,17 +380,28 @@ function flagMatch(it: MediaItem, r: Rec, flag: MediaFlagName): boolean {
 export function filterExplore(items: MediaItem[], q: BrowseQuery): MediaItem[] {
   const imageVideo = (q.kind as string) === 'image-video';
   const search = q.q ? parseSearch(q.q) : null;
-  if (!q.place && !q.camera && !q.flag && !imageVideo && !search) return items;
   const place = q.place?.toUpperCase();
   const bareCc = !!place && !place.includes('-');
   const camera = q.camera?.toLowerCase();
-  return items.filter((it) => {
+  const insight = !!(q.gps || q.orient || q.vlen || q.city || q.color || q.dup || q.daytime);
+  if (!q.place && !q.camera && !q.flag && !imageVideo && !search && !insight && !q.byAdded) return items;
+  const out = items.filter((it) => {
     if (imageVideo && it.kind !== 'image' && it.kind !== 'video') return false;
     const r = recOf(it);
     if (it.flags !== r.flags) it.flags = r.flags;
     if (q.flag && !flagMatch(it, r, q.flag)) return false;
     if (place && (bareCc ? r.place?.cc !== place : r.place?.key.toUpperCase() !== place)) return false;
     if (camera && r.cam?.key !== camera) return false;
+    if (insight) {
+      // colours, duplicates and sun-based times need server data: nothing matches locally
+      if (q.color || q.dup || q.daytime) return false;
+      const gps = !!r.meta && isValidGps(r.meta.lat, r.meta.lon);
+      if (q.gps === 'none' && gps) return false;
+      if (q.gps === 'any' && !gps) return false;
+      if (q.orient && orientationOf(it.width, it.height, r.flags) !== q.orient) return false;
+      if (q.vlen && (it.kind !== 'video' || videoLengthOf(it.duration) !== q.vlen)) return false;
+      if (q.city && r.place?.city !== q.city) return false;
+    }
     if (search) {
       if (search.flag && !flagMatch(it, r, search.flag)) return false;
       if (search.from !== undefined && it.localAt < search.from) return false;
@@ -347,6 +411,9 @@ export function filterExplore(items: MediaItem[], q: BrowseQuery): MediaItem[] {
     }
     return true;
   });
+  // "recently added": no index of when a file appeared → newest modification first
+  if (q.byAdded) out.sort((a, b) => b.mtime - a.mtime || (a.id < b.id ? 1 : -1));
+  return out;
 }
 
 export function geoPointsFor(items: MediaItem[]): GeoPoints {

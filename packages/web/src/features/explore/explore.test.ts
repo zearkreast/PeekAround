@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/store/persist', () => ({ load: (_k: string, d: unknown) => d, save: () => {} }));
 
 const { cameraLabel, countryName, dateRange, exploreQuery, flagEmoji, memoryLabel, memoryShort, spanDays, yearRange } = await import('./labels');
-const { boundsFilter, normalizeBbox, tileConfig } = await import('./mapUtil');
+const { boundsFilter, normalizeBbox, tileConfig, tileProblemOf } = await import('./mapUtil');
+const { bytesLabel, dayLabel, dayRange, mapFocusHref } = await import('./labels');
 const { memoryFromId } = await import('./memoryId');
 
 const D = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d);
@@ -59,6 +60,42 @@ describe('map helpers', () => {
     expect(tileConfig('osm', true)!.className).toBe('pm-tiles-dark');
     expect(tileConfig('osm', false)!.className).toBeUndefined();
     expect(tileConfig('osm', true)!.url).toContain('tile.openstreetmap.org');
+  });
+
+  it('HTTP backends load tiles through the server proxy; Android local mode goes upstream', () => {
+    const proxy = (st: string) => `http://127.0.0.1:47213/api/tiles/${st}/{z}/{x}/{y}.png`;
+    const osm = tileConfig('osm', true, proxy)!;
+    expect(osm).toMatchObject({ style: 'osm', proxied: true, url: 'http://127.0.0.1:47213/api/tiles/osm/{z}/{x}/{y}.png', className: 'pm-tiles-dark', maxZoom: 19 });
+    expect(tileConfig('carto', false, proxy)!.url).toContain('/api/tiles/osm/');
+    const sat = tileConfig('satellite', true, proxy)!;
+    expect(sat.className).toBeUndefined(); // imagery is never inverted
+    expect(sat.attribution).toContain('Esri');
+    const topo = tileConfig('topo', false)!;
+    expect(topo).toMatchObject({ proxied: false, subdomains: 'abc', maxZoom: 17 });
+    expect(topo.url).toContain('opentopomap.org');
+    expect(tileConfig('off', false, proxy)).toBeNull();
+  });
+
+  it('explains tile failures', () => {
+    expect(tileProblemOf('offline', 504)).toEqual({ kind: 'offline' });
+    expect(tileProblemOf('refused:403', 502)).toEqual({ kind: 'refused', status: 403 });
+    expect(tileProblemOf(null, 504)).toEqual({ kind: 'offline' });
+    expect(tileProblemOf(null, 500)).toEqual({ kind: 'unknown' });
+  });
+
+  it('insight labels and links', () => {
+    expect(dayRange('2024-02-29')).toEqual({ from: D(2024, 2, 29), to: D(2024, 3, 1) });
+    expect(dayRange('2023-02-29')).toBeNull();
+    expect(dayRange('nope')).toBeNull();
+    expect(dayLabel('2024-03-05', 'tr')).toBe('5 Mart 2024');
+    expect(bytesLabel(1536, 'en')).toBe('1.5 KB');
+    expect(bytesLabel(5 * 1024 ** 3, 'tr')).toBe('5 GB');
+    expect(mapFocusHref('12', 41.0082, 28.97841234)).toBe('/explore/map?focus=12&lat=41.008200&lon=28.978412');
+    expect(memoryFromId('year-2023')).toMatchObject({ kind: 'year', from: D(2023, 1, 1), to: D(2024, 1, 1) });
+    expect(memoryLabel({ id: 'year-2023', kind: 'year', from: D(2023, 1, 1), to: D(2024, 1, 1), count: 40, coverIds: [], months: [1, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2] }, 'tr')).toEqual({
+      title: '2023 yılı',
+      subtitle: '40 anı · 3 ay',
+    });
   });
 
   it('normalises wrapped Leaflet bounds', () => {

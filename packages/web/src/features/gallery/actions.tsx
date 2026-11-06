@@ -41,7 +41,7 @@ import {
   Share2,
   Trash2,
 } from 'lucide-react';
-import type { DeviceInfo, FileRef, MediaItem, ServerInfo } from '@peekaround/shared';
+import type { DeviceInfo, FileRef, FolderRef, MediaItem, ServerInfo } from '@peekaround/shared';
 import { joinRel } from '@peekaround/shared';
 import { useBackend, useInfo, type Backend } from '@/backend';
 import { desktop } from '@/backend/desktop';
@@ -106,6 +106,8 @@ export interface ActionCtx {
   isTemp(folderId: string): boolean;
   /** the linked phone a folder lives on (view + copy only: no delete/rename/move/edit/favorite), or null */
   deviceOf(folderId: string): DeviceInfo | null;
+  /** the remote (MEGA streaming) folder an item lives in (view + copy only), or null */
+  remoteOf?(folderId: string): FolderRef | null;
   nav: NavigateFunction;
   qc: QueryClient;
   t: ReturnType<typeof useT>;
@@ -169,7 +171,9 @@ async function refresh(qc: QueryClient) {
 
 const isMedia = (i: MediaItem) => i.kind === 'image' || i.kind === 'video';
 /** some items live on a linked phone (read + copy only) */
-export const onDevice = (items: MediaItem[], c: Pick<ActionCtx, 'deviceOf'>) => items.some((i) => !!c.deviceOf(i.folderId));
+export const onDevice = (items: MediaItem[], c: Pick<ActionCtx, 'deviceOf' | 'remoteOf'>) => items.some((i) => !!c.deviceOf(i.folderId)) || onRemote(items, c);
+/** some items stream from a MEGA link (read-only, copy to this computer) */
+export const onRemote = (items: MediaItem[], c: Pick<ActionCtx, 'remoteOf'>) => !!c.remoteOf && items.some((i) => !!c.remoteOf!(i.folderId));
 /** Android app in client mode: "download" saves on the phone natively (features/devices) */
 export const isPhoneClient = (c: Pick<ActionCtx, 'backend'>) => c.backend.kind === 'http' && isNative();
 
@@ -241,7 +245,8 @@ export const BUILTIN_ACTIONS: MediaAction[] = [
     group: 'primary',
     order: 30,
     primary: true,
-    visible: (items, c) => items.some(isMedia) && !onDevice(items, c),
+    // favorites live in our database: fine for MEGA items, not for phone items
+    visible: (items, c) => items.some(isMedia) && !items.some((i) => !!c.deviceOf(i.folderId)),
     run: (items, c) => setFavorite(items, !items.every((i) => i.favorite), c),
   },
   {
@@ -350,6 +355,7 @@ export function useMediaActions(surface: ActionSurface = 'menu') {
   const registry = useRegistry((s) => s.actions);
   const temp = libs.data?.temp;
   const devices = libs.data?.devices;
+  const libraries = libs.data?.libraries;
 
   const ctx: ActionCtx = useMemo(
     () => ({
@@ -360,13 +366,14 @@ export function useMediaActions(surface: ActionSurface = 'menu') {
       target,
       isTemp: (folderId: string) => !!temp?.some((f) => f.id === folderId),
       deviceOf: (folderId: string) => devices?.find((d) => d.folders.some((f) => f.id === folderId)) ?? null,
+      remoteOf: (folderId: string) => libraries?.flatMap((l) => l.folders).find((f) => f.id === folderId && !!f.remote) ?? null,
       nav,
       qc,
       t,
       toast,
       dialogs,
     }),
-    [backend, info, surface, target, temp, devices, nav, qc, t, dialogs],
+    [backend, info, surface, target, temp, devices, libraries, nav, qc, t, dialogs],
   );
 
   return useMemo(() => {

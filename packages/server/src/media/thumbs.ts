@@ -7,6 +7,7 @@ import sharp, { type Sharp } from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
 import type { Ffmpeg } from '../ffmpeg.js';
 import type { MediaRow } from './mapper.js';
+import type { ThumbQuality } from '@peekaround/shared';
 
 sharp.cache(false); // never keep file handles open (Windows can't rename/delete otherwise)
 
@@ -37,7 +38,7 @@ export interface RemoteImageSource {
   strip(abs: string, n: number, h: number): Promise<Buffer>;
 }
 
-export const isRemoteAbs = (abs: string) => abs.startsWith('device://');
+export const isRemoteAbs = (abs: string) => abs.startsWith('device://') || abs.startsWith('remote://');
 
 interface Task {
   run: () => Promise<unknown>;
@@ -57,9 +58,16 @@ export class Limiter {
   private low: Task[] = [];
 
   constructor(
-    readonly max: number,
-    readonly lowMax = Math.max(1, max - 1),
+    public max: number,
+    public lowMax = Math.max(1, max - 1),
   ) {}
+
+  /** change the slot counts at runtime (Settings.indexIntensity); running tasks finish normally */
+  resize(max: number, lowMax = Math.max(1, max - 1)) {
+    this.max = Math.max(1, Math.floor(max));
+    this.lowMax = Math.max(1, Math.min(this.max, Math.floor(lowMax)));
+    this.pump();
+  }
 
   run<T>(fn: () => Promise<T>, prio: Priority): { promise: Promise<T>; promote: () => void } {
     let task!: Task;
@@ -147,11 +155,24 @@ export class ThumbService {
   /** one base decode (320 + 640 [+ 1600 for videos] + thumbhash) per source, whatever asked for it */
   private bases = new Map<string, { promise: Promise<BaseResult>; promote: () => void }>();
   readonly limiter = new Limiter(Math.max(2, Math.min(6, os.cpus().length)));
-  /** set by the DeviceHub */
+  /** set by the DeviceHub (device://) */
   remote: RemoteImageSource | null = null;
+  /** set by the RemoteService (remote:// — MEGA links streamed without downloading) */
+  cloud: RemoteImageSource | null = null;
+  /** Settings.thumbQuality: WebP quality of new thumbnails */
+  quality: ThumbQuality = 'normal';
+
+  /** WebP quality for a rendition whose 'normal' quality is `base` */
+  q(base: number): number {
+    return this.quality === 'low' ? base - 14 : this.quality === 'high' ? Math.min(95, base + 8) : base;
+  }
 
   private remoteOf(abs: string): RemoteImageSource | null {
     if (!isRemoteAbs(abs)) return null;
+    if (abs.startsWith('remote://')) {
+      if (!this.cloud) throw new Error('remote media unavailable');
+      return this.cloud;
+    }
     if (!this.remote) throw new Error('device media unavailable');
     return this.remote;
   }
@@ -238,7 +259,7 @@ export class ThumbService {
       const frame = await this.ffmpeg.frame(abs, row.duration ? Math.min(row.duration * 0.1, 3) : 1, 1600);
       if (!frame.length) return null;
       await fsp.mkdir(path.dirname(f640), { recursive: true });
-      await toFileAtomic(sharp(frame).resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 85 }), this.file(key, '1600.webp'));
+      await toFileAtomic(sharp(frame).resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: this.q(85) }), this.file(key, '1600.webp'));
       base = sharp(frame);
     } else {
       base = await this.source(abs, row, 1280);
@@ -254,10 +275,10 @@ export class ThumbService {
     await fsp.mkdir(path.dirname(f640), { recursive: true });
     const { data, info } = await base
       .resize(640, 640, { fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 80 })
+      .webp({ quality: this.q(80) })
       .toBuffer({ resolveWithObject: true });
     // 320 first, 640 last: thumb() treats an existing 640 as "base done"
-    await toFileAtomic(sharp(data).resize(320, 320, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 78 }), f320);
+    await toFileAtomic(sharp(data).resize(320, 320, { fit: 'inside', withoutEnlargement: true }).webp({ quality: this.q(78) }), f320);
     await writeAtomic(f640, data);
     const small = await sharp(data)
       .resize(100, 100, { fit: 'inside' })
@@ -283,7 +304,7 @@ export class ThumbService {
         const buf = await remote.thumb(abs, 1600, prio);
         return this.limiter.run(async () => {
           await fsp.mkdir(path.dirname(f), { recursive: true });
-          await toFileAtomic(sharp(buf, { failOn: 'none' }).rotate().resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 85 }), f);
+          await toFileAtomic(sharp(buf, { failOn: 'none' }).rotate().resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: this.q(85) }), f);
           return f;
         }, prio).promise;
       });
@@ -294,7 +315,7 @@ export class ThumbService {
           const src = await this.source(abs, row, 1600);
           if (!src) return null;
           await fsp.mkdir(path.dirname(f), { recursive: true });
-          await toFileAtomic(src.resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 85 }), f);
+          await toFileAtomic(src.resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: this.q(85) }), f);
           return f;
         }, prio).promise,
       );

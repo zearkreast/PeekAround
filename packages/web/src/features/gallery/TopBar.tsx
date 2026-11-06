@@ -31,7 +31,7 @@ import { useJobs } from '@/store/jobs';
 import { useLocation as useGalleryLocation } from '@/store/location';
 import { usePrefs } from '@/store/prefs';
 import { useIsMobile } from '@/lib/useMedia';
-import { BottomSheet, Button, IconButton, Input, MenuItem, MenuLabel, MenuSep, Modal, Popover, ProgressRing, Segmented, Slider, Switch } from '@/components/ui';
+import { BottomSheet, Button, IconButton, Input, MenuItem, MenuLabel, MenuSep, Modal, Popover, ProgressRing, Segmented, Slider } from '@/components/ui';
 import { canGoBackInHistory } from '@/lib/backStack';
 import { pickAndUpload } from '@/features/upload/actions';
 import { AddMenuExtras } from '@/features/upload/AddMenuExtras';
@@ -144,10 +144,6 @@ function ViewOptions() {
       </MenuItem>
       <MenuSep />
       <div className="flex flex-col gap-3 px-2.5 py-2">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[13px] text-fg">{t('gallery.recursive')}</span>
-          <Switch checked={p.recursive} onChange={(recursive) => p.set({ recursive })} />
-        </div>
         <Segmented
           size="sm"
           value={p.gridMode}
@@ -334,7 +330,7 @@ function MobileSearch() {
   );
 }
 
-const ROOT_TABS = ['/', '/timeline', '/explore', '/library', '/settings'];
+const ROOT_TABS = ['/', '/explore', '/library', '/settings'];
 
 export function TopBar() {
   const t = useT();

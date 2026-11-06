@@ -3,12 +3,20 @@ import mobileEn from './mobile.en';
 import devicesEn from './devices.en';
 import exploreEn from './explore.en';
 import remoteEn from './remote.en';
+import mapEn from './map.en';
+import megaEn from './mega.en';
+import settingsEn from './settings.en';
+import libraryEn from './library.en';
 
 const en: Messages = {
   ...mobileEn,
   ...devicesEn,
   ...exploreEn,
   ...remoteEn,
+  ...mapEn,
+  ...megaEn,
+  ...settingsEn,
+  ...libraryEn,
   'app.tagline': 'Your folders, beautifully.',
   'common.cancel': 'Cancel',
   'common.close': 'Close',

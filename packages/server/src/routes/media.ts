@@ -4,7 +4,8 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { MEDIA_FLAG, type MediaDetails } from '@peekaround/shared';
 import yazl from 'yazl';
-import type { Ctx } from '../context.js';
+import { getSettings, type Ctx } from '../context.js';
+import { hwAccelArgs } from '../runtime-settings.js';
 import type { FolderRow } from '../library.js';
 import type { MediaRow } from '../media/mapper.js';
 import { toItem } from '../media/mapper.js';
@@ -14,6 +15,7 @@ import { HttpError, resolveInRoot, trimChars } from '../paths.js';
 import { lazyDeviceStream } from '../devices/hub.js';
 import { deviceDetails, deviceFfmpegInput, relOfRow, requireOnline, serveDeviceFile } from '../devices/media.js';
 import { mediaRow, mediaSource, type Plugin } from './util.js';
+import { hideDeviceMedia } from './albums.js';
 
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 
@@ -22,6 +24,7 @@ export const mediaRoutes: Plugin = (app, ctx) => {
     const r = mediaRow(ctx, req.params.id);
     const src = mediaSource(ctx, r);
     if (src.device) return deviceDetails(ctx, r, src.folder);
+    if (src.remote) return ctx.remote.details(r, src.folder);
     const { abs, folder } = src;
     const extra = r.extra ? JSON.parse(r.extra) : null;
     return {
@@ -72,6 +75,8 @@ export const mediaRoutes: Plugin = (app, ctx) => {
     const r = mediaRow(ctx, req.params.id);
     const src = mediaSource(ctx, r);
     if (src.device) return serveDeviceFile(ctx, r, src.folder, req, reply, !!req.query.download);
+    // remote (MEGA): ranged reads mapped onto MEGA (AES-CTR → seekable <video>), viewed images cached
+    if (src.remote) return ctx.remote.serveFile(r, src.folder, req, reply, !!req.query.download);
     const { abs } = src;
     if (!(await fsp.access(abs).then(() => true, () => false))) throw new HttpError(404, 'File missing');
     if (req.query.download) reply.header('Content-Disposition', contentDisposition(r.name));
@@ -133,12 +138,15 @@ export const mediaRoutes: Plugin = (app, ctx) => {
     const src = mediaSource(ctx, r);
     // device videos: ffmpeg reads our own ranged /file endpoint over loopback (seekable, moov-at-end safe)
     if (src.device) requireOnline(ctx, src.folder);
-    const input = src.device ? deviceFfmpegInput(ctx, r) : ['-i', src.abs];
+    // remote videos: the same loopback trick, our /file endpoint maps ranges onto MEGA
+    const input = src.device ? deviceFfmpegInput(ctx, r) : src.remote ? ctx.remote.ffmpegInput(r) : ['-i', src.abs];
     const t = Math.max(0, Number(req.query.t) || 0);
     const proc = ctx.ffmpeg.spawn([
       '-loglevel',
       'error',
       ...(t ? ['-ss', t.toFixed(2)] : []),
+      // Settings.hwAccel: GPU decode (falls back to software when no device is usable)
+      ...hwAccelArgs(getSettings(ctx)),
       ...input,
       '-map',
       '0:v:0',
@@ -177,9 +185,31 @@ export const mediaRoutes: Plugin = (app, ctx) => {
 
   /** Download several media files (or a whole directory) as a zip stream. */
   const deviceEntry = deviceEntryFactory(ctx);
-  app.get<{ Querystring: { ids?: string; folderId?: string; dir?: string; name?: string } }>('/api/download', HEAVY_LIMIT, async (req, reply) => {
+  app.get<{ Querystring: { ids?: string; folderId?: string; dir?: string; name?: string; albumId?: string } }>('/api/download', HEAVY_LIMIT, async (req, reply) => {
+    // a whole album (its items wherever they live)
+    if (req.query.albumId && !req.query.ids) {
+      const noDevices = hideDeviceMedia(ctx, req);
+      const ids = ctx.db.all<{ media_id: number }>(
+        `SELECT media_id FROM album_items WHERE album_id = ?${noDevices ? ' AND media_id IN (SELECT m.id FROM media m JOIN folders f ON f.id = m.folder_id WHERE f.device_id IS NULL)' : ''} ORDER BY position`,
+        Number(req.query.albumId),
+      );
+      req.query.ids = ids.map((r) => r.media_id).join(',');
+    }
     const zip = new yazl.ZipFile();
     let count = 0;
+    // yazl never listens for errors of addReadStream sources: forward them (an unhandled one would crash the process)
+    const streams: import('node:stream').Readable[] = [];
+    const addStream = (s: import('node:stream').Readable, name: string, size: number) => {
+      s.on('error', (e) => zip.emit('error', e));
+      streams.push(s);
+      zip.addReadStream(s, name, { compress: false, size });
+    };
+    // client gone mid-download: yazl leaves the open entry paused forever — destroy the streamed entries
+    // so their phone / MEGA transfers (and MEGA transfer slots) are released
+    reply.raw.on('close', () => {
+      if (reply.raw.writableFinished) return;
+      for (const s of streams) s.destroy();
+    });
     if (req.query.ids) {
       const used = new Set<string>();
       for (const id of req.query.ids.split(',').filter(Boolean)) {
@@ -188,14 +218,15 @@ export const mediaRoutes: Plugin = (app, ctx) => {
         let n = r.name;
         for (let i = 1; used.has(n); i++) n = r.name.replace(/(\.[^.]*)?$/, ` (${i})$1`);
         used.add(n);
-        if (src.device) zip.addReadStream(deviceEntry(src.folder, r), n, { compress: false, size: r.size });
+        if (src.device) addStream(deviceEntry(src.folder, r), n, r.size);
+        else if (src.remote) addStream(ctx.remote.zipEntry(src.folder, r), n, r.size);
         else zip.addFile(src.abs, n, { compress: false });
         count++;
       }
     } else if (req.query.folderId) {
       const folder = ctx.lib.folderRow(req.query.folderId);
-      if (folder.device_id) {
-        // phone folder: entries from the index, each streamed through the tunnel when the zip reaches it
+      if (folder.device_id || folder.remote) {
+        // phone / MEGA folder: entries from the index, each streamed (tunnel / MEGA) when the zip reaches it
         const dir = req.query.dir ? trimChars(String(req.query.dir), '/') : '';
         const rows = ctx.db.all<MediaRow>(
           `SELECT * FROM media WHERE folder_id = ?${dir ? ' AND (dir = ? OR substr(dir, 1, ?) = ?)' : ''} ORDER BY dir, name`,
@@ -204,11 +235,12 @@ export const mediaRoutes: Plugin = (app, ctx) => {
         );
         for (const r of rows) {
           const rel = relOfRow(r);
-          zip.addReadStream(deviceEntry(folder, r), dir ? rel.slice(dir.length + 1) : rel, { compress: false, size: r.size });
+          const entry = folder.remote ? ctx.remote.zipEntry(folder, r) : deviceEntry(folder, r);
+          addStream(entry, dir ? rel.slice(dir.length + 1) : rel, r.size);
           count++;
         }
       }
-      const base = folder.device_id ? null : resolveInRoot(folder.path, req.query.dir ?? '');
+      const base = folder.device_id || folder.remote ? null : resolveInRoot(folder.path, req.query.dir ?? '');
       const walk = (d: string, rel: string) => {
         for (const e of fs.readdirSync(d, { withFileTypes: true })) {
           if (ctx.scanner.skipName(e.name)) continue;

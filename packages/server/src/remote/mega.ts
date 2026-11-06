@@ -1,6 +1,8 @@
-import type { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { kindOf, type RemoteInspect, type RemoteNode } from '@peekaround/shared';
 import { HttpError } from '../paths.js';
+import { b64url, ctrRangeDecryptor, decryptFileAttr, parseFa, parseFileAttrResponse } from './crypto.js';
 
 /**
  * MEGA (mega.nz / mega.co.nz) public links: parsing, an injectable client (megajs 1.3.10, Node
@@ -72,6 +74,12 @@ export interface MegaNode {
   children: MegaNode[];
   /** decrypted content stream (files only); destroy it to cancel */
   download(opts: { signal: AbortSignal }): Readable;
+  /** raw MEGA file attribute list ("<cluster>:<type>*<handle>/…"), when the listing had one */
+  fa?: string | null;
+  /** decrypted bytes [start, end] (inclusive) — random access, used for streaming (files only) */
+  read?(opts: { start: number; end: number; signal: AbortSignal }): Readable;
+  /** decrypted file attribute: 0 = 120px square thumbnail, 1 = preview; null when the node has none */
+  attr?(type: 0 | 1, signal: AbortSignal): Promise<Buffer | null>;
 }
 
 export interface MegaClient {
@@ -85,28 +93,54 @@ export function megaClient(): MegaClient {
     async load(link) {
       const mod: any = await import('megajs');
       const File = mod.File ?? mod.default?.File;
-      const f = new File({ downloadId: link.id, key: link.key, directory: link.type === 'folder', loadedFile: link.sub?.id });
+      const API = mod.API ?? mod.default?.API;
+      // own API instance: its raw responses carry the file attributes (`fa`) megajs drops
+      const api = new API(false);
+      const fa = new Map<string, string>();
+      const orig = api.request.bind(api);
+      api.request = (json: any, cb: any, retry?: number) =>
+        orig(
+          json,
+          (err: unknown, resp: any) => {
+            if (!err && resp && typeof resp === 'object') {
+              if (Array.isArray(resp.f)) for (const n of resp.f) if (n && typeof n.fa === 'string') fa.set(String(n.h), n.fa);
+              if (typeof resp.fa === 'string' && json?.p) fa.set(String(json.p), resp.fa);
+            }
+            cb?.(err, resp);
+          },
+          retry,
+        );
+      const f = new File({ downloadId: link.id, key: link.key, directory: link.type === 'folder', loadedFile: link.sub?.id, api });
       let node: any;
       try {
         node = await f.loadAttributes();
       } catch (e) {
         throw megaError(e);
       }
-      return wrapMega(node);
+      return wrapMega(node, { api, link, fa });
     },
   };
 }
 
-function wrapMega(f: any): MegaNode {
+interface WrapCtx {
+  api: any;
+  link: MegaLink;
+  fa: Map<string, string>;
+}
+
+function wrapMega(f: any, c: WrapCtx): MegaNode {
   let kids: MegaNode[] | null = null;
+  const id = String(Array.isArray(f.downloadId) ? f.downloadId[1] : (f.nodeId ?? f.downloadId));
+  const key: Buffer | null = Buffer.isBuffer(f.key) ? f.key : null;
   return {
-    id: String(Array.isArray(f.downloadId) ? f.downloadId[1] : (f.nodeId ?? f.downloadId)),
+    id,
     name: typeof f.name === 'string' && f.name ? f.name : 'untitled',
     size: Number(f.size) || 0,
     directory: !!f.directory,
     timestamp: f.timestamp ? Number(f.timestamp) * 1000 : null,
+    fa: c.fa.get(id) ?? null,
     get children() {
-      kids ??= (f.children ?? []).map(wrapMega);
+      kids ??= (f.children ?? []).map((k: any) => wrapMega(k, c));
       return kids!;
     },
     download({ signal }) {
@@ -116,7 +150,121 @@ function wrapMega(f: any): MegaNode {
       else signal.addEventListener('abort', stop, { once: true });
       return s;
     },
+    read({ start, end, signal }) {
+      if (f.directory || !key) throw new HttpError(400, 'Not a file');
+      return megaRead(c, id, key, Number(f.size) || 0, start, end, signal);
+    },
+    async attr(type, signal) {
+      if (!key) return null;
+      return megaFileAttr(c, key, c.fa.get(id) ?? null, type, signal);
+    },
   };
+}
+
+// ── raw transfers (streaming) ──
+
+function apiRequest(api: any, json: Record<string, unknown>): Promise<any> {
+  return new Promise((resolve, reject) => {
+    try {
+      api.request(json, (err: unknown, resp: unknown) => (err ? reject(err) : resolve(resp)));
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+/** temporary download URLs per node (MEGA "g" command), reused for seeks */
+const DL_URLS = new Map<string, { url: string; at: number }>();
+const DL_URL_TTL = 10 * 60_000;
+
+async function downloadUrl(c: WrapCtx, nodeId: string, fresh: boolean): Promise<string> {
+  const k = `${c.link.id}/${nodeId}`;
+  const hit = DL_URLS.get(k);
+  if (!fresh && hit && Date.now() - hit.at < DL_URL_TTL) return hit.url;
+  const req: Record<string, unknown> =
+    c.link.type === 'folder' ? { a: 'g', g: 1, ssl: 2, n: nodeId, _querystring: { n: c.link.id } } : { a: 'g', g: 1, ssl: 2, p: c.link.id };
+  const resp = await apiRequest(c.api, req);
+  if (typeof resp?.g !== 'string' || !/^https?:/.test(resp.g)) {
+    const e = Number(resp?.e);
+    const tl = Number(resp?.tl);
+    if (e === -17 || tl > 0) throw Object.assign(new Error(`EOVERQUOTA (-17): Bandwidth limit reached: ${tl || 0} seconds until it resets`), tl > 0 ? { timeLimit: tl } : {});
+    throw new Error(e ? `MEGA error ${e}` : 'MEGA servers returned an invalid response, maybe caused by rate limit');
+  }
+  if (DL_URLS.size > 5000) DL_URLS.clear();
+  DL_URLS.set(k, { url: resp.g, at: Date.now() });
+  return resp.g;
+}
+
+function quotaError(res: Response): Error {
+  const left = Number(res.headers.get('x-mega-time-left'));
+  return Object.assign(new Error(`Bandwidth limit reached: ${left || 0} seconds until it resets`), left > 0 ? { timeLimit: left } : {});
+}
+
+/** ranged, decrypted read: one ciphertext request from the 16-byte aligned offset, retried before the first byte */
+function megaRead(c: WrapCtx, nodeId: string, key: Buffer, size: number, start: number, end: number, signal: AbortSignal): Readable {
+  const out = new PassThrough();
+  if (end >= size) end = size - 1;
+  if (start < 0 || start > end) {
+    process.nextTick(() => out.destroy(new HttpError(416, 'Range not satisfiable')));
+    return out;
+  }
+  const ctrl = new AbortController();
+  const abort = () => ctrl.abort();
+  if (signal.aborted) ctrl.abort();
+  else signal.addEventListener('abort', abort, { once: true });
+  out.once('close', abort);
+  const aligned = start - (start % 16);
+  void (async () => {
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (ctrl.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      if (attempt) await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+      let res: Response;
+      try {
+        const url = await downloadUrl(c, nodeId, attempt > 0);
+        res = await fetch(`${url}/${aligned}-${end}`, { signal: ctrl.signal });
+      } catch (e) {
+        lastErr = e;
+        if ((e as Error)?.name === 'AbortError' || /OVERQUOTA|ENOENT|EBLOCKED|EACCESS|EKEY/.test(String((e as Error)?.message))) throw e;
+        continue;
+      }
+      if (res.status === 509) throw quotaError(res);
+      if (!res.ok || !res.body) {
+        lastErr = new Error(`MEGA returned a ${res.status} status code`);
+        await res.body?.cancel().catch(() => {});
+        // 403/404: expired download URL → fresh one; 5xx: congestion → back off
+        continue;
+      }
+      const body = Readable.fromWeb(res.body as any);
+      await pipeline(body, ctrRangeDecryptor(key, aligned, start, end), out);
+      return;
+    }
+    throw lastErr ?? new Error('MEGA download failed');
+  })().catch((e) => {
+    if (!out.destroyed) out.destroy(e?.name === 'AbortError' ? Object.assign(new Error('aborted'), { name: 'AbortError' }) : e);
+  }).finally(() => signal.removeEventListener('abort', abort));
+  return out;
+}
+
+/** cached file attribute host per handle: the POST url from "ufa" */
+async function megaFileAttr(c: WrapCtx, key: Buffer, fa: string | null, type: 0 | 1, signal: AbortSignal): Promise<Buffer | null> {
+  const ref = parseFa(fa).find((r) => r.type === type);
+  if (!ref) return null;
+  const req: Record<string, unknown> = { a: 'ufa', fah: b64url(ref.handle), ssl: 2, r: 1 };
+  if (c.link.type === 'folder') req._querystring = { n: c.link.id };
+  const resp = await apiRequest(c.api, req);
+  const base = typeof resp?.p === 'string' ? resp.p : null;
+  if (!base) throw new Error('MEGA returned no file attribute host');
+  // the web client posts the handles to "<p>/<type>"; older hosts answer on "<p>" too
+  for (const url of [`${base}/${type}`, base]) {
+    const res = await fetch(url, { method: 'POST', body: new Uint8Array(ref.handle), signal });
+    if (res.status === 509) throw quotaError(res);
+    if (!res.ok) continue;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const part = parseFileAttrResponse(buf).get(ref.handle.toString('hex'));
+    if (part && part.length) return decryptFileAttr(key, part);
+  }
+  return null;
 }
 
 /** Friendly messages for MEGA failures. */

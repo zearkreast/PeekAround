@@ -1,5 +1,31 @@
-import type { Lang } from '@/store/prefs';
+import { usePrefs, type Lang } from '@/store/prefs';
 import { locale } from '@/i18n';
+
+/** Settings → language: 24/12 h clock override */
+function withClock(opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptions {
+  const hc = usePrefs.getState().hourCycle;
+  if (hc === 'auto' || (!opts.timeStyle && opts.hour === undefined)) return opts;
+  return { ...opts, hourCycle: hc };
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * Settings → language: ISO dates ("2024-07-05 14:30"). Only for dateStyle / timeStyle formats
+ * (headers like "Sat, 5 Jul" stay localized); null = use Intl.
+ */
+export function isoDate(d: Date, opts: Intl.DateTimeFormatOptions, utc: boolean): string | null {
+  const p = usePrefs.getState();
+  if (p.dateFormat !== 'iso' || !opts.dateStyle) return null;
+  const [y, mo, da, h, mi] = utc
+    ? [d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes()]
+    : [d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()];
+  if (!Number.isFinite(y)) return null;
+  const date = `${y}-${pad(mo + 1)}-${pad(da)}`;
+  if (!opts.timeStyle) return date;
+  const time = p.hourCycle === 'h12' ? `${((h + 11) % 12) + 1}:${pad(mi)} ${h < 12 ? 'AM' : 'PM'}` : `${pad(h)}:${pad(mi)}`;
+  return `${date} ${time}`;
+}
 
 export function formatBytes(n: number): string {
   if (!n) return '0 B';
@@ -26,7 +52,9 @@ export function formatTime(s: number): string {
 
 export function formatDate(ms: number, lang: Lang, opts: Intl.DateTimeFormatOptions = { dateStyle: 'medium' }): string {
   try {
-    return new Intl.DateTimeFormat(locale(lang), opts).format(new Date(ms));
+    const iso = isoDate(new Date(ms), opts, false);
+    if (iso) return iso;
+    return new Intl.DateTimeFormat(locale(lang), withClock(opts)).format(new Date(ms));
   } catch {
     return new Date(ms).toLocaleDateString();
   }
@@ -56,10 +84,11 @@ export function durationUntil(ms: number, lang: Lang): string {
 
 const dtfCache = new Map<string, Intl.DateTimeFormat>();
 function dtf(lang: Lang, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const k = lang + JSON.stringify(opts);
+  const o = withClock(opts);
+  const k = lang + JSON.stringify(o);
   let f = dtfCache.get(k);
   if (!f) {
-    f = new Intl.DateTimeFormat(locale(lang), { ...opts, timeZone: 'UTC' });
+    f = new Intl.DateTimeFormat(locale(lang), { ...o, timeZone: 'UTC' });
     dtfCache.set(k, f);
   }
   return f;
@@ -68,7 +97,7 @@ function dtf(lang: Lang, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat 
 /** Format a wall-clock-as-UTC timestamp (MediaItem.localAt) — never shifts the day. */
 export function formatLocal(localAt: number, lang: Lang, opts: Intl.DateTimeFormatOptions = { dateStyle: 'medium' }): string {
   try {
-    return dtf(lang, opts).format(new Date(localAt));
+    return isoDate(new Date(localAt), opts, true) ?? dtf(lang, opts).format(new Date(localAt));
   } catch {
     return new Date(localAt).toISOString().slice(0, 10);
   }

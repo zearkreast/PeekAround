@@ -245,7 +245,7 @@ export function Segmented<T extends string>({
 }) {
   const id = useId();
   return (
-    <div className={cn('inline-flex rounded-xl border border-line bg-surface p-0.5', className)}>
+    <div data-segmented className={cn('inline-flex rounded-xl border border-line bg-surface p-0.5', className)}>
       {options.map((o) => (
         <button
           key={o.value}

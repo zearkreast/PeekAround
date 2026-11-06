@@ -140,7 +140,7 @@ export function Builder() {
               <Button variant="secondary" icon={<Plus className="size-4" />} onClick={() => setPicker('visual')} data-testid="empty-add">
                 {t('slide.addMedia')}
               </Button>
-              <Button variant="primary" onClick={() => nav('/timeline')}>
+              <Button variant="primary" onClick={() => nav('/')}>
                 {t('slide.goTimeline')}
               </Button>
             </div>

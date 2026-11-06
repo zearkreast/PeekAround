@@ -6,9 +6,9 @@ import { cn } from '@/lib/cn';
 import { useSelecting } from '@/store/selection';
 
 const TABS: { to: string; icon: typeof Images; label: MessageKey; match: (p: string) => boolean }[] = [
-  { to: '/timeline', icon: Images, label: 'mobile.nav.photos', match: (p) => p === '/' || p.startsWith('/timeline') || p.startsWith('/favorites') || p.startsWith('/search') },
+  { to: '/', icon: Images, label: 'mobile.nav.photos', match: (p) => p === '/' || p.startsWith('/timeline') || p.startsWith('/favorites') || p.startsWith('/search') },
   { to: '/explore', icon: Compass, label: 'mobile.nav.explore', match: (p) => p.startsWith('/explore') },
-  { to: '/library', icon: Library, label: 'mobile.nav.library', match: (p) => p === '/library' || p.startsWith('/library/') || p.startsWith('/folder/') || p.startsWith('/collage') || p.startsWith('/slideshow') || p.startsWith('/fonts') },
+  { to: '/library', icon: Library, label: 'mobile.nav.library', match: (p) => p === '/library' || p.startsWith('/library/') || p.startsWith('/folder/') || p.startsWith('/album') || p.startsWith('/collage') || p.startsWith('/slideshow') || p.startsWith('/fonts') },
   { to: '/settings', icon: Settings, label: 'mobile.nav.settings', match: (p) => p.startsWith('/settings') },
 ];
 

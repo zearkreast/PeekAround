@@ -1,5 +1,6 @@
 import type {
   BrowseSkeleton,
+  CalendarYear,
   ExploreResult,
   GeoPoints,
   BrowseQuery,
@@ -28,7 +29,7 @@ import { loadLocal, saveLocal, type LocalConfig, type LocalFolder } from './conf
 import { readFontInfo } from './fontname';
 import { PeekLocal, writeBlob, type NativeFile } from './plugin';
 import { buildSkeleton } from './skeleton';
-import { buildExplore, filterExplore, geoPointsFor } from './explore';
+import { buildExplore, calendarFor, filterExplore, geoPointsFor } from './explore';
 import { ensureIndexed } from './indexBridge';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#f97316', '#10b981', '#06b6d4', '#3b82f6'];
@@ -224,7 +225,7 @@ export class AndroidLocalBackend implements Backend {
   async info(): Promise<ServerInfo> {
     return {
       name: APP_NAME,
-      version: '1.1.0',
+      version: '1.2.0',
       apiVersion: API_VERSION,
       mode: 'android-local',
       hostname: this.label,
@@ -363,6 +364,12 @@ export class AndroidLocalBackend implements Backend {
   async explore(): Promise<ExploreResult> {
     await this.ready;
     return buildExplore(await this.collect(this.allFolders().filter((f) => !f.temp)));
+  }
+
+  /** calendar heatmap: items per day of a year */
+  async calendar(year: number): Promise<CalendarYear> {
+    await this.ready;
+    return calendarFor(await this.collect(this.allFolders().filter((f) => !f.temp)), year);
   }
 
   async geoPoints(q: BrowseQuery): Promise<GeoPoints> {

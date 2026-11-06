@@ -5,6 +5,7 @@ import { Carousel, Thumb, useEnter } from './cards';
 import { useExplore } from './data';
 import { memoryShort, playHref } from './labels';
 import { motion } from 'motion/react';
+import { usePrefs } from '@/store/prefs';
 import './explore.css';
 
 /** Google-Photos-like memories row (home / timeline top). Renders nothing without memories. */
@@ -14,7 +15,9 @@ export function MemoriesStrip({ className }: { className?: string }) {
   const { result } = useExplore();
   const enter = useEnter();
   const list = result.memories;
-  if (!list.length) return null;
+  // Settings → explore: memories strip off
+  const show = usePrefs((s) => s.showMemories);
+  if (!list.length || !show) return null;
   return (
     <motion.section {...enter} className={className ?? 'mb-8'} data-memories-strip>
       <div className="mb-3 flex items-center gap-2">

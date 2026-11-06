@@ -174,3 +174,23 @@ export function normalizeCamera(make: string | null | undefined, model: string |
 export function cameraKey(make: string | null, model: string): string {
   return `${(make ?? '').toLowerCase()}|${model.toLowerCase()}`;
 }
+
+// ───────────────────────── Messaging apps ─────────────────────────
+
+/**
+ * Files that came through messaging apps (WhatsApp, Telegram, Signal, Messenger …): those apps
+ * re-encode photos and strip EXIF, so they never have a location — useful to explain an empty map.
+ */
+export function isMessagingName(name: string, dir = ''): boolean {
+  const n = name.toLowerCase();
+  if (/^(img|vid|aud|ptt|stk)-\d{8}-wa\d{3,}/.test(n) || n.startsWith('whatsapp ')) return true;
+  if (/^(photo|video)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}/.test(n)) return true; // Telegram Desktop
+  if (/^signal-\d{4}-\d{2}-\d{2}/.test(n) || /^received_\d{6,}/.test(n)) return true;
+  const d = dir.toLowerCase();
+  return /(^|\/)(whatsapp|telegram|signal|messenger)( |\/|$)/.test(d) || d.includes('whatsapp images') || d.includes('telegram images');
+}
+
+/** SQL twin of isMessagingName (columns name, dir) — used by the metadata diagnostics */
+export const MESSAGING_SQL = `(lower(name) GLOB '[iva][mit][gdo]-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-wa[0-9]*' OR lower(name) LIKE 'whatsapp %'
+  OR lower(name) GLOB '[pv][hi][od][te]*_[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_*' OR lower(name) LIKE 'signal-%' OR lower(name) GLOB 'received_[0-9]*'
+  OR lower(dir) LIKE '%whatsapp%' OR lower(dir) LIKE '%telegram%')`;

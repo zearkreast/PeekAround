@@ -1,24 +1,52 @@
 /** Map helpers — pure (unit tested). */
-import type { Settings } from '@peekaround/shared';
+import { TILE_STYLES, tileStyleOf, type MapTileStyle, type Settings } from '@peekaround/shared';
 
 export type Point = [id: string, lat: number, lon: number];
 
 export interface TileConfig {
+  style: MapTileStyle;
   url: string;
   attribution: string;
   subdomains?: string;
+  maxZoom: number;
   /** tiles are light-only: darken them with a CSS filter in dark themes */
   className?: string;
+  /** loaded through the PeekAround server (proxy + cache) */
+  proxied: boolean;
 }
 
-const OSM_ATTR = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors';
+/**
+ * Tile layer for Settings.mapTiles + current theme; null = no tiles.
+ * @param proxy the server's tile URL template (Backend.tileUrl) — HTTP backends always proxy, so
+ *   the browser / Electron renderer never talks to the tile servers itself (OSM tile policy:
+ *   identifying User-Agent, no loopback Referer); Android local mode has no server → upstream.
+ */
+export function tileConfig(mode: Settings['mapTiles'], dark: boolean, proxy?: (style: MapTileStyle) => string): TileConfig | null {
+  const style = tileStyleOf(mode);
+  if (!style) return null;
+  const s = TILE_STYLES[style];
+  const className = dark && s.darkFilter ? 'pm-tiles-dark' : undefined;
+  if (proxy) return { style, url: proxy(style), attribution: s.attribution, maxZoom: s.maxZoom, className, proxied: true };
+  return {
+    style,
+    url: s.url,
+    subdomains: s.subdomains.length ? s.subdomains.join('') : undefined,
+    attribution: s.attribution,
+    maxZoom: s.maxZoom,
+    className,
+    proxied: false,
+  };
+}
 
-/** tile layer for Settings.mapTiles + current theme; null = no tiles */
-export function tileConfig(mode: Settings['mapTiles'], dark: boolean): TileConfig | null {
-  if (mode === 'off') return null;
-  // 'carto' is kept for old settings only: CARTO basemaps now require an API key, so every
-  // mode renders OpenStreetMap tiles (darkened in dark themes).
-  return { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: OSM_ATTR, className: dark ? 'pm-tiles-dark' : undefined };
+/** server answer for a failed tile (X-Peek-Tile-Error) → UI message kind */
+export type TileProblem = { kind: 'offline' } | { kind: 'refused'; status: number } | { kind: 'unknown' };
+
+export function tileProblemOf(header: string | null | undefined, httpStatus: number): TileProblem {
+  const h = (header ?? '').trim();
+  if (h === 'offline') return { kind: 'offline' };
+  if (h.startsWith('refused')) return { kind: 'refused', status: Number(h.split(':')[1]) || httpStatus || 0 };
+  if (httpStatus === 504 || httpStatus === 0) return { kind: 'offline' };
+  return { kind: 'unknown' };
 }
 
 const wrapLon = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;

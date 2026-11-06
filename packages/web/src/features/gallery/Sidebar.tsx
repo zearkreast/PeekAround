@@ -1,15 +1,19 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
-  CalendarDays,
+  BookImage,
+  ChevronDown,
   ChevronRight,
   Clock3,
   Folder,
   FolderOpen,
+  GripVertical,
   Heart,
-  Home,
+  Images,
   LayoutGrid,
+  Library as LibraryGlyph,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -19,8 +23,11 @@ import {
   WifiOff,
   X,
   Compass,
+  Cloud,
 } from 'lucide-react';
-import type { FolderRef, Library } from '@peekaround/shared';
+import { useRemote } from '@/features/remote/RemoteHost';
+import { RemoteBadge } from '@/features/remote/RemoteFolders';
+import type { Album, FolderRef, Library } from '@peekaround/shared';
 import { useBackend, useConnection, useInfo } from '@/backend';
 import { useT, useLang } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -35,10 +42,20 @@ import { useScan } from '@/store/scan';
 import { IconButton, ProgressRing } from '@/components/ui';
 import { BACK, useBackHandler } from '@/lib/backStack';
 import { LogoMark, LogoWordmark } from '@/components/Logo';
-import { LibraryEditor } from '@/features/settings/LibraryEditor';
 import { DevicesNav } from '@/features/devices/DevicesNav';
+import { albumHref, albumsSupported, useAlbums } from '@/features/library/albums';
+import { addToAlbum } from '@/features/library/AlbumPicker';
+import { isMediaDrag, readMediaDrop } from '@/features/library/dnd';
+import { useLibraryUi } from '@/features/library/LibraryHost';
+import { NewAlbumButton } from '@/features/library/AlbumsPage';
 
-function NavItem({ to, icon, label, collapsed, end }: { to: string; icon: ReactNode; label: string; collapsed: boolean; end?: boolean }) {
+/** the one moving "active" pill of the sidebar (shared layoutId → it glides between rows) */
+function ActivePill() {
+  return <motion.span layoutId="nav-active" className="absolute inset-0 rounded-xl bg-surface-2" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />;
+}
+
+function NavItem({ to, icon, label, collapsed, end, match }: { to: string; icon: ReactNode; label: string; collapsed: boolean; end?: boolean; match?: (p: string) => boolean }) {
+  const loc = useLocation();
   return (
     <NavLink
       to={to}
@@ -47,20 +64,14 @@ function NavItem({ to, icon, label, collapsed, end }: { to: string; icon: ReactN
       className={({ isActive }) =>
         cn(
           'group relative flex h-9 items-center gap-3 rounded-xl px-2.5 text-[13.5px] font-medium transition-colors [&_svg]:size-[18px] [&_svg]:shrink-0',
-          isActive ? 'text-fg' : 'text-dim hover:bg-surface hover:text-fg',
+          isActive || match?.(loc.pathname) ? 'text-fg' : 'text-dim hover:bg-surface hover:text-fg',
         )
       }
     >
       {({ isActive }) => (
         <>
-          {isActive && (
-            <motion.span
-              layoutId="nav-active"
-              className="absolute inset-0 rounded-xl bg-surface-2"
-              transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-            />
-          )}
-          <span className="relative z-10 flex items-center gap-3">
+          {(isActive || match?.(loc.pathname)) && <ActivePill />}
+          <span className="relative z-10 flex min-w-0 items-center gap-3">
             {icon}
             {!collapsed && <span className="truncate">{label}</span>}
           </span>
@@ -96,18 +107,20 @@ function DirNode({ folderId, dir, name, count, depth }: { folderId: string; dir:
         data-drop-folder={folderId}
         data-drop-dir={dir}
         data-drop-label={name}
-        className={cn('group flex h-8 items-center rounded-lg pr-2 text-[13px] transition-colors', active ? 'bg-surface-2 text-fg' : 'text-dim hover:bg-surface hover:text-fg')}
+        className={cn('group relative flex h-8 items-center rounded-lg pr-2 text-[13px] transition-colors', active ? 'text-fg' : 'text-dim hover:bg-surface hover:text-fg')}
         style={{ paddingLeft: 6 + depth * 14 }}
       >
+        {active && <ActivePill />}
         <button
           type="button"
           aria-label={t('mobile.expand')}
+          aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
-          className="grid size-5 shrink-0 place-items-center rounded text-faint hover:text-fg"
+          className="relative z-10 grid size-5 shrink-0 place-items-center rounded text-faint hover:text-fg"
         >
           <ChevronRight className={cn('size-3.5 transition-transform duration-200', open && 'rotate-90')} />
         </button>
-        <NavLink to={href} className="flex min-w-0 flex-1 items-center gap-2">
+        <NavLink to={href} className="relative z-10 flex min-w-0 flex-1 items-center gap-2">
           {open ? <FolderOpen className="size-4 shrink-0" /> : <Folder className="size-4 shrink-0" />}
           <span className="truncate">{name}</span>
           <span className="ml-auto text-[11px] text-faint tabular-nums opacity-0 transition-opacity group-hover:opacity-100">{count || ''}</span>
@@ -124,38 +137,89 @@ function DirNode({ folderId, dir, name, count, depth }: { folderId: string; dir:
   );
 }
 
-function LibraryRow({ lib, collapsed, onEdit }: { lib: Library; collapsed: boolean; onEdit: () => void }) {
+const LIB_MIME = 'application/x-peekaround-library';
+
+function LibraryRow({
+  lib,
+  collapsed,
+  onEdit,
+  reorder,
+}: {
+  lib: Library;
+  collapsed: boolean;
+  onEdit: () => void;
+  /** drag & drop reordering (writable servers) */
+  reorder: { dragging: string | null; setDragging: (id: string | null) => void; drop: (id: string, before: boolean) => void } | null;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [insert, setInsert] = useState<'before' | 'after' | null>(null);
   const loc = useLocation();
   const active = loc.pathname === libraryHref(lib.id) || lib.folders.some((f) => loc.pathname.startsWith(`/folder/${f.id}`));
+  const exact = loc.pathname === libraryHref(lib.id);
   const single = lib.folders.length === 1 ? lib.folders[0] : null;
+  const remote = lib.folders.find((f) => f.remote)?.remote;
   return (
-    <div>
+    <div
+      className={cn('relative', reorder?.dragging === lib.id && 'nav-dragging', insert === 'before' && 'nav-insert-before', insert === 'after' && 'nav-insert-after')}
+      onDragOver={(e) => {
+        if (!reorder?.dragging || reorder.dragging === lib.id || !Array.from(e.dataTransfer.types).includes(LIB_MIME)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const r = e.currentTarget.getBoundingClientRect();
+        setInsert(e.clientY < r.top + Math.min(r.height, 36) / 2 ? 'before' : 'after');
+      }}
+      onDragLeave={() => setInsert(null)}
+      onDrop={(e) => {
+        if (!reorder?.dragging || !Array.from(e.dataTransfer.types).includes(LIB_MIME)) return;
+        e.preventDefault();
+        const where = insert;
+        setInsert(null);
+        if (where) reorder.drop(lib.id, where === 'before');
+      }}
+    >
       <div
-        data-drop-folder={single?.id}
+        data-drop-folder={single && !single.remote && !single.device ? single.id : undefined}
         data-drop-dir={single ? '' : undefined}
         data-drop-label={lib.name}
         onContextMenu={(e) => {
           e.preventDefault();
           onEdit();
         }}
-        className={cn('group relative flex h-9 items-center rounded-xl text-[13.5px] font-medium transition-colors', active ? 'bg-surface-2 text-fg' : 'text-dim hover:bg-surface hover:text-fg')}
+        className={cn('group relative flex h-9 items-center rounded-xl text-[13.5px] font-medium transition-colors', active ? 'text-fg' : 'text-dim hover:bg-surface hover:text-fg')}
       >
-        <NavLink to={libraryHref(lib.id)} className="flex min-w-0 flex-1 items-center gap-3 px-2.5" title={collapsed ? lib.name : undefined}>
-          <span className="grid size-[22px] shrink-0 place-items-center rounded-lg text-white" style={{ background: lib.color }}>
+        {exact ? <ActivePill /> : active && <span className="absolute inset-0 rounded-xl bg-surface" />}
+        {reorder && !collapsed && (
+          <span
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(LIB_MIME, lib.id);
+              e.dataTransfer.effectAllowed = 'move';
+              reorder.setDragging(lib.id);
+            }}
+            onDragEnd={() => reorder.setDragging(null)}
+            title={t('nav2.reorderHint')}
+            className="absolute top-1/2 left-0 z-20 grid h-6 w-3 -translate-y-1/2 cursor-grab place-items-center text-faint opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+          >
+            <GripVertical className="size-3" />
+          </span>
+        )}
+        <NavLink to={libraryHref(lib.id)} className="relative z-10 flex min-w-0 flex-1 items-center gap-3 px-2.5" title={collapsed ? lib.name : undefined}>
+          <span className="grid size-[22px] shrink-0 place-items-center rounded-lg text-white transition-transform duration-200 group-hover:scale-110" style={{ background: lib.color }}>
             <LibraryIcon name={lib.icon} className="size-3.5" />
           </span>
           {!collapsed && <span className="truncate">{lib.name}</span>}
+          {!collapsed && remote && <RemoteBadge remote={remote} />}
         </NavLink>
         {!collapsed && (
           <>
-            <span className="mr-1 text-[11px] text-faint tabular-nums group-hover:hidden">{lib.mediaCount || ''}</span>
+            <span className="relative z-10 mr-1 text-[11px] text-faint tabular-nums group-hover:hidden">{lib.mediaCount || ''}</span>
             <button
               type="button"
               aria-label={t('mobile.expand')}
+              aria-expanded={open}
               onClick={() => setOpen((o) => !o)}
-              className="mr-1 hidden size-6 place-items-center rounded-md text-faint hover:bg-surface-2 hover:text-fg group-hover:grid"
+              className="relative z-10 mr-1 hidden size-6 place-items-center rounded-md text-faint hover:bg-surface-2 hover:text-fg group-hover:grid"
             >
               <ChevronRight className={cn('size-3.5 transition-transform duration-200', open && 'rotate-90')} />
             </button>
@@ -177,6 +241,55 @@ function LibraryRow({ lib, collapsed, onEdit }: { lib: Library; collapsed: boole
   );
 }
 
+/** album row: link + drop target for dragged tiles */
+function AlbumRow({ album, collapsed }: { album: Album; collapsed: boolean }) {
+  const t = useT();
+  const backend = useBackend();
+  const qc = useQueryClient();
+  const loc = useLocation();
+  const [over, setOver] = useState(false);
+  const active = loc.pathname === albumHref(album.id);
+  return (
+    <div
+      onDragOver={(e) => {
+        if (!isMediaDrag(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        if (!isMediaDrag(e)) return;
+        e.preventDefault();
+        setOver(false);
+        void addToAlbum(backend, qc, album, readMediaDrop(e), t);
+      }}
+      title={over ? t('nav2.dropToAlbum', { name: album.name }) : collapsed ? album.name : undefined}
+      data-drop-album={album.id}
+    >
+      <NavLink
+        to={albumHref(album.id)}
+        className={cn(
+          'group relative flex h-9 items-center gap-3 rounded-xl px-2.5 text-[13.5px] font-medium transition-colors',
+          active ? 'text-fg' : 'text-dim hover:bg-surface hover:text-fg',
+          over && 'album-drop',
+        )}
+      >
+        {active && <ActivePill />}
+        <span className="relative z-10 size-[22px] shrink-0 overflow-hidden rounded-lg bg-surface-2 transition-transform duration-200 group-hover:scale-110">
+          {album.coverId ? (
+            <img src={backend.thumbUrl(album.coverId, 320)} alt="" draggable={false} className="size-full object-cover" />
+          ) : (
+            <BookImage className="m-[3px] size-4 text-faint" />
+          )}
+        </span>
+        {!collapsed && <span className="relative z-10 min-w-0 flex-1 truncate">{album.name}</span>}
+        {!collapsed && <span className="relative z-10 text-[11px] text-faint tabular-nums">{album.count || ''}</span>}
+      </NavLink>
+    </div>
+  );
+}
+
 function TempRow({ f }: { f: FolderRef }) {
   const backend = useBackend();
   const lang = useLang();
@@ -185,14 +298,13 @@ function TempRow({ f }: { f: FolderRef }) {
   const loc = useLocation();
   const active = loc.pathname.startsWith(`/folder/${f.id}`);
   return (
-    <div
-      className={cn('group flex h-9 items-center gap-2.5 rounded-xl px-2.5 text-[13px] transition-colors', active ? 'bg-surface-2 text-fg' : 'text-dim hover:bg-surface hover:text-fg')}
-    >
-      <NavLink to={folderHref(f.id)} className="flex min-w-0 flex-1 items-center gap-2.5">
+    <div className={cn('group relative flex h-9 items-center gap-2.5 rounded-xl px-2.5 text-[13px] transition-colors', active ? 'text-fg' : 'text-dim hover:bg-surface hover:text-fg')}>
+      {active && <ActivePill />}
+      <NavLink to={folderHref(f.id)} className="relative z-10 flex min-w-0 flex-1 items-center gap-2.5">
         <Clock3 className="size-4 shrink-0 text-warn" />
         <span className="truncate">{f.name}</span>
       </NavLink>
-      {f.expiresAt && <span className="shrink-0 text-[11px] text-faint group-hover:hidden">{durationUntil(f.expiresAt, lang)}</span>}
+      {f.expiresAt && <span className="relative z-10 shrink-0 text-[11px] text-faint group-hover:hidden">{durationUntil(f.expiresAt, lang)}</span>}
       <button
         type="button"
         title={t('temp.close')}
@@ -200,7 +312,7 @@ function TempRow({ f }: { f: FolderRef }) {
           await backend.removeFolder(f.id);
           if (active) nav('/');
         }}
-        className="hidden size-6 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-2 hover:text-fg group-hover:grid"
+        className="relative z-10 hidden size-6 shrink-0 place-items-center rounded-md text-faint hover:bg-surface-2 hover:text-fg group-hover:grid"
       >
         <X className="size-3.5" />
       </button>
@@ -208,15 +320,68 @@ function TempRow({ f }: { f: FolderRef }) {
   );
 }
 
-function SectionTitle({ children, action, collapsed }: { children: ReactNode; action?: ReactNode; collapsed: boolean }) {
+/** section header; with `id` its body collapses (remembered), with `to` the title is a link */
+function SectionTitle({ children, action, collapsed, id, to }: { children: ReactNode; action?: ReactNode; collapsed: boolean; id?: string; to?: string }) {
+  const t = useT();
+  const closed = usePrefs((s) => (id ? !!s.navCollapsed[id] : false));
   if (collapsed) return <div className="mx-3 my-3 h-px bg-line" />;
+  const toggle = () => {
+    if (!id) return;
+    const p = usePrefs.getState();
+    p.set({ navCollapsed: { ...p.navCollapsed, [id]: !closed } });
+  };
+  const label = 'text-[11px] font-semibold tracking-[0.08em] uppercase';
   return (
-    <div className="flex h-8 items-center justify-between px-2.5 pt-4 pb-1">
-      <span className="text-[11px] font-semibold tracking-[0.08em] text-faint uppercase">{children}</span>
+    <div className="flex h-8 items-center justify-between pt-4 pb-1 pr-0.5 pl-1">
+      <span className="flex min-w-0 items-center">
+        {id && (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={!closed}
+            aria-label={t('nav2.section.toggle', { name: typeof children === 'string' ? children : id })}
+            className="grid size-5 place-items-center rounded-md text-faint transition-colors hover:bg-surface-2 hover:text-fg"
+          >
+            <ChevronDown className={cn('size-3 transition-transform duration-200', closed && '-rotate-90')} />
+          </button>
+        )}
+        {to ? (
+          <NavLink to={to} end className={cn(label, 'rounded-md px-1 py-0.5 text-faint transition-colors hover:text-fg [&.active]:text-fg')}>
+            {children}
+          </NavLink>
+        ) : (
+          <span className={cn(label, 'px-1 text-faint', id && 'cursor-pointer select-none')} onClick={toggle}>
+            {children}
+          </span>
+        )}
+      </span>
       {action}
     </div>
   );
 }
+
+/** collapsible body of a section (height animation) */
+function SectionBody({ id, children, collapsed }: { id: string; children: ReactNode; collapsed: boolean }) {
+  const closed = usePrefs((s) => !!s.navCollapsed[id]);
+  return (
+    <AnimatePresence initial={false}>
+      {(!closed || collapsed) && (
+        <motion.div
+          key="body"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-col gap-0.5 overflow-hidden"
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+const photosMatch = (p: string) => p === '/' || p.startsWith('/timeline') || p.startsWith('/search');
 
 export function Sidebar() {
   const t = useT();
@@ -232,11 +397,38 @@ export function Sidebar() {
     if (mobile) setChrome({ navOpen: false });
   }, [loc.pathname, mobile, setChrome]);
   const libs = useLibraries();
+  const albums = useAlbums();
   const info = useInfo();
+  const backend = useBackend();
+  const qc = useQueryClient();
   const conn = useConnection();
   const scan = useScan();
-  const [editing, setEditing] = useState<Library | 'new' | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
   const canEdit = info ? !info.caps.readonly : false;
+  const libraries = libs.data?.libraries ?? [];
+  const albumList = albums.data ?? [];
+  const showAlbums = albumsSupported(backend);
+  const editLib = (l: Library | 'new') => canEdit && useLibraryUi.getState().edit(l);
+
+  // drag & drop library order → server (optimistic)
+  const reorder =
+    canEdit && backend.orderLibraries && libraries.length > 1
+      ? {
+          dragging,
+          setDragging,
+          drop: (targetId: string, before: boolean) => {
+            const moving = dragging;
+            setDragging(null);
+            if (!moving || moving === targetId) return;
+            const ids = libraries.map((l) => l.id).filter((id) => id !== moving);
+            const at = ids.indexOf(targetId) + (before ? 0 : 1);
+            ids.splice(at, 0, moving);
+            const key = ['libraries', backend.id];
+            qc.setQueryData(key, (d: typeof libs.data) => (d ? { ...d, libraries: ids.map((id) => d.libraries.find((l) => l.id === id)!).filter(Boolean) } : d));
+            void backend.orderLibraries!(ids).finally(() => qc.invalidateQueries({ queryKey: ['libraries'] }));
+          },
+        }
+      : null;
 
   const body = (
     <>
@@ -245,34 +437,72 @@ export function Sidebar() {
         {!collapsed && <LogoWordmark />}
       </div>
 
-      <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-3">
-        <NavItem to="/" end icon={<Home />} label={t('nav.home')} collapsed={collapsed} />
-        <NavItem to="/timeline" icon={<CalendarDays />} label={t('nav.timeline')} collapsed={collapsed} />
+      <nav className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-3" data-testid="sidebar">
+        <NavItem to="/" end icon={<Images />} label={t('nav2.photos')} collapsed={collapsed} match={photosMatch} />
         <NavItem to="/explore" icon={<Compass />} label={t('mobile.nav.explore')} collapsed={collapsed} />
         <NavItem to="/favorites" icon={<Heart />} label={t('nav.favorites')} collapsed={collapsed} />
+        <NavItem to="/library" end icon={<LibraryGlyph />} label={t('nav2.library')} collapsed={collapsed} />
+
+        {showAlbums && (
+          <>
+            <SectionTitle collapsed={collapsed} id="albums" to="/albums" action={<NewAlbumButton compact />}>
+              {t('nav2.albums')}
+            </SectionTitle>
+            <SectionBody id="albums" collapsed={collapsed}>
+              {albumList.slice(0, 12).map((a) => (
+                <AlbumRow key={a.id} album={a} collapsed={collapsed} />
+              ))}
+              {albumList.length > 12 && !collapsed && (
+                <NavLink to="/albums" className="flex h-8 items-center rounded-lg px-2.5 text-[12.5px] text-faint hover:bg-surface hover:text-fg">
+                  {t('nav2.allAlbums')} ({albumList.length})
+                </NavLink>
+              )}
+              {!albumList.length && (collapsed ? <NavItem to="/albums" icon={<BookImage />} label={t('nav2.albums')} collapsed /> : albums.isSuccess && (
+                <NavLink to="/albums" className="flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[12.5px] text-faint transition-colors hover:bg-surface hover:text-fg">
+                  <BookImage className="size-4" />
+                  {t('album.empty.title')}
+                </NavLink>
+              ))}
+            </SectionBody>
+          </>
+        )}
 
         <SectionTitle
           collapsed={collapsed}
+          id="libraries"
           action={
             canEdit && (
-              <button type="button" title={t('nav.addLibrary')} onClick={() => setEditing('new')} className="grid size-6 place-items-center rounded-md text-faint hover:bg-surface-2 hover:text-fg">
-                <Plus className="size-3.5" />
-              </button>
+              <span className="flex items-center gap-0.5">
+                {backend.remoteAddFolder && (
+                  <button
+                    type="button"
+                    title={t('mega.addLink')}
+                    aria-label={t('mega.addLink')}
+                    onClick={() => useRemote.getState().show(null, { intent: 'stream' })}
+                    className="grid size-6 place-items-center rounded-md text-faint hover:bg-surface-2 hover:text-[#e5484d]"
+                  >
+                    <Cloud className="size-3.5" />
+                  </button>
+                )}
+                <button type="button" title={t('nav.addLibrary')} aria-label={t('nav.addLibrary')} onClick={() => editLib('new')} className="grid size-6 place-items-center rounded-md text-faint hover:bg-surface-2 hover:text-fg">
+                  <Plus className="size-3.5" />
+                </button>
+              </span>
             )
           }
         >
           {t('nav.libraries')}
         </SectionTitle>
-        <div className="flex flex-col gap-0.5">
-          {libs.data?.libraries.map((l) => (
-            <LibraryRow key={l.id} lib={l} collapsed={collapsed} onEdit={() => canEdit && setEditing(l)} />
+        <SectionBody id="libraries" collapsed={collapsed}>
+          {libraries.map((l) => (
+            <LibraryRow key={l.id} lib={l} collapsed={collapsed} onEdit={() => editLib(l)} reorder={reorder} />
           ))}
           {collapsed && canEdit && (
-            <button type="button" title={t('nav.addLibrary')} onClick={() => setEditing('new')} className="flex h-9 items-center justify-center rounded-xl text-faint hover:bg-surface hover:text-fg">
+            <button type="button" title={t('nav.addLibrary')} onClick={() => editLib('new')} className="flex h-9 items-center justify-center rounded-xl text-faint hover:bg-surface hover:text-fg">
               <Plus className="size-4" />
             </button>
           )}
-        </div>
+        </SectionBody>
 
         {!!libs.data?.temp.length && (
           <>
@@ -285,10 +515,14 @@ export function Sidebar() {
 
         <DevicesNav collapsed={collapsed} title={(c) => <SectionTitle collapsed={collapsed}>{c}</SectionTitle>} />
 
-        <SectionTitle collapsed={collapsed}>{t('nav.tools')}</SectionTitle>
-        <NavItem to="/collage" icon={<LayoutGrid />} label={t('nav.collage')} collapsed={collapsed} />
-        <NavItem to="/slideshow" icon={<Presentation />} label={t('nav.slideshow')} collapsed={collapsed} />
-        <NavItem to="/fonts" icon={<Type />} label={t('nav.fonts')} collapsed={collapsed} />
+        <SectionTitle collapsed={collapsed} id="tools">
+          {t('nav.tools')}
+        </SectionTitle>
+        <SectionBody id="tools" collapsed={collapsed}>
+          <NavItem to="/collage" icon={<LayoutGrid />} label={t('nav.collage')} collapsed={collapsed} />
+          <NavItem to="/slideshow" icon={<Presentation />} label={t('nav.slideshow')} collapsed={collapsed} />
+          <NavItem to="/fonts" icon={<Type />} label={t('nav.fonts')} collapsed={collapsed} />
+        </SectionBody>
       </nav>
 
       <div className="flex flex-col gap-1 border-t border-line px-2.5 py-2.5">
@@ -322,7 +556,6 @@ export function Sidebar() {
           </IconButton>
         )}
       </div>
-      <LibraryEditor value={editing} onClose={() => setEditing(null)} />
     </>
   );
 

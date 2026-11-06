@@ -21,7 +21,9 @@ Aynı uygulama üç şekilde çalışır:
 ## Özellikler
 
 **Galeri**
-- Kütüphane = bir veya birden çok klasör; klasör ağacı, zaman çizelgesi (gün başlıkları + yer adı), favoriler, arama, sıralama/filtre
+- Kütüphane = bir veya birden çok klasör; **Tümü | Klasörler** görünümü, istatistikler (boyut, tarih aralığı, son tarama), kapak fotoğrafı, yeniden tarama, **hariç tutma kuralları** (klasör adı/glob, en küçük boyut, gizli klasörler)
+- **Albümler:** kütüphanelerden bağımsız, elle oluşturulan koleksiyonlar (sürükle-bırak, özel sıralama, kapak, zip indir)
+- Açılışta **Fotoğraflar** (zaman çizelgesi + anılar), **Kitaplık** sayfasında albümler, kütüphaneler, cihazlar ve araçlar bir arada
 - Kesin yerleşimli *justified* ızgara: 100 bin dosyada bile kayma/zıplama yok; Google Fotoğraflar tarzı **tarih kaydırıcısı** ile istediğin aya anında atla
 - Telefonda **iki parmakla ızgara yoğunluğu**, uzun basıp sürükleyerek çoklu seçim, alt menü (Fotoğraflar / Keşfet / Kitaplık / Ayarlar), Android geri tuşu desteği
 - Küçük resimden tam ekrana **paylaşılan öğe geçişi**; görüntüleyicide parmağı takip eden kaydırma, odak noktalı pinch-zoom, çift dokunma, aşağı kaydırıp kapatma, yukarı kaydırıp bilgi; EXIF + konum + kamera bilgisi
@@ -32,7 +34,9 @@ Aynı uygulama üç şekilde çalışır:
 
 **Keşfet — otomatik gruplama (Google Fotoğraflar gibi)**
 - **Anılar:** “Geçmişte bugün” ve otomatik bulunan **geziler** (“Antalya gezisi · Tem 2024”), hikâye tarzı anı oynatıcı
-- **Yerler + harita:** GPS’ten çevrimdışı yer adı (“Kadıköy, İstanbul”), il/eyalet bazında gruplar, küçük resimli kümelerle harita (harita karoları için internet gerekir, yer listesi çevrimdışı çalışır)
+- **Yerler + harita:** GPS’ten çevrimdışı yer adı (“Kadıköy, İstanbul”), ülke → bölge → şehir, küçük resimli kümelerle harita (standart / topoğrafik / uydu). Harita karoları sunucu üzerinden çekilip önbelleğe alınır; bakılan bölgeler çevrimdışı da görünür
+- Konum EXIF’in yanında **XMP**’den ve **Google Takeout** `.json` dosyalarından da okunur; Ayarlar → “Konum ve meta veri” kartı hangi dosyalarda konum olmadığını gösterir
+- **Daha fazla Keşfet:** yıl özeti, gece çekimleri ve altın saat, renkler, dikey/yatay/panorama, kısa klipler/uzun videolar, en büyük dosyalar, son eklenenler, **kopyalar**, takvim ısı haritası, “Beni şaşırt”
 - **Türler + kameralar:** videolar, ekran görüntüleri, selfie’ler, panoramalar, animasyonlar; telefon/kamera modeline göre; yıllar
 - Doğal dille arama: “istanbul 2023 video”, “Ağustos 2024”, “selfie”
 - Tarihler fotoğrafın çekildiği yerin saatine göre gruplanır (Ayarlar → Keşfet’ten ev saat dilimi)
@@ -49,7 +53,7 @@ Aynı uygulama üç şekilde çalışır:
 - Kütüphanedeki zip’lere “Göz at” ile geçici bakma; Türkçe Windows zip’lerindeki (CP857) dosya adları doğru çözülür
 - Masaüstünde bırakılan klasör: **kütüphaneye bağla** (kopyalamadan) veya **buraya kopyala**
 - Android’de **Paylaş → PeekAround**
-- **MEGA linkleri:** mega.nz dosya/klasör linkini yapıştır, sürükle ya da MEGA uygulamasından paylaş → ağacı gör, seç, kalıcı indir veya geçici aç
+- **MEGA linkleri:** mega.nz dosya/klasör linkini yapıştır, sürükle ya da MEGA uygulamasından paylaş → **indirmeden izle** (link kütüphane klasörü olur; fotoğraflar/videolar MEGA’dan akışla açılır, sadece küçük resimler ve sınırlı bir önbellek diske yazılır) veya seçip bilgisayara kopyala
 
 **Düzenleme (her zaman kopyaya: `ad_edit.jpg`, `ad_edit-2.jpg` …)**
 - Fotoğraf editörü: pozlama, kontrast, sıcaklık, gölge/vurgu, vinyet, gren… (WebGL), filtre ön ayarları, kırp/döndür/çevir/düzleştir, **özel fontlu metin katmanları**, geri/ileri al, önce/sonra
@@ -59,7 +63,9 @@ Aynı uygulama üç şekilde çalışır:
 - **Fontlar**: TTF/OTF/WOFF/WOFF2 yükle; tüm editörlerde canlı önizlemeli font seçici; Türkçe karakterli hazır fontlar
 
 **Diğer**
-- Türkçe / İngilizce arayüz, koyu/açık tema, vurgu rengi, animasyon seviyesi (tam/azaltılmış/kapalı)
+- Türkçe / İngilizce arayüz, koyu/açık tema, vurgu rengi, animasyon seviyesi (tam/azaltılmış/kapalı), sayfa geçişleri
+- Aranabilir, bölümlere ayrılmış **Ayarlar** (ızgara, görüntüleyici, video, önbellek, performans, gizlilik, klavye kısayolları, ayar yedeği); `?` ile kısayol listesi
+- Masaüstü: sistem tepsisi, oturum açılışında başlat, güncelleme denetimi, bildirimler, görev çubuğunda ilerleme, dosyaları pencereden dışarı sürükleme
 - PWA: telefondan “Ana ekrana ekle”
 - Ağdaki sunucular mDNS ile otomatik bulunur (Android uygulaması), ayarlarda bağlantı adresi + QR kod
 
@@ -126,7 +132,7 @@ Bağlantıyı daha sonra Ayarlar → Bağlantı’dan değiştirebilirsin.
 
 ## Geliştirme
 
-Gereksinimler: Node.js ≥ 22.13 (24 önerilir), ffmpeg + ffprobe (PATH’te).
+Gereksinimler: Node.js ≥ 22.13 (24 önerilir), ffmpeg (PATH’te; ffprobe varsa kullanılır, yoksa gerekmez).
 
 ```bash
 npm install
@@ -187,7 +193,7 @@ git push origin v1.0.0
 ## Atıflar
 
 - Yer adları: [GeoNames](https://www.geonames.org/) (CC BY 4.0) — `packages/web/public/geo/ATTRIBUTION.txt`
-- Harita: © [OpenStreetMap](https://www.openstreetmap.org/copyright) katkıcıları (Leaflet, supercluster)
+- Harita: © [OpenStreetMap](https://www.openstreetmap.org/copyright) katkıcıları (Leaflet, supercluster); topoğrafik: © [OpenTopoMap](https://opentopomap.org) (CC-BY-SA); uydu: © Esri, Maxar, Earthstar Geographics
 
 ## Lisans
 

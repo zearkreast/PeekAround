@@ -1,9 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
-import { useQueryClient } from '@tanstack/react-query';
-import { Check, Clock, Compass, Search } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, Clock, Compass, Search, Trash2 } from 'lucide-react';
 import type { Settings } from '@peekaround/shared';
-import { foldText, systemTimeZone, tzOffsetAt } from '@peekaround/shared';
+import { foldText, systemTimeZone, tileStyleOf, tzOffsetAt } from '@peekaround/shared';
+import { useLang } from '@/i18n';
+import { bytesLabel } from './labels';
 import { useBackend, useInfo } from '@/backend';
 import { useT } from '@/i18n';
 import { useSettings } from '@/lib/queries';
@@ -69,6 +71,21 @@ export function ExploreSettings({ delay = 0.1 }: { delay?: number }) {
   const zones = useMemo(() => (pick ? allTimeZones() : []), [pick]);
   const shown = useMemo(() => filterZones(zones, q).slice(0, 400), [zones, q]);
   const device = systemTimeZone();
+  const lang = useLang();
+  const tileCache = useQuery({ queryKey: ['tile-cache', backend.id], queryFn: () => backend.tileCache!(), enabled: !!backend.tileCache, staleTime: 10_000 });
+  const [clearing, setClearing] = useState(false);
+  const clearTiles = async () => {
+    setClearing(true);
+    try {
+      await backend.clearTileCache?.();
+      await tileCache.refetch();
+      toast.success(t('map.settings.cleared'));
+    } catch (e) {
+      toast.error(t('common.error'), (e as Error).message);
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const update = async (patch: Partial<Settings>) => {
     try {
@@ -98,17 +115,48 @@ export function ExploreSettings({ delay = 0.1 }: { delay?: number }) {
         {t('explore.settings.title')}
       </h2>
       <div className="flex flex-col divide-y divide-line">
-        <Row label={t('explore.settings.mapTiles')} hint={t('explore.settings.mapTilesHint')}>
+        <Row label={t('map.settings.style')} hint={backend.tileUrl ? t('map.settings.styleHint') : t('map.settings.styleHintDirect')}>
           <Segmented
             size="sm"
-            value={s.mapTiles === 'off' ? 'off' : 'osm'}
+            value={tileStyleOf(s.mapTiles) ?? 'off'}
             onChange={(mapTiles) => !ro && void update({ mapTiles })}
             options={[
-              { value: 'osm', label: t('explore.settings.tiles.osm') },
-              { value: 'off', label: t('explore.settings.tiles.off') },
+              { value: 'osm', label: t('map.style.osm') },
+              { value: 'topo', label: t('map.style.topo') },
+              { value: 'satellite', label: t('map.style.satellite') },
+              { value: 'off', label: t('map.style.off') },
             ]}
           />
         </Row>
+        {backend.tileCache && (
+          <Row
+            label={t('map.settings.cache')}
+            hint={
+              tileCache.data
+                ? t('map.settings.cacheUsage', { size: bytesLabel(tileCache.data.bytes, lang), limit: bytesLabel((s.tileCacheMb ?? tileCache.data.limitMb) * 1024 * 1024, lang), n: tileCache.data.files })
+                : undefined
+            }
+          >
+            <select
+              aria-label={t('map.settings.cacheLimit')}
+              title={t('map.settings.cacheLimit')}
+              value={String(s.tileCacheMb ?? 512)}
+              disabled={ro}
+              onChange={(e) => void update({ tileCacheMb: Number(e.target.value) }).then(() => tileCache.refetch())}
+              className="h-9 rounded-lg border border-line bg-surface-2 px-2 text-sm"
+              data-setting="tileCacheMb"
+            >
+              {[128, 256, 512, 1024, 2048, 4096].map((mb) => (
+                <option key={mb} value={mb}>
+                  {mb >= 1024 ? `${mb / 1024} GB` : `${mb} MB`}
+                </option>
+              ))}
+            </select>
+            <Button variant="secondary" size="sm" icon={<Trash2 className="size-4" />} loading={clearing} onClick={() => void clearTiles()} data-action="clear-tiles">
+              {t('map.settings.clear')}
+            </Button>
+          </Row>
+        )}
         <Row label={t('explore.settings.homeTz')} hint={t('explore.settings.homeTzHint')}>
           <Button variant="secondary" size="sm" icon={<Clock className="size-4" />} disabled={ro} onClick={() => setPick(true)} data-action="pick-tz">
             <span className="max-w-[180px] truncate">{tz.replace(/_/g, ' ')}</span>

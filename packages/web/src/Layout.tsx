@@ -1,5 +1,5 @@
-import { Suspense, useEffect, useRef } from 'react';
-import { Outlet, useLocation as useRouterLocation, useNavigate } from 'react-router';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useLocation as useRouterLocation, useNavigate, useOutlet } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
 import { setNavigate } from '@/lib/nav';
 import { notifyHistoryChange } from '@/lib/backStack';
@@ -19,10 +19,23 @@ import { Viewer } from '@/features/viewer/Viewer';
 import { ShareHandler } from '@/features/android/ShareHandler';
 import { DevicesHost } from '@/features/devices/DevicesHost';
 import { RemoteHost } from '@/features/remote/RemoteHost';
+import { LibraryHost } from '@/features/library/LibraryHost';
+import { SettingsHost } from '@/features/settings/SettingsHost';
 import { initAndroidBack } from '@/backend/android/back';
 
 /** Full-screen tools (editors, slideshow player) render without the gallery chrome. */
 const IMMERSIVE = /^\/(edit\/|slideshow\/play|explore\/memory\/[^/]+\/play)/;
+
+/**
+ * The route element as it was when this page mounted: the page that animates out keeps showing
+ * itself (a plain <Outlet /> would render the NEW route inside the exiting page → a duplicate
+ * page flashing during the transition).
+ */
+function FrozenOutlet() {
+  const outlet = useOutlet();
+  const [frozen] = useState(outlet);
+  return frozen;
+}
 
 export function Layout() {
   useThemeEffect();
@@ -35,13 +48,6 @@ export function Layout() {
   // Android hardware / predictive back ↔ JS back stack
   useEffect(() => initAndroidBack(), []);
   useEffect(() => notifyHistoryChange(), [loc.key]);
-
-  // phones open on the photo timeline (Google Photos style); home stays one tap away in Library
-  const first = useRef(true);
-  useEffect(() => {
-    if (first.current && mobile && loc.pathname === '/' && !loc.search) nav('/timeline', { replace: true });
-    first.current = false;
-  }, [mobile, loc.pathname, loc.search, nav]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
@@ -72,7 +78,7 @@ export function Layout() {
                     </div>
                   }
                 >
-                  <Outlet />
+                  <FrozenOutlet />
                 </Suspense>
               </motion.div>
             </AnimatePresence>
@@ -88,6 +94,8 @@ export function Layout() {
       <ShareHandler />
       <DevicesHost />
       <RemoteHost />
+      <LibraryHost />
+      <SettingsHost />
       <Splash />
     </ScrollContext.Provider>
   );

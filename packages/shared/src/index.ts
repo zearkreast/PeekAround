@@ -4,6 +4,8 @@
  * and the Android local backend so every platform speaks the same language.
  */
 
+import type { ExploreExtras } from './insights';
+
 export const APP_NAME = 'PeekAround';
 export const API_VERSION = 1;
 
@@ -85,6 +87,8 @@ export interface FolderRef {
   mediaCount: number;
   /** set when this folder lives on a linked phone (read + copy only) */
   device: { id: string; name: string; online: boolean } | null;
+  /** set when this folder streams from a cloud link (MEGA; read + copy only, nothing downloaded) */
+  remote?: import('./remoteFolders').RemoteFolderInfo | null;
 }
 
 export interface Library {
@@ -95,6 +99,10 @@ export interface Library {
   folders: FolderRef[];
   mediaCount: number;
   sort: number;
+  /** picked cover photo (1.2); null/undefined = automatic */
+  coverId?: string | null;
+  /** scan options (1.2): exclusions, minimum size, hidden folders */
+  options?: import('./albums').LibraryOptions;
 }
 
 export interface SubFolder {
@@ -103,6 +111,8 @@ export interface SubFolder {
   dir: string;
   mediaCount: number;
   coverIds: string[];
+  /** newest localAt inside (folder sorting by date); undefined on older servers */
+  latest?: number | null;
 }
 
 export type SortKey = 'takenAt' | 'name' | 'mtime' | 'size' | 'kind';
@@ -129,6 +139,26 @@ export interface BrowseQuery {
   /** CameraGroup.key */
   camera?: string;
   flag?: MediaFlagName;
+  // ── Explore insights filters (see insights.ts) ──
+  /** 'none' = items without a location, 'any' = with one */
+  gps?: 'none' | 'any';
+  /** dominant colour bucket (thumbhash average) */
+  color?: import('./color').ColorBucket;
+  orient?: import('./insights').Orientation;
+  /** night shots / golden hour */
+  daytime?: import('./insights').DayTime;
+  /** short clips / long videos */
+  vlen?: import('./insights').VideoLength;
+  /** only exact duplicates (same size + content hash) */
+  dup?: boolean;
+  /** city label inside `place` (country → region → city drill-down) */
+  city?: string;
+  /** newest additions to the library first (overrides sort; falls back to mtime) */
+  byAdded?: boolean;
+  /** only the items of this album (1.2) */
+  albumId?: string;
+  /** album custom order (album_items.position) — overrides sort */
+  byPosition?: boolean;
 }
 
 export interface Crumb {
@@ -221,23 +251,41 @@ export interface Settings {
   zipAction: ZipAction;
   /** IANA zone used to turn UTC-only timestamps (videos, mtime) into local wall-clock time */
   homeTimeZone: string;
-  /** map tiles for the Places map */
-  mapTiles: 'carto' | 'osm' | 'off';
+  /** map tile style for the Places map (tiles.ts); 'carto' is a legacy value read as 'osm' */
+  mapTiles: import('./tiles').MapTileStyle | 'off' | 'carto';
+  /** size cap of the server's on-disk map tile cache, MB */
+  tileCacheMb: number;
   editSuffix: string; // default "_edit"
   showHidden: boolean;
   tempSessionHours: number;
   /** server-side only: base directories that the host browser may show */
   hostBrowseRoots: string[];
+  /** size cap of the on-disk cache for streamed remote (MEGA) media, MB */
+  remoteCacheMb: number;
+  /** WebP quality of generated thumbnails (new thumbnails only; clear the cache to redo) */
+  thumbQuality: ThumbQuality;
+  /** how hard the background indexer works (metadata + thumbnail concurrency) */
+  indexIntensity: IndexIntensity;
+  /** live video transcode: let ffmpeg decode with the GPU (-hwaccel auto) */
+  hwAccel: boolean;
 }
+
+export type ThumbQuality = 'low' | 'normal' | 'high';
+export type IndexIntensity = 'low' | 'normal' | 'high';
 
 export const DEFAULT_SETTINGS: Settings = {
   zipAction: 'ask',
   homeTimeZone: 'UTC',
   mapTiles: 'osm',
+  tileCacheMb: 512,
   editSuffix: '_edit',
   showHidden: false,
   tempSessionHours: 24,
   hostBrowseRoots: [],
+  remoteCacheMb: 2048,
+  thumbQuality: 'normal',
+  indexIntensity: 'normal',
+  hwAccel: false,
 };
 
 // ───────────────────────── Uploads / zip ─────────────────────────
@@ -367,6 +415,7 @@ export type ServerEvent =
   | { type: 'pair'; device: DeviceInfo } // a phone asks to be paired (desktop window only)
   | { type: 'explore' } // grouping data (places, cameras, memories) changed
   | { type: 'folders' } // libraries / folders / temp sessions changed
+  | { type: 'albums'; ids?: string[] } // albums or their items changed
   | { type: 'scan'; scanning: boolean; done: number; total: number }
   | { type: 'job'; job: Job }
   | { type: 'fonts' };
@@ -424,7 +473,7 @@ export interface YearGroup {
 
 export interface Memory {
   id: string;
-  kind: 'onthisday' | 'trip';
+  kind: 'onthisday' | 'trip' | 'year';
   /** onthisday: whole years ago; trip: place label + country */
   yearsAgo?: number;
   place?: string;
@@ -434,9 +483,11 @@ export interface Memory {
   to: number;
   count: number;
   coverIds: string[];
+  /** year in review: items per month (Jan..Dec) */
+  months?: number[];
 }
 
-export interface ExploreResult {
+export interface ExploreResult extends ExploreExtras {
   memories: Memory[];
   places: PlaceGroup[];
   types: TypeGroup[];
@@ -541,3 +592,19 @@ export * from './classify';
 export * from './memories';
 export * from './trips';
 export * from './search';
+
+// ───────────────────────── Maps + Explore insights ─────────────────────────
+
+export * from './tiles';
+export * from './sun';
+export * from './color';
+export * from './takeout';
+export * from './insights';
+
+// ───────────────────────── Remote (streaming) folders ─────────────────────────
+
+export * from './remoteFolders';
+
+// ───────────────────────── Albums + library options (1.2) ─────────────────────────
+
+export * from './albums';

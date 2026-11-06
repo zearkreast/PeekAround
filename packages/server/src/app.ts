@@ -25,12 +25,17 @@ import { fileRoutes } from './routes/files.js';
 import { jobRoutes } from './routes/jobs.js';
 import { mediaRoutes } from './routes/media.js';
 import { exploreRoutes } from './routes/explore.js';
+import { tileRoutes } from './routes/tiles.js';
 import { corsDelegator, registerSecurity, securityOptionsFromEnv, type SecurityOptions } from './security.js';
 import { deviceRoutes } from './routes/devices.js';
 import { remoteRoutes } from './routes/remote.js';
+import { cacheRoutes } from './routes/cache.js';
+import { albumRoutes } from './routes/albums.js';
+import { applyRuntimeSettings } from './runtime-settings.js';
 import { DeviceHub } from './devices/hub.js';
 import { deviceAccessHook } from './devices/access.js';
 import { megaClient } from './remote/mega.js';
+import { RemoteService } from './remote/folders.js';
 import type { Duplex } from 'node:stream';
 
 export interface PeekServer {
@@ -64,11 +69,14 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
   ctx.explore = new ExploreService(ctx);
   ctx.mega = opts.mega ?? megaClient();
   ctx.devices = new DeviceHub(ctx);
+  ctx.remote = new RemoteService(ctx);
   // home time zone: persisted on first run (server zone), used for videos / mtime
   const stored = db.getSetting<{ homeTimeZone?: string }>('settings', {});
   if (!isValidTimeZone(stored.homeTimeZone)) db.setSetting('settings', { ...getSettings(ctx), homeTimeZone: systemTimeZone() });
   scanner.showHidden = getSettings(ctx).showHidden;
   scanner.homeTimeZone = getSettings(ctx).homeTimeZone;
+  // thumbnail quality + indexing concurrency (runtime-settings.ts)
+  applyRuntimeSettings(ctx, getSettings(ctx));
 
   const app = Fastify({
     logger: cfg.logger ? { level: 'info' } : false,
@@ -108,7 +116,12 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
     mediaRoutes(scope, ctx);
     jobRoutes(scope, ctx);
     exploreRoutes(scope, ctx);
+    // map tiles (proxy + cache, own rate limit)
+    tileRoutes(scope, ctx);
     remoteRoutes(scope, ctx);
+    // per-kind cache usage + clearing (settings page)
+    cacheRoutes(scope, ctx);
+    albumRoutes(scope, ctx);
   });
   // file routes add raw-body content type parsers → keep them in their own encapsulated scope
   await app.register(async (scope) => fileRoutes(scope, ctx));
@@ -137,6 +150,8 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
 
   watcher.sync();
   void scanner.scanAll();
+  // remote (MEGA) folders: re-list in the background (offline → old rows stay, status shows it)
+  ctx.remote.start();
 
   // mDNS so the Android app can discover servers on the LAN
   let mdns: { stop(): void } | null = null;
@@ -217,6 +232,7 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
       mdns?.stop();
       await stopLan();
       await ctx.devices.close();
+      await ctx.remote.close();
       await jobs.close();
       await watcher.close();
       await scanner.stop();

@@ -6,6 +6,7 @@ import { useBackend } from '@/backend';
 import { useT } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { formatTime } from '@/lib/format';
+import { usePrefs } from '@/store/prefs';
 import { toast } from '@/store/toasts';
 import { MenuItem, Popover } from '@/components/ui';
 
@@ -39,10 +40,17 @@ export function VideoPlayer({
   const [time, setTime] = useState(0);
   const [dur, setDur] = useState(item.duration ?? 0);
   const [buffered, setBuffered] = useState(0);
-  const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
-  const [loop, setLoop] = useState(false);
-  const [speed, setSpeed] = useState(1);
+  // Settings → video: start muted, remembered volume, loop short clips, default speed, autoplay
+  const vp = usePrefs.getState();
+  const [muted, setMuted] = useState(vp.videoMuted);
+  const [volume, setVolumeState] = useState(vp.rememberVolume ? Math.max(0, Math.min(1, vp.videoVolume)) : 1);
+  const [loop, setLoop] = useState(() => vp.loopShortSec > 0 && !!item.duration && item.duration < vp.loopShortSec);
+  const [speed, setSpeed] = useState(SPEEDS.includes(vp.videoSpeed) ? vp.videoSpeed : 1);
+  const autoStart = autoPlay && vp.videoAutoplay;
+  const setVolume = (v: number) => {
+    setVolumeState(v);
+    if (usePrefs.getState().rememberVolume) usePrefs.getState().set({ videoVolume: v });
+  };
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
   const [controls, setControls] = useState(true);
   const [speedOpen, setSpeedOpen] = useState(false);
@@ -143,7 +151,7 @@ export function VideoPlayer({
         src={src}
         poster={poster}
         preload="metadata"
-        autoPlay={autoPlay || offset > 0}
+        autoPlay={autoStart || offset > 0}
         playsInline
         loop={loop}
         crossOrigin="anonymous"

@@ -190,3 +190,84 @@
 .pm-tiles-dark .leaflet-tile {
   filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.6);
 }
+
+/* focused item ("Show on map" from the viewer) */
+.pm-focus > span {
+  position: absolute;
+  inset: 18px;
+  border-radius: 999px;
+  border: 3px solid var(--accent);
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  animation: pm-focus 1.8s var(--ease-out, ease-out) infinite;
+}
+@keyframes pm-focus {
+  0% {
+    transform: scale(0.55);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0.15;
+  }
+}
+[data-motion='reduced'] .pm-focus > span,
+[data-motion='off'] .pm-focus > span {
+  animation: none;
+  opacity: 0.9;
+}
+
+/* ───────── Insights ───────── */
+
+/* calendar heatmap: 7 rows (Mon..Sun) × 53 week columns */
+.cal-grid {
+  display: grid;
+  grid-template-rows: repeat(7, var(--cal-cell));
+  grid-auto-flow: column;
+  grid-auto-columns: var(--cal-cell);
+  gap: 3px;
+  --cal-cell: 12px;
+}
+@media (min-width: 1100px) {
+  .cal-grid {
+    --cal-cell: 14px;
+  }
+}
+.cal-day {
+  border-radius: 3px;
+  background: var(--surface-2, var(--tile-bg));
+  transition: transform 0.15s var(--ease-out, ease-out), box-shadow 0.15s;
+}
+.cal-day[data-l='1'] {
+  background: color-mix(in oklab, var(--accent) 28%, var(--surface-2, var(--tile-bg)));
+}
+.cal-day[data-l='2'] {
+  background: color-mix(in oklab, var(--accent) 50%, var(--surface-2, var(--tile-bg)));
+}
+.cal-day[data-l='3'] {
+  background: color-mix(in oklab, var(--accent) 74%, var(--surface-2, var(--tile-bg)));
+}
+.cal-day[data-l='4'] {
+  background: var(--accent);
+}
+button.cal-day:hover,
+button.cal-day:focus-visible {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 2px var(--bg-elev);
+  outline: none;
+  z-index: 1;
+}
+
+/* collage card (2×2 covers) hover lift */
+.ins-card {
+  transition: transform 0.35s var(--ease-out, ease-out), box-shadow 0.35s var(--ease-out, ease-out);
+}
+@media (hover: hover) {
+  .ins-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow);
+  }
+}
+[data-motion='off'] .ins-card:hover,
+[data-motion='reduced'] .ins-card:hover {
+  transform: none;
+}
