@@ -162,7 +162,7 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
     try {
       const { Bonjour } = await import('bonjour-service');
       const b = new Bonjour();
-      const svc = b.publish({ name: `PeekAround ${serverInfo(ctx).hostname}`.slice(0, 60), type: 'peekaround', port: p, txt: { v: cfg.version } });
+      const svc = b.publish(mdnsService(serverInfo(ctx).hostname, p, cfg.version));
       svc.on?.('error', () => {});
       mdns = { stop: () => b.unpublishAll(() => b.destroy()) };
     } catch {
@@ -245,6 +245,25 @@ export async function createServer(opts: ServerOptions): Promise<PeekServer> {
       db.close();
     },
   };
+}
+
+/**
+ * DNS-SD announcement for the Android app's server discovery (PeekLocalPlugin.discover).
+ *  - IPv4 only: the desktop LAN listener binds 0.0.0.0 and the app ignores IPv6 answers. Windows
+ *    lists an adapter's IPv6 addresses before its IPv4 one, so with AAAA records the address that
+ *    Android's resolver hands back could be an IPv6 one and the PC was "not found".
+ *  - its own `.local` host name: bonjour's default is the bare machine name ("DESKTOP-AB12"),
+ *    which is not an mDNS name (resolvers send it to unicast DNS), and `<machine>.local` is also
+ *    answered by Windows' built-in mDNS responder with every address of the machine.
+ */
+export function mdnsService(hostname: string, port: number, version: string) {
+  const label =
+    hostname
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'pc';
+  return { name: `PeekAround ${hostname}`.slice(0, 60), type: 'peekaround', port, host: `peekaround-${label}.local`, disableIPv6: true, txt: { v: version } };
 }
 
 /** SQL function behind free-text search: folded name + place (city, province, country names) + camera. */

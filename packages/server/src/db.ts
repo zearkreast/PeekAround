@@ -81,6 +81,8 @@ export class Db {
   private arrayCache = new Map<string, StatementSync>();
   private readerConn: DatabaseSync | null | undefined;
   private readerCache = new Map<string, StatementSync>();
+  /** cached reader statements currently being iterated (see iterateArrays) */
+  private readerBusy = new Set<StatementSync>();
 
   constructor(private file: string) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -164,12 +166,19 @@ export class Db {
    */
   *iterateArrays(sql: string, ...params: any[]): Generator<unknown[]> {
     const conn = this.reader();
+    // a cached statement may still be mid-iteration in another (paused) generator — e.g. two
+    // explore computations at once: re-running it would reset that iteration, so borrow it
+    // only while it is free and prepare a private one otherwise
     let s: StatementSync | undefined = conn ? this.readerCache.get(sql) : undefined;
-    if (conn && !s) {
+    let cached = !!s && !this.readerBusy.has(s);
+    if (conn && !cached) {
       try {
         s = conn.prepare(sql);
         if (typeof s.setReturnArrays === 'function') s.setReturnArrays(true);
-        this.readerCache.set(sql, s);
+        if (!this.readerCache.has(sql)) {
+          this.readerCache.set(sql, s);
+          cached = true;
+        }
       } catch {
         s = undefined; // e.g. a function only the main connection has
       }
@@ -178,7 +187,12 @@ export class Db {
       yield* this.allArrays(sql, ...params);
       return;
     }
-    for (const r of s.iterate(...params) as Iterable<unknown>) yield Array.isArray(r) ? r : Object.values(r as object);
+    if (cached) this.readerBusy.add(s);
+    try {
+      for (const r of s.iterate(...params) as Iterable<unknown>) yield Array.isArray(r) ? r : Object.values(r as object);
+    } finally {
+      if (cached) this.readerBusy.delete(s);
+    }
   }
 
   get<T = Row>(sql: string, ...params: any[]): T | undefined {

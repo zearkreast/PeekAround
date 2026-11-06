@@ -84,6 +84,11 @@ export class Scanner {
     return this.scanning.size > 0 || this.metaRunning || this.thumbRunning;
   }
 
+  /** nothing left to do: no scan, meta, thumbnail or enrichment pass (tests / diagnostics) */
+  get idle(): boolean {
+    return !this.busy && !this.enrichRunning;
+  }
+
   /** a full walk of one of these folders is running (library header) */
   busyFor(folderIds: number[]): boolean {
     return folderIds.some((id) => this.scanning.has(id));

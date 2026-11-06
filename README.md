@@ -182,15 +182,17 @@ brand/             Logo (albatros)
 
 ### GitHub’a gönderince
 
-`.github/workflows/build.yml` her push’ta test eder, Windows/Linux paketlerini, Android APK’yı ve Docker imajını derler (Actions → Artifacts).
-`v1.0.0` gibi bir etiket gönderdiğinde hepsini bir **Release**’e ekler:
+`.github/workflows/build.yml`:
+
+- **Her push ve pull request:** tip kontrolü ve testler.
+- **`v1.3.0` gibi bir etiket:** Windows/Linux paketleri, Android APK ve Docker imajı derlenip hepsi bir **Release**’e eklenir.
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
-İmzalı (release) APK için repo Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Yoksa debug imzalı APK üretilir.
+Kişisel token gerekmez; otomatik `GITHUB_TOKEN` yeterli. Push için token, imzalı APK secret’ları ve sorun giderme: [docs/github-actions.md](docs/github-actions.md).
 
 ## Atıflar
 

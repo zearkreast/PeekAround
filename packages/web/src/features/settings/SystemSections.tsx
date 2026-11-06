@@ -273,6 +273,7 @@ function LanCard() {
               </a>
             ))}
             <div className="mt-2 text-xs text-faint">{t('settings.scanQr')}</div>
+            {desktop?.platform === 'win32' && <div className="mt-2 text-xs text-faint">{t('settings.lanFirewall')}</div>}
           </div>
         </div>
         </Searchable>

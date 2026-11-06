@@ -115,20 +115,33 @@ async function startServer() {
     prefs.port = server.port;
     savePrefs(prefs);
   }
-  if (prefs.lan.enabled) {
-    try {
-      await server.setLan(true, prefs.lan.port);
-    } catch (e) {
-      log('LAN share could not start', e);
-      prefs.lan.enabled = false;
-      savePrefs(prefs);
-    }
-  }
+  if (prefs.lan.enabled) await startLanShare();
   server.ctx.events.on((e) => {
     if (e.type === 'job') onJob(e.job);
     else if (e.type === 'devices') updateTray();
     else if (e.type === 'pair' && !windowFocused()) notify(L(lang(), `📱 ${e.device.name} bağlanmak istiyor`, `📱 ${e.device.name} wants to connect`), L(lang(), 'Onaylamak için PeekAround’u aç.', 'Open PeekAround to approve.'));
   });
+}
+
+/**
+ * LAN sharing that was on when the app last ran. A failure at launch keeps the setting (only the user
+ * turns sharing off) and is retried for a while: right after a restart / an update the previous
+ * instance may still hold the port, and at a Windows login launch the port can be briefly taken
+ * (Hyper-V / WSL reserve port ranges while the network comes up).
+ */
+async function startLanShare(attempt = 0) {
+  if (!server || quitting || !prefs.lan.enabled || lanOn()) return;
+  try {
+    await server.setLan(true, prefs.lan.port);
+    // a retry: the tray's menu shows the LAN addresses
+    if (attempt) {
+      log(`LAN share started (attempt ${attempt + 1})`);
+      updateTray();
+    }
+  } catch (e) {
+    log(`LAN share could not start on port ${prefs.lan.port} (attempt ${attempt + 1})`, e);
+    if (attempt < 6) setTimeout(() => void startLanShare(attempt + 1), Math.min(60_000, 2000 * 2 ** attempt)).unref();
+  }
 }
 
 /** our own pages: the embedded server origin (and the Vite dev server when not packaged) */
@@ -492,7 +505,8 @@ function registerIpc() {
   ipcMain.handle('peek:set-lan', async (e, enabled: unknown, port: unknown) => {
     if (!trusted(e)) return { enabled: false, urls: [], error: 'Not allowed' };
     const p = Number(port);
-    if (typeof enabled !== 'boolean' || !Number.isInteger(p) || p < 1024 || p > 65535) return { enabled: lanOn(), urls: [], error: 'Invalid port' };
+    // any TCP port: Windows lets apps bind ports below 1024 (e.g. 80, so the phone needs no ":port"); errors come back from listen()
+    if (typeof enabled !== 'boolean' || !Number.isInteger(p) || p < 1 || p > 65535) return { enabled: lanOn(), urls: [], error: 'Invalid port' };
     try {
       const r = await server!.setLan(enabled, p);
       prefs.lan = { enabled: r.enabled, port: p };

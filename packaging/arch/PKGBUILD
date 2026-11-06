@@ -3,7 +3,7 @@
 # Build & install:   makepkg -si
 # (Or simply install the ready-made PeekAround-<version>-x64.pacman from the release:  sudo pacman -U PeekAround-*.pacman)
 pkgname=peekaround-bin
-pkgver=1.3.0
+pkgver=1.3.1
 pkgrel=1
 pkgdesc="Modern, animated gallery for your folders — browse, watch, edit, slideshows & collages"
 arch=('x86_64')

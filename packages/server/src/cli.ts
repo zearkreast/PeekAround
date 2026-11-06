@@ -86,7 +86,7 @@ const server = await createServer({
     return given.length ? given : [...roots.map((r) => r.path), os.homedir()];
   })(),
   logger: values.verbose ?? bool(env('PEEK_VERBOSE'), false),
-  version: process.env.npm_package_version ?? '1.3.0',
+  version: process.env.npm_package_version ?? '1.3.1',
 });
 
 const lan = (await import('./config.js')).lanUrls(server.port);

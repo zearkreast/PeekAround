@@ -225,7 +225,7 @@ export class AndroidLocalBackend implements Backend {
   async info(): Promise<ServerInfo> {
     return {
       name: APP_NAME,
-      version: '1.3.0',
+      version: '1.3.1',
       apiVersion: API_VERSION,
       mode: 'android-local',
       hostname: this.label,

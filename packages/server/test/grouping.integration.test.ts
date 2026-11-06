@@ -124,12 +124,13 @@ describe('grouping, skeleton and explore', () => {
     const r = await srv.app.inject({ method: 'PATCH', url: '/api/settings', payload: { homeTimeZone: 'Europe/Istanbul' } });
     expect(r.statusCode).toBe(200);
     const total = 36 + 7;
-    for (let i = 0; i < 300; i++) {
+    // wait until every background pass is done (slow CI runners: the background budget is small there)
+    for (let i = 0, quiet = 0; i < 1200 && quiet < 3; i++) {
       const c = srv.ctx.db.get<{ c: number }>("SELECT count(*) c FROM media WHERE meta_state != 0 AND (thumb_state != 0 OR kind NOT IN ('image','video'))")!.c;
-      if (c >= total && !srv.ctx.scanner.busy) break;
+      quiet = c >= total && srv.ctx.scanner.idle && !srv.ctx.explore.dups.busy && !srv.ctx.events.genPending ? quiet + 1 : 0;
       await new Promise((res) => setTimeout(res, 100));
     }
-  }, 120_000);
+  }, 180_000);
 
   afterAll(async () => {
     await srv?.close();

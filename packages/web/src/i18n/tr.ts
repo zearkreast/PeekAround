@@ -253,6 +253,7 @@ const base = {
   'settings.lanPort': 'Port',
   'settings.lanUrls': 'Bu adreslerden bağlan',
   'settings.scanQr': 'Telefonla okut',
+  'settings.lanFirewall': 'Telefon bağlanamıyor mu? Windows Güvenlik Duvarı PeekAround’a Özel ağlarda izin vermeli, Wi-Fi Windows’ta “Özel” ağ olarak ayarlı olmalı ve iki cihaz aynı ağda olmalı (misafir Wi-Fi’ler cihazları genelde birbirinden ayırır).',
   'settings.about': 'Hakkında',
   'settings.version': 'Sürüm {v}',
   'settings.mode.server': 'Sunucu modu',

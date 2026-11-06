@@ -7,7 +7,8 @@ import { Button, Input } from '@/components/ui';
 import { LogoMark, LogoWordmark } from '@/components/Logo';
 import { saveMode } from '@/backend/android/config';
 import { PeekLocal } from '@/backend/android/plugin';
-import { L } from './strings';
+import { L, fmt } from './strings';
+import { probeServer } from './probe';
 
 type Step = 'choose' | 'local' | 'server';
 
@@ -141,20 +142,14 @@ function ServerStep({ onBack }: { onBack: () => void }) {
   const connect = async (u: string, name?: string) => {
     setError('');
     setConnecting(u);
-    try {
-      const clean = u.trim().replace(/\/+$/, '');
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 6000);
-      const res = await fetch(`${clean}/api/info`, { signal: ctrl.signal });
-      clearTimeout(timer);
-      const info = await res.json();
-      if (info?.name !== 'PeekAround') throw new Error('not peekaround');
-      saveMode({ mode: 'server', url: clean, name: name ?? info.hostname });
+    const r = await probeServer(u);
+    if (r.ok) {
+      saveMode({ mode: 'server', url: r.url, name: name ?? r.info.hostname });
       location.reload();
-    } catch {
-      setError(s.connectFail);
-      setConnecting(null);
+      return;
     }
+    setError(r.error === 'invalid' ? s.connectInvalid : r.error === 'not-peekaround' ? s.connectNotPeek : r.error === 'refused' ? fmt(s.connectRefused, { status: r.status ?? '' }) : s.connectFail);
+    setConnecting(null);
   };
 
   return (

@@ -66,6 +66,11 @@ export class EventHub {
   private metaGenAt = 0;
   private metaGenTimer: NodeJS.Timeout | null = null;
 
+  /** a throttled generation change is still due (tests wait for a settled state) */
+  get genPending(): boolean {
+    return this.metaGenTimer !== null;
+  }
+
   /** bump() for bulk writes: right away, or once at the end of the current window */
   bumpThrottled() {
     const now = Date.now();

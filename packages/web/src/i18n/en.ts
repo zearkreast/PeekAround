@@ -270,6 +270,7 @@ const en: Messages = {
   'settings.lanPort': 'Port',
   'settings.lanUrls': 'Connect via',
   'settings.scanQr': 'Scan with your phone',
+  'settings.lanFirewall': 'Phone can’t connect? Windows Firewall must allow PeekAround on private networks, the Wi-Fi must be set to “Private” in Windows, and both devices must be on the same network (guest Wi-Fi often isolates devices).',
   'settings.about': 'About',
   'settings.version': 'Version {v}',
   'settings.mode.server': 'Server mode',

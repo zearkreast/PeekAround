@@ -71,7 +71,7 @@ export function resolveConfig(opts: ServerOptions): ResolvedConfig {
     logger: opts.logger ?? false,
     hooks: opts.hooks ?? {},
     fetch: opts.fetch,
-    version: opts.version ?? '1.3.0',
+    version: opts.version ?? '1.3.1',
     cacheDir,
     thumbDir: path.join(cacheDir, 'thumbs'),
     tempDir: path.join(dataDir, 'temp'),
@@ -80,12 +80,31 @@ export function resolveConfig(opts: ServerOptions): ResolvedConfig {
   };
 }
 
+/**
+ * Adapters a phone on the Wi-Fi is never on: Windows' Hyper-V / WSL switches ("vEthernet (WSL)"),
+ * VirtualBox / VMware host-only networks, Docker / libvirt bridges, VPN overlays. They often come
+ * first on Windows, and the first URL is the one in the QR code.
+ */
+const VIRTUAL_ADAPTER = /vethernet|hyper-v|\bwsl\b|virtualbox|vbox|vmware|vmnet|docker|^br-|^veth|virbr|tailscale|zerotier/i;
+
+function isPrivateV4(a: string): boolean {
+  const [x, y] = a.split('.').map(Number);
+  return x === 10 || (x === 172 && y >= 16 && y <= 31) || (x === 192 && y === 168);
+}
+
+/**
+ * http://<ip>:<port> of this machine for other devices on the network, the most likely one first:
+ * private LAN addresses of real adapters, then other addresses, virtual adapters last.
+ * Link-local 169.254.x.x (an adapter without a DHCP lease) is left out: nothing can reach it.
+ */
 export function lanUrls(port: number): string[] {
-  const out: string[] = [];
-  for (const list of Object.values(os.networkInterfaces())) {
+  const out: { url: string; rank: number; i: number }[] = [];
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
     for (const ni of list ?? []) {
-      if (ni.family === 'IPv4' && !ni.internal) out.push(`http://${ni.address}:${port}`);
+      if (ni.family !== 'IPv4' || ni.internal || ni.address.startsWith('169.254.')) continue;
+      const rank = (VIRTUAL_ADAPTER.test(name) ? 2 : 0) + (isPrivateV4(ni.address) ? 0 : 1);
+      out.push({ url: `http://${ni.address}:${port}`, rank, i: out.length });
     }
   }
-  return out;
+  return out.sort((a, b) => a.rank - b.rank || a.i - b.i).map((o) => o.url);
 }

@@ -66,7 +66,13 @@ await build({
       shortcutName: 'PeekAround',
       artifactName: '${productName}-Setup-${version}.${ext}',
     },
-    portable: { artifactName: '${productName}-${version}-portable.${ext}' },
+    portable: {
+      artifactName: '${productName}-${version}-portable.${ext}',
+      // a fixed unpack folder (%TEMP%\PeekAround): by default every build unpacks to a new random
+      // folder, so Windows Firewall sees a new program on each update and blocks the LAN share
+      // (phones can't connect) until its prompt is accepted again — dismissing it adds a block rule
+      unpackDirName: 'PeekAround',
+    },
     linux: {
       icon: 'build/icons',
       category: 'Graphics',

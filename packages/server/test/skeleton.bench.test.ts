@@ -6,6 +6,9 @@ import type { BrowseResult, BrowseSkeleton, ExploreResult } from '@peekaround/sh
 import { createServer, type PeekServer } from '../src/app';
 import { META_V } from '../src/media/metadata';
 
+/** shared CI runners (2 slow vCPUs, noisy neighbours) get looser time limits; locally the real ones apply */
+const SLOW = process.env.CI ? 4 : 1;
+
 const N = 100_000;
 
 /** Synthetic 100k-row library (rows inserted directly, no files) to keep the list endpoints fast. */
@@ -62,26 +65,26 @@ describe('skeleton performance (100k rows)', () => {
     expect(Buffer.from(sk.aspects, 'base64').length).toBe(N);
     expect(sk.days!.length).toBeGreaterThan(3000);
     console.log(`skeleton 100k: ${ms.toFixed(0)} ms, ${(r.body.length / 1024).toFixed(0)} KB`);
-    expect(ms).toBeLessThan(300);
+    expect(ms).toBeLessThan(300 * SLOW);
   });
 
   it('pages, filters and explore stay fast', async () => {
     const p = await timed('/api/browse?offset=50000&limit=600');
     expect((p.r.json() as BrowseResult).items).toHaveLength(600);
-    expect(p.ms).toBeLessThan(150);
+    expect(p.ms).toBeLessThan(150 * SLOW);
     const f = await timed('/api/browse/skeleton?place=TR-34&sort=name&order=asc');
     expect((f.r.json() as BrowseSkeleton).total).toBe(N / 4);
-    expect(f.ms).toBeLessThan(300);
+    expect(f.ms).toBeLessThan(300 * SLOW);
     const cached = await srv.app.inject('/api/browse/skeleton?place=TR-34&sort=name&order=asc');
     expect(cached.body).toBe(f.r.body);
     const g = await timed('/api/geo/points');
-    expect(g.ms).toBeLessThan(300);
+    expect(g.ms).toBeLessThan(300 * SLOW);
     const t0 = performance.now();
     const ex = (await srv.app.inject('/api/explore')).json() as ExploreResult;
     const exMs = performance.now() - t0;
     console.log(`page ${p.ms.toFixed(0)} ms, filtered skeleton ${f.ms.toFixed(0)} ms, geo ${g.ms.toFixed(0)} ms, explore (cold) ${exMs.toFixed(0)} ms`);
     expect(ex.places).toHaveLength(3);
-    expect(exMs).toBeLessThan(2000);
+    expect(exMs).toBeLessThan(2000 * SLOW);
     // insights come with the same pass
     expect(ex.stats!.photos + ex.stats!.videos).toBe(N);
     expect(ex.countries!.map((c) => c.cc).sort()).toEqual(['DE', 'TR']);
@@ -103,7 +106,7 @@ describe('skeleton performance (100k rows)', () => {
     console.log(`explore compute: longest event-loop block ${worst.toFixed(0)} ms`);
     expect(r.stats!.photos + r.stats!.videos).toBe(N);
     // one synchronous pass over 100k rows blocked for ~1 s (desktop: the window's IPC with it)
-    expect(worst).toBeLessThan(500);
+    expect(worst).toBeLessThan(500 * SLOW);
   });
 
   it('insight filters stay fast', async () => {
@@ -112,10 +115,10 @@ describe('skeleton performance (100k rows)', () => {
       const { ms, r } = await timed(`/api/browse/skeleton?${q}`);
       expect(r.statusCode).toBe(200);
       out.push(`${q} ${ms.toFixed(0)} ms`);
-      expect(ms, q).toBeLessThan(400);
+      expect(ms, q).toBeLessThan(400 * SLOW);
     }
     const c = await timed('/api/explore/calendar?year=2020');
-    expect(c.ms).toBeLessThan(150);
+    expect(c.ms).toBeLessThan(150 * SLOW);
     console.log(out.join(', '), `calendar ${c.ms.toFixed(0)} ms`);
   });
 });

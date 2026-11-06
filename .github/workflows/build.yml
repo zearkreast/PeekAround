@@ -1,6 +1,13 @@
 name: Build
 
-# Builds everything on every push; creates a GitHub Release with all packages when a tag like v1.0.0 is pushed.
+# - every push to main / pull request: typecheck + tests (fast feedback)
+# - a tag like v1.3.0 (or "Run workflow" by hand): also builds every package and, for tags,
+#   publishes a GitHub Release with the Windows, Linux and Android packages + the Docker image.
+# No personal token is needed: everything uses the automatic GITHUB_TOKEN. Optional secrets:
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#   → a release APK signed with your own key (without them a debug APK is built, and its key
+#     changes on every run, so phones can't update over a previous install).
+#   WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD → signed Windows .exe files (see docs/github-actions.md).
 on:
   push:
     branches: [main]
@@ -12,37 +19,52 @@ on:
 permissions:
   contents: read
 
+# a newer push to the same branch cancels the older run (tags always finish)
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 env:
-  NODE_VERSION: 24
+  NODE_VERSION: 22
+  # the test/web jobs don't need the Electron binary
   ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  CI: 'true'
 
 jobs:
   test:
     name: Typecheck & tests
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: npm ci
+      - name: ffmpeg (video tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
+      # the sample library the tests read (fixtures/ is git-ignored, it is generated)
+      - run: npm run fixtures
       - run: npm test
 
   desktop:
-    name: Desktop (${{ matrix.os }})
+    name: Desktop (${{ matrix.name }})
     needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          - name: Windows
+            os: windows-latest
             target: --win
-          - os: ubuntu-latest
+          - name: Linux
+            os: ubuntu-latest
             target: --linux
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: ''
     steps:
@@ -51,18 +73,22 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Linux packaging tools (pacman needs bsdtar)
+      - name: Linux packaging tools (pacman needs bsdtar, deb/rpm need fpm deps)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libarchive-tools rpm
-      - run: npm ci
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libarchive-tools rpm
+      - run: npm ci --no-audit --no-fund
       - run: npm run build -w @peekaround/web
+      # self-contained app folder with the native modules for this OS
       - run: node packages/desktop/scripts/stage.mjs
       - run: node packages/desktop/scripts/dist.mjs ${{ matrix.target }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # optional Windows code signing: WIN_CSC_LINK = the .pfx certificate as base64,
+          # WIN_CSC_KEY_PASSWORD = its password. Without them the .exe files are unsigned.
+          CSC_LINK: ${{ matrix.name == 'Windows' && secrets.WIN_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.name == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: desktop-${{ runner.os }}
+          name: desktop-${{ matrix.name }}
           path: |
             packages/desktop/release/*.exe
             packages/desktop/release/*.AppImage
@@ -73,7 +99,9 @@ jobs:
   android:
     name: Android APK
     needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -85,29 +113,39 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - run: npm run build -w @peekaround/web
       - run: npx cap sync android
         working-directory: packages/android
       - name: Build APK
         working-directory: packages/android/android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > release.keystore
-            ./gradlew assembleRelease \
-              -Pandroid.injected.signing.store.file=$PWD/release.keystore \
-              -Pandroid.injected.signing.store.password='${{ secrets.ANDROID_KEYSTORE_PASSWORD }}' \
-              -Pandroid.injected.signing.key.alias='${{ secrets.ANDROID_KEY_ALIAS }}' \
-              -Pandroid.injected.signing.key.password='${{ secrets.ANDROID_KEY_PASSWORD }}'
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            ./gradlew --no-daemon assembleRelease \
+              -Pandroid.injected.signing.store.file="$RUNNER_TEMP/release.keystore" \
+              -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+              -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+              -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
           else
-            ./gradlew assembleDebug
+            echo "::notice::No signing secrets set - building a debug APK"
+            ./gradlew --no-daemon assembleDebug
           fi
       - name: Collect APK
         run: |
           mkdir -p out
-          find packages/android/android/app/build/outputs/apk -name '*.apk' -exec cp {} out/ \;
-          for f in out/*.apk; do mv "$f" "out/PeekAround-$(basename "$f" | sed 's/^app-//')"; done
+          version=$(node -p "require('./package.json').version")
+          find packages/android/android/app/build/outputs/apk -name '*.apk' | while read -r f; do
+            kind=$(basename "$(dirname "$f")")   # debug | release
+            cp "$f" "out/PeekAround-${version}-android-${kind}.apk"
+          done
+          ls -la out
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: android
@@ -115,18 +153,19 @@ jobs:
           if-no-files-found: error
 
   docker:
+    name: Docker image
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: write
-    name: Docker image (amd64 + arm64)
-    needs: test
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -134,6 +173,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
+          # ghcr names must be lower case
           images: ghcr.io/${{ github.repository_owner }}/peekaround
           tags: |
             type=ref,event=branch
@@ -143,26 +183,30 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          # arm64 (Raspberry Pi, ARM NAS) is emulated and slow: only for releases
+          platforms: ${{ startsWith(github.ref, 'refs/tags/v') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   release:
-    permissions:
-      contents: write
     name: GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [desktop, android, docker]
+    # the Docker image is published to ghcr on its own; a Docker problem must not block the release
+    needs: [desktop, android]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           merge-multiple: true
+      - run: ls -la dist
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist/*
           generate_release_notes: true
+          fail_on_unmatched_files: true
