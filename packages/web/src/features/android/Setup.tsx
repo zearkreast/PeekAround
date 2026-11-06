@@ -185,7 +185,7 @@ function ServerStep({ onBack }: { onBack: () => void }) {
       >
         <label className="text-[13px] text-dim">{s.manual}</label>
         <div className="flex gap-2">
-          <Input value={url} onChange={(e) => setUrl(e.target.value)} inputMode="url" placeholder="http://192.168.1.10:8080" className="flex-1" />
+          <Input value={url} onChange={(e) => setUrl(e.target.value)} inputMode="url" placeholder="http://192.168.1.10:1313" className="flex-1" />
           <Button type="submit" variant="primary" loading={!!connecting && connecting === url}>
             {s.connect}
           </Button>

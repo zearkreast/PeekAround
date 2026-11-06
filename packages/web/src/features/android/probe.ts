@@ -2,15 +2,17 @@ import type { ServerInfo } from '@peekaround/shared';
 import { normalizeBase } from '@/lib/safeUrl';
 
 /** the desktop app's default LAN share port (Settings → Network) */
-export const LAN_PORT = 8080;
+export const LAN_PORT = 1313;
+/** the Docker/server default (and the desktop default before 1.3.1) */
+export const SERVER_PORT = 8080;
 
 export type ProbeError = 'invalid' | 'unreachable' | 'refused' | 'not-peekaround';
 export type ProbeResult = { ok: true; url: string; info: ServerInfo } | { ok: false; error: ProbeError; status?: number };
 
 /**
- * Addresses to try for what was typed on the connect screen: "192.168.1.20:8080", "pc.local" or a full
+ * Addresses to try for what was typed on the connect screen: "192.168.1.20:1313", "pc.local" or a full
  * URL. Without a scheme http:// is added; without a port the address as typed (port 80, a reverse
- * proxy) and the desktop app's LAN port. Returns [] for something that is not an http(s) address.
+ * proxy), the desktop app's LAN port and the Docker/server port. Returns [] for something that is not an http(s) address.
  */
 export function candidateUrls(input: string): string[] {
   let raw = String(input ?? '').trim();
@@ -25,8 +27,12 @@ export function candidateUrls(input: string): string[] {
   const u = new URL(base);
   if (!u.hostname) return [];
   if (u.port || u.pathname !== '/') return [base];
-  u.port = String(LAN_PORT);
-  return [base, normalizeBase(u.href)];
+  const out = [base];
+  for (const p of [LAN_PORT, SERVER_PORT]) {
+    u.port = String(p);
+    out.push(normalizeBase(u.href));
+  }
+  return out;
 }
 
 /**

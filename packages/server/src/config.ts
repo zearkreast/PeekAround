@@ -71,7 +71,7 @@ export function resolveConfig(opts: ServerOptions): ResolvedConfig {
     logger: opts.logger ?? false,
     hooks: opts.hooks ?? {},
     fetch: opts.fetch,
-    version: opts.version ?? '1.3.1',
+    version: opts.version ?? '1.3.2',
     cacheDir,
     thumbDir: path.join(cacheDir, 'thumbs'),
     tempDir: path.join(dataDir, 'temp'),

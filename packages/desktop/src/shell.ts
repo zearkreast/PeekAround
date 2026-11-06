@@ -36,7 +36,7 @@ export interface DesktopPrefs {
 }
 
 export const DEFAULT_DESKTOP_PREFS: DesktopPrefs = {
-  lan: { enabled: false, port: 8080 },
+  lan: { enabled: false, port: 1313 },
   startAtLogin: false,
   startHidden: false,
   closeAction: 'auto',

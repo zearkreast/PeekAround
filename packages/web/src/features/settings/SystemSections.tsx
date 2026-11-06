@@ -231,7 +231,7 @@ function LanCard() {
   const qc = useQueryClient();
   const backend = useBackend();
   const [lan, setLan] = useState<{ enabled: boolean; port: number; urls: string[] } | null>(null);
-  const [port, setPort] = useState(8080);
+  const [port, setPort] = useState(1313);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     desktop?.getLan().then((l) => {

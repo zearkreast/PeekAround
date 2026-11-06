@@ -22,8 +22,8 @@ describe('Android connect screen: server address probe', () => {
     // no scheme (the field's "http://" prefix deleted) → http://
     expect(candidateUrls(' 192.168.1.20:8080 ')).toEqual(['http://192.168.1.20:8080']);
     // no port → as typed (port 80 / reverse proxy) and the desktop app's LAN port
-    expect(candidateUrls('192.168.1.20')).toEqual(['http://192.168.1.20', 'http://192.168.1.20:8080']);
-    expect(candidateUrls('https://photos.example.com')).toEqual(['https://photos.example.com', 'https://photos.example.com:8080']);
+    expect(candidateUrls('192.168.1.20')).toEqual(['http://192.168.1.20', 'http://192.168.1.20:1313', 'http://192.168.1.20:8080']);
+    expect(candidateUrls('https://photos.example.com')).toEqual(['https://photos.example.com', 'https://photos.example.com:1313', 'https://photos.example.com:8080']);
     expect(candidateUrls('http://nas.local/peek')).toEqual(['http://nas.local/peek']);
     for (const bad of ['', 'http://', 'ftp://x', 'http://user:pw@x', 'javascript:alert(1)']) expect(candidateUrls(bad), bad).toEqual([]);
   });
@@ -36,8 +36,11 @@ describe('Android connect screen: server address probe', () => {
   });
 
   it('finds the LAN share when the port was left out', async () => {
-    const r = await probeServer('192.168.1.20', { fetch: fakeFetch({ 'http://192.168.1.20:8080/api/info': { body: info } }) });
-    expect(r).toMatchObject({ ok: true, url: 'http://192.168.1.20:8080' });
+    const r = await probeServer('192.168.1.20', { fetch: fakeFetch({ 'http://192.168.1.20:1313/api/info': { body: info } }) });
+    expect(r).toMatchObject({ ok: true, url: 'http://192.168.1.20:1313' });
+    // a Docker server / a desktop app still on the old port
+    const old = await probeServer('192.168.1.20', { fetch: fakeFetch({ 'http://192.168.1.20:8080/api/info': { body: info } }) });
+    expect(old).toMatchObject({ ok: true, url: 'http://192.168.1.20:8080' });
   });
 
   it('tells "nothing answered" apart from "some other server" and HTTP errors', async () => {
