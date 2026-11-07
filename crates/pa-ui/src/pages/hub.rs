@@ -395,10 +395,13 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         }
     });
     let w = Rc::downgrade(app);
-    hs.on_open_tool(move |_tool| {
+    hs.on_open_tool(move |tool| {
         if let Some(a) = w.upgrade() {
-            // collage / slideshow builder / fonts: not built yet
-            a.toast(ToastKind::Info, &a.t("native.soon.title"), "");
+            match tool.as_str() {
+                "fonts" => a.go(Route::Fonts, true),
+                // collage / slideshow builder: not built yet
+                _ => a.toast(ToastKind::Info, &a.t("native.soon.title"), ""),
+            }
         }
     });
 }

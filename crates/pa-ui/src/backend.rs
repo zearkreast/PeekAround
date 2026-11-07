@@ -108,6 +108,16 @@ pub trait Backend: Send + Sync + 'static {
         })
     }
 
+    /// `PUT <path>` with a raw body (font uploads); backends without an HTTP server answer 501.
+    fn put_bytes(&self, _path: &str, _body: Vec<u8>) -> BoxFut<serde_json::Value> {
+        Box::pin(async {
+            Err(BackendError {
+                status: 501,
+                message: "not supported".into(),
+            })
+        })
+    }
+
     /// Absolute URL of a server path (downloads, links); None without an HTTP server.
     fn url(&self, _path: &str) -> Option<String> {
         None
@@ -266,6 +276,11 @@ impl Backend for HttpBackend {
     }
     fn url(&self, path: &str) -> Option<String> {
         Some(self.client.absolute(path))
+    }
+    fn put_bytes(&self, path: &str, body: Vec<u8>) -> BoxFut<serde_json::Value> {
+        let c = self.client.clone();
+        let p = path.to_string();
+        Box::pin(async move { c.put_bytes(&p, body).await.map_err(berr) })
     }
     fn get_bytes(&self, path: &str) -> BoxFut<bytes::Bytes> {
         let c = self.client.clone();

@@ -10,9 +10,10 @@ import { SettingsPage } from "pages/settings.slint";
 import { PlaceholderPage } from "pages/placeholder.slint";
 // library hub, albums, album, library / folder pages, dialogs
 import { HubPage } from "pages/hub.slint";
+import { FontsPage } from "pages/fonts.slint";
 import { AlbumsPage, AlbumPage } from "pages/albums.slint";
 import { LibraryPage } from "pages/library.slint";
-import { HubState, AlbumsState, AlbumState, LibState } from "pages/state.slint";
+import { HubState, AlbumsState, AlbumState, LibState, FontsState } from "pages/state.slint";
 import { PIcons } from "pages/icons.slint";
 import { DialogLayer, Dlg } from "dialogs/dialogs.slint";
 import { JobsState, UploadPanel } from "shell/jobs.slint";
@@ -36,7 +37,8 @@ export { Theme, Motion, I18n, Shell, GridState, PrefsState, Page, Conn }
 export { TileData, HeaderData, TileKind, TileDeco } from "pages/grid.slint";
 export { ToastData, ToastKind } from "components/overlays.slint";
 export { ViewerState, VIcons, ActionState, GridInput, DragState }
-export { HubState, AlbumsState, AlbumState, LibState, PIcons, Dlg, JobsState }
+export { HubState, AlbumsState, AlbumState, LibState, PIcons, Dlg, JobsState, FontsState }
+export { FontFaceRow, FontFamilyCard, BundledFont } from "pages/state.slint";
 export { Chrome } from "globals.slint";
 export { PickRowData, PathRowData, TreeRowData, KeyRowData } from "dialogs/dialogs.slint";
 export { JobRowData, UploadRowData } from "shell/jobs.slint";
@@ -92,6 +94,7 @@ export component AppWindow inherits Window {
         : Shell.page == Page.explore-places ? I18n.t("explore.allPlaces", I18n.rev)
         : Shell.page == Page.explore-dups ? I18n.t("insights.dup.title", I18n.rev)
         : Shell.page == Page.explore-map ? MapState.title
+        : Shell.page == Page.fonts ? I18n.t("fonts.title", I18n.rev)
         : I18n.t("settings.title", I18n.rev);
     property <bool> grid-page: Shell.page == Page.photos || Shell.page == Page.favorites || Shell.page == Page.search
         || Shell.page == Page.album || Shell.page == Page.lib || Shell.page == Page.folder;
@@ -189,6 +192,9 @@ export component AppWindow inherits Window {
                     }
                     if Shell.page == Page.library: PageFrame {
                         HubPage { window-width: root.width; }
+                    }
+                    if Shell.page == Page.fonts: PageFrame {
+                        FontsPage { window-width: root.width; }
                     }
                     if Shell.page == Page.album: PageFrame {
                         AlbumPage { window-width: root.width; }

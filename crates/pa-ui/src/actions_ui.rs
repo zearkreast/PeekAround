@@ -1190,6 +1190,10 @@ impl Hub {
 
     fn files_dropped(self: &Rc<Self>, paths: Vec<PathBuf>) {
         let Some(a) = self.app() else { return };
+        if crate::pages::fonts::wants_drop(&a) {
+            crate::pages::fonts::upload(&a, paths);
+            return;
+        }
         let ctx = self.ctx();
         if !ctx.writable {
             a.toast(ToastKind::Error, &a.t("drop.readonly"), "");

@@ -18,6 +18,7 @@ use crate::thumbs::{self, ThumbCache};
 
 pub(crate) mod albums;
 pub(crate) mod dialogs;
+pub(crate) mod fonts;
 pub(crate) mod hub;
 pub(crate) mod jobs;
 pub(crate) mod library;
@@ -183,6 +184,7 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     dialogs::install(app);
     settings::install(app);
     jobs::install(app);
+    fonts::install(app);
     // first data
     hub::load_libraries(app);
     albums::load_albums(app);
@@ -208,6 +210,7 @@ pub(crate) fn enter(app: &Rc<AppInner>, route: &Route) {
         Route::Album(id) => albums::enter_album(app, id),
         Route::Lib(_) | Route::Folder(..) => library::enter(app),
         Route::Settings => settings::enter(app),
+        Route::Fonts => fonts::enter(app),
         _ => {}
     }
 }
@@ -285,6 +288,7 @@ pub(crate) fn on_event(app: &Rc<AppInner>, e: &BackendEvent) {
         ServerEvent::Job { job } => jobs::on_job(app, job),
         ServerEvent::Pair { device } => dialogs::on_pair(app, device),
         ServerEvent::MegaAccount => settings::on_mega_account(app),
+        ServerEvent::Fonts => fonts::on_fonts_changed(app),
         _ => {}
     }
     if matches!(ev, ServerEvent::Devices) {

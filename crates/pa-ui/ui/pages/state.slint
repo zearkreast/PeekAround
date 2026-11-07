@@ -205,3 +205,46 @@ export global LibState {
     // sub folder card context menu: "slideshow" | "download" | "copy-to-pc" | "rename" | "move" | "delete"
     callback folder-action(string, string);
 }
+
+// ───────── Fonts page (src/pages/fonts.rs) ─────────
+
+export struct FontFaceRow {
+    id: string,
+    family: string,
+    // e.g. "Bold Italic"
+    sub: string,
+    weight: int,
+    italic: bool,
+    // "ttf" / "otf" / "woff" / "woff2"
+    format: string,
+    // registered with the renderer (WOFF2 isn't: it previews in the UI font)
+    previewable: bool,
+}
+
+export struct FontFamilyCard {
+    family: string,
+    // "1 stil" / "3 stil"
+    count: string,
+    faces: [FontFaceRow],
+}
+
+export struct BundledFont {
+    family: string,
+    label: string,
+    category: string,
+    weights: [string],
+    italic: bool,
+}
+
+export global FontsState {
+    in property <bool> loading: true;
+    in property <[FontFamilyCard]> families;
+    in property <int> custom-count;
+    in property <[BundledFont]> bundled;
+    // file names being uploaded
+    in property <[string]> uploading;
+    in-out property <string> sample;
+    in-out property <float> size: 40;
+    callback browse();
+    callback delete(/* id */ string, /* "Family Sub" */ string);
+}

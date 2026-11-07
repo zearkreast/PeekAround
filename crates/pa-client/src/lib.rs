@@ -529,6 +529,24 @@ impl Client {
         serde_json::from_slice(&bytes).map_err(|e| Error::Decode(e.to_string()))
     }
 
+    /// `PUT <path>` with a raw body (font uploads); the JSON answer, `null` when empty.
+    pub async fn put_bytes(&self, path: &str, body: Vec<u8>) -> Result<serde_json::Value> {
+        let rb = self
+            .request(reqwest::Method::PUT, path)
+            .header("Content-Type", "application/octet-stream")
+            .body(body);
+        let bytes = self
+            .send(rb)
+            .await?
+            .bytes()
+            .await
+            .map_err(|e| Error::Network(e.to_string()))?;
+        if bytes.iter().all(|b| b.is_ascii_whitespace()) {
+            return Ok(serde_json::Value::Null);
+        }
+        serde_json::from_slice(&bytes).map_err(|e| Error::Decode(e.to_string()))
+    }
+
     /// Stream `GET <path>` into a file (zip downloads); returns the bytes written.
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn download_to(&self, path: &str, dest: &std::path::Path) -> Result<u64> {

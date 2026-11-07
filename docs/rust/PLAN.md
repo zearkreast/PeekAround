@@ -11,6 +11,8 @@
 | Commit | Rust code is committed and pushed to a **separate branch** (`rust-rewrite`); `main` stays at 1.3.2 until 2.0 is merged. Comment cleanup before every commit, no Claude attribution. |
 | Delivery | Besides the commits, built packages (Windows zip/installer, APK) go to `.local-project-files` for testing. No source zip any more. |
 | Release | Each alpha is published as a GitHub **pre-release** tagged `v2.0.0-alpha.N`; 1.3.2 stays "Latest". |
+| M4 order | Fonts → slideshow (player + builder) → photo editor → collage → video editor; one commit per part. |
+| Photo editor | Adjustments and filters on the **GPU through wgpu** (like the 1.x WebGL renderer). |
 | HEIC | **libheif** (`libheif-rs`), bundled in every package (Windows, Linux, Android, Docker). |
 | Data compatibility | The Rust server opens the existing `peekaround.db` (same schema, migrations 001–005, `PRAGMA user_version`) so libraries, favorites, albums, settings, MEGA folders and paired phones survive the upgrade. Thumbnail caches may be regenerated. |
 | API compatibility | The HTTP/WS API stays the same during the rewrite (routes, JSON shapes in `packages/shared/src/*.ts`) so the old React UI can be used as a test client for the Rust server (milestone M1), and old 1.3 phone apps keep working against a new PC for a transition period. |

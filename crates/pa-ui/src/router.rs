@@ -33,6 +33,8 @@ pub enum Route {
     ExplorePlaces,
     /// `/explore/duplicates`
     ExploreDuplicates,
+    /// `/fonts`
+    Fonts,
     /// `/explore/map[?place=…][?focus=<id>&lat=&lon=]` (focus: id, lat, lon as given)
     ExploreMap {
         /// place key filter ("" = everything)
@@ -53,6 +55,7 @@ impl Route {
             Page::Library => Route::Library,
             Page::Settings => Route::Settings,
             Page::Search => Route::Search(search.to_string()),
+            Page::Fonts => Route::Fonts,
             // pages with parameters are reached through `AppInner::go` only
             Page::Album | Page::Lib | Page::Folder => Route::Library,
             Page::ExploreResult | Page::ExplorePlaces | Page::ExploreDups | Page::ExploreMap => {
@@ -71,6 +74,7 @@ impl Route {
             Route::Library => Page::Library,
             Route::Settings => Page::Settings,
             Route::Search(_) => Page::Search,
+            Route::Fonts => Page::Fonts,
             Route::Album(_) => Page::Album,
             Route::Lib(_) => Page::Lib,
             Route::Folder(..) => Page::Folder,
@@ -98,6 +102,7 @@ impl Route {
             ("albums", None) => Route::Albums,
             ("library", None) => Route::Library,
             ("settings", _) => Route::Settings,
+            ("fonts", None) => Route::Fonts,
             ("search", Some(q)) => Route::Search(q),
             ("album", Some(id)) => Route::Album(id),
             ("library", Some(id)) => Route::Lib(id),

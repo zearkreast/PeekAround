@@ -1,0 +1,341 @@
+// Fonts page (features/fonts/index.tsx): drop card + "choose files", preview text and size,
+// uploaded families (each face previewed in itself, delete), bundled families.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "icons.slint";
+import { Shell } from "../globals.slint";
+import { DragState } from "../grid/input.slint";
+import { FontsState, FontFamilyCard, BundledFont } from "state.slint";
+import { Cols, GridPos, Enter, PageTitle } from "parts.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
+import { Spinner, Badge } from "../components/feedback.slint";
+import { TextField, Slider } from "../components/inputs.slint";
+import { ScrollPage } from "scroll.slint";
+
+component DropCard inherits Rectangle {
+    in property <bool> active;
+    border-radius: 24px;
+    border-width: 2px;
+    border-color: root.active ? Theme.accent : Theme.border-strong;
+    background: root.active ? Theme.accent.with-alpha(0.12) : Theme.bg-elev;
+    animate background, border-color { duration: Motion.fast; }
+    height: lay.preferred-height;
+    lay := VerticalLayout {
+        padding: 32px;
+        spacing: 6px;
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 64px;
+                height: 64px;
+                border-radius: 16px;
+                background: Theme.accent;
+                drop-shadow-blur: 24px;
+                drop-shadow-offset-y: 10px;
+                drop-shadow-color: Theme.accent.with-alpha(0.45);
+                Image { source: PIcons.cloud-upload; colorize: #ffffff; width: 32px; height: 32px; }
+            }
+        }
+        Rectangle { height: 10px; }
+        Text {
+            text: root.active ? I18n.t("fonts.dropHere", I18n.rev) : I18n.t("fonts.drop", I18n.rev);
+            horizontal-alignment: center;
+            font-family: Theme.font-display;
+            font-size: 20px;
+            font-weight: 600;
+            color: Theme.text;
+            wrap: word-wrap;
+        }
+        Text { text: ".ttf · .otf · .woff · .woff2"; horizontal-alignment: center; font-size: 13px; color: Theme.text-faint; }
+        HorizontalLayout {
+            alignment: center;
+            spacing: 12px;
+            padding-top: 14px;
+            VerticalLayout { alignment: center; Rectangle { width: 40px; height: 1px; background: Theme.border; } }
+            Text { text: I18n.t("fonts.or", I18n.rev); font-size: 13px; color: Theme.text-dim; }
+            VerticalLayout { alignment: center; Rectangle { width: 40px; height: 1px; background: Theme.border; } }
+        }
+        HorizontalLayout {
+            alignment: center;
+            padding-top: 10px;
+            Button {
+                text: I18n.t("fonts.browse", I18n.rev);
+                icon: PIcons.cloud-upload;
+                has-icon: true;
+                variant: ButtonVariant.primary;
+                clicked => { FontsState.browse(); }
+            }
+        }
+        if FontsState.uploading.length > 0: HorizontalLayout {
+            alignment: center;
+            spacing: 8px;
+            padding-top: 14px;
+            for n in FontsState.uploading: Rectangle {
+                height: 28px;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.surface-2;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 12px;
+                    spacing: 8px;
+                    VerticalLayout { alignment: center; Spinner { size: 14px; } }
+                    Text { text: n; font-size: 12px; color: Theme.text; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}
+
+component FamilyCard inherits Rectangle {
+    in property <FontFamilyCard> d;
+    in property <string> sample;
+    in property <float> size;
+    border-radius: 24px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev;
+    clip: true;
+    height: lay.preferred-height;
+    lay := VerticalLayout {
+        HorizontalLayout {
+            padding-left: 20px;
+            padding-right: 20px;
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 12px;
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 12px;
+                background: Theme.surface-2;
+                Image { source: PIcons.type; colorize: Theme.accent; width: 16px; height: 16px; }
+            }
+            Text {
+                text: root.d.family;
+                horizontal-stretch: 1;
+                font-size: 15px;
+                font-weight: 500;
+                color: Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            VerticalLayout { alignment: center; Badge { text: root.d.count; } }
+        }
+        Rectangle { height: 1px; background: Theme.border; }
+        for f[i] in root.d.faces: VerticalLayout {
+            if i > 0: Rectangle { height: 1px; background: Theme.border; }
+            face := HorizontalLayout {
+                padding-left: 20px;
+                padding-right: 12px;
+                padding-top: 16px;
+                padding-bottom: 16px;
+                spacing: 16px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 6px;
+                    HorizontalLayout {
+                        spacing: 6px;
+                        alignment: start;
+                        Text { text: f.sub; font-size: 11px; font-weight: 500; color: Theme.text-dim; }
+                        Text { text: "· " + f.weight + (f.italic ? " · italic" : ""); font-size: 11px; color: Theme.text-faint; }
+                        Rectangle {
+                            border-radius: 6px;
+                            background: Theme.surface-2;
+                            width: fmt.preferred-width + 10px;
+                            fmt := Text { text: f.format; font-size: 10px; color: Theme.text-faint; x: 5px; }
+                        }
+                    }
+                    Text {
+                        text: root.sample;
+                        font-family: f.previewable ? f.family : Theme.font-sans;
+                        font-weight: f.weight;
+                        font-italic: f.italic;
+                        font-size: root.size * 1px;
+                        color: Theme.text;
+                        // one line: the card's height comes from the layout, which can't measure wrapped text
+                        overflow: elide;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Icons.trash-2;
+                        label: I18n.t("common.delete", I18n.rev);
+                        clicked => { FontsState.delete(f.id, f.family + " " + f.sub); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component BundledCard inherits Rectangle {
+    in property <BundledFont> d;
+    in property <string> sample;
+    in property <float> size;
+    // two lines of the sample at 80 % of the chosen size
+    out property <length> fsz: Math.round(root.size * 0.8) * 1px;
+    out property <length> card-h: 32px + 20px + 10px + root.fsz * 2.6 + 10px + 18px;
+    border-radius: 20px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev;
+    clip: true;
+    height: root.card-h;
+    lay := VerticalLayout {
+        padding: 16px;
+        spacing: 10px;
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: root.d.label; horizontal-stretch: 1; font-size: 14px; font-weight: 500; color: Theme.text; overflow: elide; }
+            Badge { text: root.d.category; }
+        }
+        Text {
+            text: root.sample;
+            font-family: root.d.family;
+            font-size: root.fsz;
+            height: root.fsz * 2.6;
+            color: Theme.text;
+            wrap: word-wrap;
+            overflow: elide;
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            alignment: start;
+            for w in root.d.weights: Rectangle {
+                border-radius: 6px;
+                background: Theme.surface-2;
+                width: wt.preferred-width + 10px;
+                height: 18px;
+                wt := Text { text: w; x: 5px; font-size: 11px; color: Theme.text-faint; vertical-alignment: center; }
+            }
+            if root.d.italic: Rectangle {
+                border-radius: 6px;
+                background: Theme.surface-2;
+                width: it.preferred-width + 10px;
+                height: 18px;
+                it := Text { text: "italic"; x: 5px; font-size: 11px; font-italic: true; color: Theme.text-faint; vertical-alignment: center; }
+            }
+        }
+    }
+}
+
+export component FontsPage inherits Rectangle {
+    in property <length> window-width;
+    property <length> pad: root.window-width >= 640px ? 28px : 16px;
+    property <length> cw: Math.min(root.width - 2 * pad - 12px, 896px);
+    property <length> cx: (root.width - 12px - cw) / 2;
+    property <string> text: FontsState.sample != "" ? FontsState.sample : I18n.t("fonts.sample", I18n.rev);
+    property <int> cols: root.cw >= 600px ? 2 : 1;
+    property <length> bw: (root.cw - (root.cols - 1) * 12px) / root.cols;
+    property <length> bh: 32px + 20px + 10px + Math.round(FontsState.size * 0.8) * 2.6px + 10px + 18px + 12px;
+
+    ScrollPage {
+        width: root.width;
+        height: root.height;
+        content-height: col.preferred-height + 24px + 112px;
+        changed scroll-y => { Shell.title-revealed = -self.scroll-y > 80px; }
+        col := VerticalLayout {
+            x: root.cx;
+            y: 32px;
+            width: root.cw;
+            spacing: 24px;
+            alignment: start;
+            VerticalLayout {
+                spacing: 6px;
+                PageTitle {
+                    text: I18n.t("fonts.title", I18n.rev);
+                    icon: PIcons.type;
+                    has-icon: true;
+                    sub: I18n.t("fonts.subtitle", I18n.rev);
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    alignment: start;
+                    VerticalLayout { alignment: center; Image { source: Icons.sparkles; colorize: Theme.accent; width: 14px; height: 14px; } }
+                    Text { text: I18n.t("fonts.usage", I18n.rev); font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+                }
+            }
+            if !Shell.readonly: DropCard { active: DragState.files-over; }
+
+            // preview controls
+            Rectangle {
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.glass;
+                height: ctl.preferred-height;
+                ctl := HorizontalLayout {
+                    padding: 12px;
+                    spacing: 12px;
+                    TextField {
+                        horizontal-stretch: 1;
+                        text <=> FontsState.sample;
+                        placeholder: I18n.t("fonts.sample", I18n.rev);
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: PIcons.rotate-ccw;
+                            label: I18n.t("fonts.resetSample", I18n.rev);
+                            enabled: FontsState.sample != "";
+                            clicked => { FontsState.sample = ""; }
+                        }
+                    }
+                    HorizontalLayout {
+                        width: 240px;
+                        spacing: 10px;
+                        Text { text: I18n.t("fonts.size", I18n.rev); font-size: 13px; color: Theme.text-dim; vertical-alignment: center; }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Slider { value <=> FontsState.size; minimum: 16; maximum: 120; }
+                        }
+                        Text { text: Math.round(FontsState.size); width: 28px; horizontal-alignment: right; font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+                    }
+                }
+            }
+
+            // uploaded fonts
+            VerticalLayout {
+                spacing: 12px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Text { text: I18n.t("fonts.custom", I18n.rev); font-family: Theme.font-display; font-size: 18px; font-weight: 600; color: Theme.text; }
+                    if FontsState.custom-count > 0: VerticalLayout { alignment: center; Badge { text: FontsState.custom-count; } }
+                }
+                if FontsState.loading: HorizontalLayout { alignment: center; padding: 40px; Spinner { size: 24px; } }
+                if !FontsState.loading && FontsState.families.length == 0: Rectangle {
+                    border-radius: 24px;
+                    border-width: 1px;
+                    border-color: Theme.border-strong;
+                    height: 96px;
+                    Text { text: I18n.t("fonts.empty", I18n.rev); font-size: 13px; color: Theme.text-faint; }
+                }
+                for f in FontsState.families: FamilyCard { d: f; sample: root.text; size: FontsState.size; }
+            }
+
+            // bundled
+            VerticalLayout {
+                spacing: 12px;
+                Text { text: I18n.t("fonts.bundled", I18n.rev); font-family: Theme.font-display; font-size: 18px; font-weight: 600; color: Theme.text; }
+                Rectangle {
+                    height: GridPos.rows(FontsState.bundled.length, root.cols) * root.bh;
+                    for b[i] in FontsState.bundled: BundledCard {
+                        x: Math.mod(i, root.cols) * (root.bw + 12px);
+                        y: Math.floor(i / root.cols) * root.bh;
+                        width: root.bw;
+                        d: b;
+                        sample: root.text;
+                        size: FontsState.size;
+                    }
+                }
+            }
+        }
+    }
+}

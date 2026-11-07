@@ -21,12 +21,14 @@ android = ["slint/backend-android-activity-06"]
 
 [dependencies]
 # femtovg (OpenGL) renderer on winit; no Qt, no skia (prebuilt binaries / huge source build)
-slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "renderer-femtovg"] }
+slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "renderer-femtovg", "unstable-fontique-011"] }
 pa-core = { path = "../pa-core", default-features = false }
 pa-client = { path = "../pa-client", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt", "sync", "time"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "fs"] }
+# WOFF 1.0 tables (Fonts page previews)
+flate2 = "1"
 bytes = "1"
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["webp", "jpeg", "png"] }
