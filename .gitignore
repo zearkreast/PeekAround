@@ -20,3 +20,7 @@ docker/peekaround-data/
 
 # local files
 .local-project-files
+
+# LLM files
+.claude
+CLAUDE.md
