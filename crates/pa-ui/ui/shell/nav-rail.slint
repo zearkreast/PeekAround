@@ -65,7 +65,7 @@ export component NavRail inherits Rectangle {
         : Shell.page == Page.explore || Shell.page == Page.explore-result || Shell.page == Page.explore-places
             || Shell.page == Page.explore-dups || Shell.page == Page.explore-map ? 1 : Shell.page == Page.favorites ? 2
         : Shell.page == Page.albums || Shell.page == Page.album ? 3
-        : Shell.page == Page.library || Shell.page == Page.lib || Shell.page == Page.folder || Shell.page == Page.fonts ? 4 : -1;
+        : Shell.page == Page.library || Shell.page == Page.lib || Shell.page == Page.folder || Shell.page == Page.fonts || Shell.page == Page.slideshow ? 4 : -1;
 
     // logo (h-[var(--topbar-h)])
     Image {

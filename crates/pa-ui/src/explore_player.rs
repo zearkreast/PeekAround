@@ -576,10 +576,10 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     let w = Rc::downgrade(&p);
     st.on_as_slideshow(move || {
         if let Some(p) = w.upgrade() {
-            // TODO: hand these items to the slideshow player; the shell shows a placeholder for now
-            p.set_paused(true);
+            let items = p.items.borrow().clone();
+            p.close();
             if let Some(a) = p.app() {
-                a.window.invoke_slideshow();
+                crate::slideshow_ui::open_with(&a, items);
             }
         }
     });

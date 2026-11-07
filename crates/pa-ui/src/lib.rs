@@ -41,6 +41,9 @@ mod api;
 mod app;
 mod pages;
 mod router;
+mod slideshow;
+mod slideshow_show;
+mod slideshow_ui;
 
 #[allow(missing_docs, clippy::all)]
 mod generated {

@@ -1,0 +1,106 @@
+// Slideshow stage (features/slideshow/ShowStage.tsx). Rust (src/slideshow_show.rs) computes every
+// frame: the layer box of the outgoing / incoming slide, the picture inside it (contain fit,
+// Ken Burns, zoom, flip), a circle reveal and overlays; this file only draws the boxes.
+
+export struct SlideVis {
+    image: image,
+    has-image: bool,
+    opacity: float,
+    // slide layer (the slide's background box) in stage px
+    lx: float,
+    ly: float,
+    lw: float,
+    lh: float,
+    // picture box relative to the layer, px
+    ix: float,
+    iy: float,
+    iw: float,
+    ih: float,
+    // circle reveal radius in px; < 0 = no clip
+    clip-r: float,
+    // black overlay (slide transition's dimmed exit) and white bloom (blur transition), 0..1
+    dim: float,
+    glow: float,
+}
+
+export struct StageFrame {
+    cur: SlideVis,
+    prev: SlideVis,
+    has-prev: bool,
+    bg: color,
+    caption-title: string,
+    caption-date: string,
+    // 0..1, and the rise in px while it fades in
+    caption-opacity: float,
+    caption-y: float,
+}
+
+component SlideLayer inherits Rectangle {
+    in property <SlideVis> v;
+    in property <color> bg;
+    property <bool> circle: root.v.clip-r >= 0;
+    property <length> cr: root.v.clip-r * 1px;
+    opacity: root.v.opacity;
+    // the clip box: the whole layer, or a centred circle of radius clip-r
+    clipbox := Rectangle {
+        x: root.circle ? root.v.lx * 1px + root.v.lw * 0.5px - root.cr : root.v.lx * 1px;
+        y: root.circle ? root.v.ly * 1px + root.v.lh * 0.5px - root.cr : root.v.ly * 1px;
+        width: root.circle ? 2 * root.cr : root.v.lw * 1px;
+        height: root.circle ? 2 * root.cr : root.v.lh * 1px;
+        border-radius: root.circle ? root.cr : 0px;
+        clip: true;
+        Rectangle {
+            x: root.v.lx * 1px - clipbox.x;
+            y: root.v.ly * 1px - clipbox.y;
+            width: root.v.lw * 1px;
+            height: root.v.lh * 1px;
+            background: root.bg;
+            if root.v.has-image: Image {
+                x: root.v.ix * 1px;
+                y: root.v.iy * 1px;
+                width: root.v.iw * 1px;
+                height: root.v.ih * 1px;
+                source: root.v.image;
+                image-fit: fill;
+            }
+            if root.v.dim > 0: Rectangle { background: #000000.with-alpha(root.v.dim); }
+            if root.v.glow > 0: Rectangle { background: #ffffff.with-alpha(root.v.glow); }
+        }
+    }
+}
+
+export component ShowStage inherits Rectangle {
+    in property <StageFrame> frame;
+    // stage size in px (Rust lays the slides out for it)
+    callback resized(length, length);
+    clip: true;
+    background: root.frame.bg;
+    changed width => { root.resized(self.width, self.height); }
+    changed height => { root.resized(self.width, self.height); }
+    init => { root.resized(self.width, self.height); }
+
+    if root.frame.has-prev: SlideLayer { v: root.frame.prev; bg: root.frame.bg; }
+    SlideLayer { v: root.frame.cur; bg: root.frame.bg; }
+
+    if root.frame.caption-opacity > 0: VerticalLayout {
+        x: root.width * 0.05;
+        y: root.height * 0.92 - self.preferred-height + root.frame.caption-y * 1px;
+        width: root.width * 0.8;
+        height: self.preferred-height;
+        opacity: root.frame.caption-opacity;
+        spacing: 4px;
+        Text {
+            text: root.frame.caption-title;
+            font-family: "Bricolage Grotesque";
+            font-weight: 600;
+            font-size: Math.clamp(Math.min(root.width, root.height) * 0.032, 16px, 40px);
+            color: #ffffff;
+            overflow: elide;
+        }
+        Text {
+            text: root.frame.caption-date;
+            font-size: Math.clamp(Math.min(root.width, root.height) * 0.017, 11px, 20px);
+            color: #ffffffcc;
+        }
+    }
+}

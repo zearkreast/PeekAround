@@ -98,7 +98,6 @@ struct Hub {
     dropped: RefCell<Vec<PathBuf>>,
     drop_timer: slint::Timer,
     scroll_timer: slint::Timer,
-    pending_slideshow: RefCell<Vec<MediaItem>>,
 }
 
 thread_local! {
@@ -149,11 +148,19 @@ pub fn register_drop_handler(prefix: &str, f: DropHandler) {
     }
 }
 
-/// The items "make slideshow" was run on (read by the slideshow screen).
-pub fn take_slideshow_items() -> Vec<MediaItem> {
-    hub()
-        .map(|h| std::mem::take(&mut *h.pending_slideshow.borrow_mut()))
-        .unwrap_or_default()
+/// A library folder's name ("Library / folder" when the library has several), from the last
+/// libraries list.
+pub(crate) fn folder_name(folder_id: &str) -> Option<String> {
+    let h = hub()?;
+    let libs = h.libs.borrow();
+    libs.as_ref()?.libraries.iter().find_map(|l| {
+        let f = l.folders.iter().find(|f| f.id == folder_id)?;
+        Some(if l.folders.len() > 1 {
+            format!("{} / {}", l.name, f.name)
+        } else {
+            l.name.clone()
+        })
+    })
 }
 
 /// Open the viewer at grid index `i` (album / folder pages that show the shared grid).
@@ -586,8 +593,10 @@ impl Hub {
             "favorite" => self.favorite(a, items),
             "download" => self.download(a, items),
             "slideshow" => {
-                *self.pending_slideshow.borrow_mut() = items;
-                a.window.invoke_slideshow();
+                if let Some(v) = crate::viewer::get() {
+                    v.close_now();
+                }
+                crate::slideshow_ui::open_with(a, items);
             }
             "add-to-album" => self.open_album_picker(items),
             "move" | "copy" => self.open_move(items, id == "copy"),
@@ -2052,7 +2061,6 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         dropped: RefCell::new(vec![]),
         drop_timer: slint::Timer::default(),
         scroll_timer: slint::Timer::default(),
-        pending_slideshow: RefCell::new(vec![]),
     });
     HUB.with(|c| *c.borrow_mut() = Some(h.clone()));
     crate::viewer::install(app);

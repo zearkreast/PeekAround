@@ -35,6 +35,8 @@ pub enum Route {
     ExploreDuplicates,
     /// `/fonts`
     Fonts,
+    /// `/slideshow` (builder; the player is an overlay)
+    Slideshow,
     /// `/explore/map[?place=…][?focus=<id>&lat=&lon=]` (focus: id, lat, lon as given)
     ExploreMap {
         /// place key filter ("" = everything)
@@ -56,6 +58,7 @@ impl Route {
             Page::Settings => Route::Settings,
             Page::Search => Route::Search(search.to_string()),
             Page::Fonts => Route::Fonts,
+            Page::Slideshow => Route::Slideshow,
             // pages with parameters are reached through `AppInner::go` only
             Page::Album | Page::Lib | Page::Folder => Route::Library,
             Page::ExploreResult | Page::ExplorePlaces | Page::ExploreDups | Page::ExploreMap => {
@@ -75,6 +78,7 @@ impl Route {
             Route::Settings => Page::Settings,
             Route::Search(_) => Page::Search,
             Route::Fonts => Page::Fonts,
+            Route::Slideshow => Page::Slideshow,
             Route::Album(_) => Page::Album,
             Route::Lib(_) => Page::Lib,
             Route::Folder(..) => Page::Folder,
@@ -103,6 +107,7 @@ impl Route {
             ("library", None) => Route::Library,
             ("settings", _) => Route::Settings,
             ("fonts", None) => Route::Fonts,
+            ("slideshow", None) => Route::Slideshow,
             ("search", Some(q)) => Route::Search(q),
             ("album", Some(id)) => Route::Album(id),
             ("library", Some(id)) => Route::Lib(id),

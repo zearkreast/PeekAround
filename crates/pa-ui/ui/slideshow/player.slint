@@ -1,0 +1,192 @@
+// Full-screen slideshow player (features/slideshow/Player.tsx): the stage, progress segments,
+// prev / play / next, time, captions, music mute, full screen; the chrome hides while playing.
+// Keys: space / k play-pause, ← →, Esc close, f full screen, c captions, m mute.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { VIcons } from "../viewer/icons.slint";
+import { PIcons } from "../pages/icons.slint";
+import { ShowStage, StageFrame } from "stage.slint";
+
+export global SlidePlayer {
+    in property <bool> open;
+    in property <StageFrame> frame;
+    in property <int> count;
+    in property <int> index;
+    in property <float> progress;
+    in property <bool> playing;
+    in property <bool> ended;
+    in property <bool> ui: true;
+    in property <bool> muted;
+    in property <bool> has-music;
+    in property <bool> captions;
+    in property <bool> fullscreen;
+    in property <string> time-text;
+    callback close();
+    callback toggle();
+    callback next();
+    callback prev();
+    callback toggle-mute();
+    callback toggle-captions();
+    callback toggle-full();
+    // pointer moved: show the chrome for a while
+    callback poke();
+    callback resized(length, length);
+}
+
+component RoundBtn inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 20px;
+    in property <bool> big;
+    callback clicked();
+    width: root.big ? 56px : 40px;
+    height: self.width;
+    border-radius: self.width / 2;
+    background: root.big ? #ffffff : ta.has-hover ? #ffffff26 : transparent;
+    animate background { duration: Motion.fast; }
+    Image { source: root.icon; colorize: root.big ? #000000 : #ffffff; width: root.icon-size; height: root.icon-size; }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+export component SlidePlayerOverlay inherits Rectangle {
+    property <bool> chrome: SlidePlayer.ui || !SlidePlayer.playing;
+    background: #000000;
+    fs := FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.modifiers.control || e.modifiers.alt || e.modifiers.meta { return reject; }
+            if e.text == " " || e.text == "k" { SlidePlayer.toggle(); }
+            else if e.text == Key.RightArrow { SlidePlayer.next(); }
+            else if e.text == Key.LeftArrow { SlidePlayer.prev(); }
+            else if e.text == Key.Escape { SlidePlayer.close(); }
+            else if e.text == "f" || e.text == "F" { SlidePlayer.toggle-full(); }
+            else if e.text == "c" || e.text == "C" { SlidePlayer.toggle-captions(); }
+            else if e.text == "m" || e.text == "M" { SlidePlayer.toggle-mute(); }
+            else { return reject; }
+            SlidePlayer.poke();
+            accept
+        }
+    }
+    stage := ShowStage {
+        frame: SlidePlayer.frame;
+        resized(w, h) => { SlidePlayer.resized(w, h); }
+    }
+    // a click on the stage plays / pauses; any move shows the chrome
+    TouchArea {
+        mouse-cursor: root.chrome ? default : none;
+        moved => { SlidePlayer.poke(); }
+        clicked => { SlidePlayer.toggle(); SlidePlayer.poke(); fs.focus(); }
+    }
+
+    // top: progress segments (one bar for long shows) + close
+    Rectangle {
+        y: 0;
+        height: 96px;
+        opacity: root.chrome ? 1 : 0;
+        animate opacity { duration: 200ms; }
+        background: @linear-gradient(180deg, #0000008c 0%, #00000000 100%);
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 12px;
+            padding-top: 14px;
+            spacing: 12px;
+            alignment: stretch;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: start;
+                padding-top: 16px;
+                if SlidePlayer.count <= 40: HorizontalLayout {
+                    spacing: 4px;
+                    height: 4px;
+                    for k in SlidePlayer.count: Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 2px;
+                        clip: true;
+                        background: #ffffff33;
+                        Rectangle {
+                            x: 0;
+                            width: parent.width * (k < SlidePlayer.index ? 1 : k == SlidePlayer.index ? SlidePlayer.progress : 0);
+                            background: #ffffff;
+                        }
+                    }
+                }
+                if SlidePlayer.count > 40: Rectangle {
+                    height: 4px;
+                    border-radius: 2px;
+                    clip: true;
+                    background: #ffffff33;
+                    Rectangle {
+                        x: 0;
+                        width: parent.width * (SlidePlayer.index + SlidePlayer.progress) / Math.max(1, SlidePlayer.count);
+                        background: #ffffff;
+                    }
+                }
+            }
+            VerticalLayout {
+                alignment: start;
+                RoundBtn { icon: VIcons.x; icon-size: 22px; clicked => { SlidePlayer.close(); } }
+            }
+        }
+    }
+
+    // bottom controls
+    Rectangle {
+        y: root.height - self.height;
+        height: 120px;
+        opacity: root.chrome ? 1 : 0;
+        animate opacity { duration: 200ms; }
+        background: @linear-gradient(0deg, #00000099 0%, #00000000 100%);
+        HorizontalLayout {
+            padding-left: 20px;
+            padding-right: 20px;
+            padding-bottom: 22px;
+            spacing: 10px;
+            alignment: stretch;
+            HorizontalLayout {
+                horizontal-stretch: 1;
+                alignment: start;
+                VerticalLayout {
+                    alignment: end;
+                    Text { text: SlidePlayer.time-text; color: #ffffffcc; font-size: 13px; }
+                }
+            }
+            VerticalLayout {
+                alignment: end;
+                HorizontalLayout {
+                    spacing: 10px;
+                    VerticalLayout { alignment: center; RoundBtn { icon: VIcons.chevron-left; icon-size: 24px; clicked => { SlidePlayer.prev(); SlidePlayer.poke(); } } }
+                    RoundBtn {
+                        big: true;
+                        icon: SlidePlayer.ended ? VIcons.rotate-cw : SlidePlayer.playing ? VIcons.pause-fill : VIcons.play-fill;
+                        icon-size: 24px;
+                        clicked => { SlidePlayer.toggle(); SlidePlayer.poke(); }
+                    }
+                    VerticalLayout { alignment: center; RoundBtn { icon: VIcons.chevron-right; icon-size: 24px; clicked => { SlidePlayer.next(); SlidePlayer.poke(); } } }
+                }
+            }
+            HorizontalLayout {
+                horizontal-stretch: 1;
+                alignment: end;
+                spacing: 4px;
+                VerticalLayout {
+                    alignment: end;
+                    Rectangle {
+                        width: 40px;
+                        height: 40px;
+                        border-radius: 20px;
+                        background: SlidePlayer.captions ? #ffffff33 : capta.has-hover ? #ffffff26 : transparent;
+                        Image { source: PIcons.type; colorize: #ffffff; width: 20px; height: 20px; }
+                        capta := TouchArea { mouse-cursor: pointer; clicked => { SlidePlayer.toggle-captions(); SlidePlayer.poke(); } }
+                    }
+                }
+                if SlidePlayer.has-music: VerticalLayout {
+                    alignment: end;
+                    RoundBtn { icon: SlidePlayer.muted ? VIcons.volume-x : VIcons.volume-2; clicked => { SlidePlayer.toggle-mute(); SlidePlayer.poke(); } }
+                }
+                VerticalLayout {
+                    alignment: end;
+                    RoundBtn { icon: SlidePlayer.fullscreen ? VIcons.minimize : VIcons.maximize; clicked => { SlidePlayer.toggle-full(); SlidePlayer.poke(); } }
+                }
+            }
+        }
+    }
+}

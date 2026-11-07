@@ -308,6 +308,7 @@ impl AppInner {
         crate::pages::enter(self, &route);
         // explore pages / map
         crate::explore::enter(self, &route);
+        crate::slideshow_ui::enter(self, &route);
     }
 
     /// error toast
@@ -579,7 +580,7 @@ pub fn run_with(
     let w = Rc::downgrade(&app);
     window.on_slideshow(move || {
         if let Some(a) = w.upgrade() {
-            a.toast(ToastKind::Info, &a.t("native.slideshowSoon"), "");
+            crate::slideshow_ui::open_from_grid(&a);
         }
     });
 
@@ -620,6 +621,7 @@ pub fn run_with(
     crate::actions_ui::install(&app);
     // explore pages, memory player, map, mini map
     crate::explore::install(&app);
+    crate::slideshow_ui::install(&app);
 
     app.navigate(Page::Photos, false);
 
@@ -642,6 +644,7 @@ pub fn run_with(
     let _ = window.hide();
     crate::explore_player::shutdown();
     crate::viewer::shutdown();
+    crate::slideshow_ui::shutdown();
     perf::report(&frames, &app.grid.0.borrow());
     drop(app);
     r

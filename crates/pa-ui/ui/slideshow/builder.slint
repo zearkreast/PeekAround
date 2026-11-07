@@ -1,0 +1,468 @@
+// Slideshow builder (features/slideshow/Builder.tsx + ItemList / SettingsPanel): live preview,
+// the slide list (order, remove, per-photo duration), style, timing, look, order, music and the
+// video export. Rust: src/slideshow_ui.rs.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { VIcons } from "../viewer/icons.slint";
+import { PIcons } from "../pages/icons.slint";
+import { Shell } from "../globals.slint";
+import { ShowStage, StageFrame } from "stage.slint";
+import { PageTitle } from "../pages/parts.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
+import { Badge, EmptyState, Spinner } from "../components/feedback.slint";
+import { TextField, Slider, Switch, Segmented, SegOption, ColorSwatches } from "../components/inputs.slint";
+import { ScrollPage } from "../pages/scroll.slint";
+
+export struct SlideRow {
+    thumb: image,
+    has-thumb: bool,
+    name: string,
+    is-video: bool,
+    // "4 sn" / "0:12"
+    dur: string,
+    // the photo has its own duration
+    custom: bool,
+}
+
+export struct MusicRow {
+    id: string,
+    name: string,
+    sub: string,
+}
+
+export global SlideBuilder {
+    in property <[SlideRow]> rows;
+    in property <StageFrame> preview;
+    in property <string> stats;
+    in property <string> total;
+    in property <string> music-name;
+    in property <bool> has-music;
+    // settings
+    in-out property <string> transition: "fade";
+    in-out property <float> duration: 4;
+    in-out property <float> transition-duration: 1;
+    in-out property <bool> ken-burns: true;
+    in-out property <string> aspect: "16:9";
+    in-out property <color> background: #000000;
+    in-out property <bool> shuffle;
+    in-out property <bool> loop;
+    in-out property <bool> captions;
+    in-out property <string> res: "1080";
+    in property <float> aspect-ratio: 16 / 9;
+    // export
+    in-out property <string> name;
+    in property <string> target-label;
+    in property <bool> exporting;
+    // music picker
+    in property <bool> music-open;
+    in property <bool> music-loading;
+    in property <[MusicRow]> music;
+    callback play();
+    callback remove(int);
+    callback move(int, int);
+    callback set-item-duration(int, float);
+    callback clear();
+    callback changed();
+    callback preview-resized(length, length);
+    callback pick-music();
+    callback use-music(string);
+    callback close-music();
+    callback remove-music();
+    callback change-target();
+    callback export();
+    callback go-timeline();
+}
+
+component Section inherits Rectangle {
+    in property <string> title;
+    border-radius: 20px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev;
+    height: lay.preferred-height;
+    lay := VerticalLayout {
+        padding: 18px;
+        spacing: 12px;
+        Text { text: root.title; font-family: Theme.font-display; font-size: 15px; font-weight: 600; color: Theme.text; }
+        @children
+    }
+}
+
+component Row inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> hint;
+    spacing: 12px;
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        Text { text: root.label; font-size: 13px; color: Theme.text; }
+        if root.hint != "": Text { text: root.hint; font-size: 11px; color: Theme.text-faint; wrap: word-wrap; }
+    }
+    @children
+}
+
+component Chip inherits Rectangle {
+    in property <string> text;
+    in property <bool> on;
+    callback clicked();
+    height: 32px;
+    width: t.preferred-width + 24px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: root.on ? Theme.accent : Theme.border;
+    background: root.on ? Theme.accent-soft : ta.has-hover ? Theme.surface-2 : transparent;
+    t := Text { text: root.text; font-size: 12px; color: root.on ? Theme.text : Theme.text-dim; }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component SlideCard inherits Rectangle {
+    in property <SlideRow> d;
+    in property <int> index;
+    in property <int> count;
+    border-radius: 14px;
+    clip: true;
+    background: Theme.tile-bg;
+    if root.d.has-thumb: Image { width: parent.width; height: parent.height; source: root.d.thumb; image-fit: cover; }
+    Rectangle { background: @linear-gradient(0deg, #000000a6 0%, #00000000 55%); }
+    Text { x: 8px; y: 6px; text: root.index + 1; font-size: 12px; font-weight: 600; color: #ffffff; }
+    HorizontalLayout {
+        y: parent.height - 26px;
+        height: 20px;
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 4px;
+        if root.d.is-video: Image { source: VIcons.play-fill; colorize: #ffffff; width: 12px; height: 12px; y: 4px; }
+        Text { text: root.d.dur; font-size: 11px; color: root.d.custom ? Theme.accent : #ffffffd9; vertical-alignment: center; }
+    }
+    ta := TouchArea {}
+    if ta.has-hover: HorizontalLayout {
+        x: parent.width - self.preferred-width - 4px;
+        y: 4px;
+        height: 28px;
+        spacing: 2px;
+        if root.index > 0: IconButton { size: IconButtonSize.sm; glass: true; icon: VIcons.chevron-left; label: I18n.t("slide.dragToReorder", I18n.rev); clicked => { SlideBuilder.move(root.index, -1); } }
+        if root.index < root.count - 1: IconButton { size: IconButtonSize.sm; glass: true; icon: VIcons.chevron-right; label: I18n.t("slide.dragToReorder", I18n.rev); clicked => { SlideBuilder.move(root.index, 1); } }
+        IconButton { size: IconButtonSize.sm; glass: true; icon: VIcons.x; label: I18n.t("common.delete", I18n.rev); clicked => { SlideBuilder.remove(root.index); } }
+    }
+}
+
+export component SlideBuilderPage inherits Rectangle {
+    in property <length> window-width;
+    property <length> pad: root.window-width >= 640px ? 28px : 16px;
+    property <length> cw: Math.min(root.width - 2 * pad - 12px, 1400px);
+    property <length> cx: (root.width - 12px - cw) / 2;
+    property <bool> two: root.cw >= 980px;
+    property <length> side: root.two ? 360px : root.cw;
+    property <length> main: root.two ? root.cw - root.side - 24px : root.cw;
+    property <int> cols: Math.max(2, Math.floor((root.main + 10px) / 130px));
+    property <length> tw: (root.main - (root.cols - 1) * 10px) / root.cols;
+    property <length> hero-h: Math.clamp(root.height * 0.46, 240px, 540px);
+    property <[SegOption]> aspects: [
+        { value: "16:9", label: "16:9" }, { value: "9:16", label: "9:16" },
+        { value: "1:1", label: "1:1" }, { value: "4:5", label: "4:5" },
+    ];
+    property <[SegOption]> resolutions: [{ value: "720", label: "720p" }, { value: "1080", label: "1080p" }, { value: "2160", label: "4K" }];
+    property <[SegOption]> transitions: [
+        { value: "fade", label: I18n.t("slide.tr.fade", I18n.rev) },
+        { value: "slide", label: I18n.t("slide.tr.slide", I18n.rev) },
+        { value: "zoom", label: I18n.t("slide.tr.zoom", I18n.rev) },
+        { value: "blur", label: I18n.t("slide.tr.blur", I18n.rev) },
+        { value: "flip", label: I18n.t("slide.tr.flip", I18n.rev) },
+        { value: "circle", label: I18n.t("slide.tr.circle", I18n.rev) },
+        { value: "kenburns", label: I18n.t("slide.tr.kenburns", I18n.rev) },
+        { value: "random", label: I18n.t("slide.tr.random", I18n.rev) },
+        { value: "none", label: I18n.t("slide.tr.none", I18n.rev) },
+    ];
+
+    ScrollPage {
+        width: root.width;
+        height: root.height;
+        content-height: col.preferred-height + 24px + 112px;
+        changed scroll-y => { Shell.title-revealed = -self.scroll-y > 80px; }
+        col := VerticalLayout {
+            x: root.cx;
+            y: 24px;
+            width: root.cw;
+            spacing: 24px;
+            alignment: start;
+            HorizontalLayout {
+                PageTitle {
+                    horizontal-stretch: 1;
+                    text: I18n.t("nav.slideshow", I18n.rev);
+                    icon: VIcons.presentation;
+                    has-icon: true;
+                    sub: I18n.t("slide.subtitle", I18n.rev);
+                }
+                if SlideBuilder.rows.length > 0: VerticalLayout {
+                    alignment: end;
+                    padding-bottom: 6px;
+                    Button {
+                        text: I18n.t("slide.clearAll", I18n.rev);
+                        variant: ButtonVariant.ghost;
+                        size: ButtonSize.sm;
+                        clicked => { SlideBuilder.clear(); }
+                    }
+                }
+            }
+
+            if SlideBuilder.rows.length == 0: VerticalLayout {
+                padding: 40px;
+                spacing: 16px;
+                EmptyState {
+                    icon: VIcons.presentation;
+                    title: I18n.t("slide.emptyTitle", I18n.rev);
+                    body: I18n.t("slide.emptyBody", I18n.rev);
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Button {
+                        text: I18n.t("slide.goTimeline", I18n.rev);
+                        variant: ButtonVariant.primary;
+                        clicked => { SlideBuilder.go-timeline(); }
+                    }
+                }
+            }
+
+            if SlideBuilder.rows.length > 0: Rectangle {
+                height: root.two ? Math.max(left.preferred-height, right.preferred-height) : left.preferred-height + 24px + right.preferred-height;
+                left := VerticalLayout {
+                    x: 0;
+                    y: 0;
+                    width: root.main;
+                    spacing: 20px;
+                    alignment: start;
+                    // preview hero
+                    Rectangle {
+                        height: root.hero-h;
+                        border-radius: 24px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: #000000;
+                        clip: true;
+                        property <length> sh: self.height - 32px;
+                        property <length> sw: Math.min(self.width - 32px, self.sh * SlideBuilder.aspect-ratio);
+                        Rectangle {
+                            x: (parent.width - parent.sw) / 2;
+                            y: (parent.height - parent.sw / SlideBuilder.aspect-ratio) / 2;
+                            width: parent.sw;
+                            height: parent.sw / SlideBuilder.aspect-ratio;
+                            border-radius: 16px;
+                            clip: true;
+                            ShowStage {
+                                frame: SlideBuilder.preview;
+                                resized(w, h) => { SlideBuilder.preview-resized(w, h); }
+                            }
+                        }
+                        Rectangle { y: parent.height - 128px; width: parent.width; height: 128px; background: @linear-gradient(0deg, #000000cc 0%, #00000000 100%); }
+                        HorizontalLayout {
+                            y: parent.height - self.preferred-height;
+                            width: parent.width;
+                            height: self.preferred-height;
+                            padding: 20px;
+                            spacing: 12px;
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: end;
+                                spacing: 4px;
+                                Text { text: SlideBuilder.stats + "  ·  " + SlideBuilder.total; font-size: 13px; color: #ffffffbf; }
+                                if SlideBuilder.has-music: Text { text: "♪ " + SlideBuilder.music-name; font-size: 13px; color: #ffffffbf; overflow: elide; }
+                            }
+                            VerticalLayout {
+                                alignment: end;
+                                Button {
+                                    text: I18n.t("slide.play", I18n.rev);
+                                    icon: VIcons.play-fill;
+                                    has-icon: true;
+                                    variant: ButtonVariant.primary;
+                                    clicked => { SlideBuilder.play(); }
+                                }
+                            }
+                        }
+                    }
+                    // slide list
+                    Rectangle {
+                        height: (Math.ceil(SlideBuilder.rows.length / root.cols)) * (root.tw * 0.75 + 10px);
+                        for r[i] in SlideBuilder.rows: SlideCard {
+                            x: Math.mod(i, root.cols) * (root.tw + 10px);
+                            y: Math.floor(i / root.cols) * (root.tw * 0.75 + 10px);
+                            width: root.tw;
+                            height: root.tw * 0.75;
+                            d: r;
+                            index: i;
+                            count: SlideBuilder.rows.length;
+                        }
+                    }
+                }
+                right := VerticalLayout {
+                    x: root.two ? root.main + 24px : 0;
+                    y: root.two ? 0 : left.preferred-height + 24px;
+                    width: root.side;
+                    spacing: 16px;
+                    alignment: start;
+                    Section {
+                        title: I18n.t("slide.style", I18n.rev);
+                        for rowi in 3: HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+                            for k in 3: Chip {
+                                property <SegOption> o: root.transitions[rowi * 3 + k];
+                                text: self.o.label;
+                                on: SlideBuilder.transition == self.o.value;
+                                clicked => { SlideBuilder.transition = self.o.value; SlideBuilder.changed(); }
+                            }
+                        }
+                    }
+                    Section {
+                        title: I18n.t("slide.timing", I18n.rev);
+                        Slider {
+                            label: I18n.t("slide.perPhoto", I18n.rev);
+                            value-text: Math.round(SlideBuilder.duration * 10) / 10 + " " + I18n.t("slide.sec", I18n.rev);
+                            value <=> SlideBuilder.duration;
+                            minimum: 1;
+                            maximum: 15;
+                            step: 0.5;
+                            committed => { SlideBuilder.changed(); }
+                        }
+                        if SlideBuilder.transition != "none": Slider {
+                            label: I18n.t("slide.transitionDuration", I18n.rev);
+                            value-text: Math.round(SlideBuilder.transition-duration * 10) / 10 + " " + I18n.t("slide.sec", I18n.rev);
+                            value <=> SlideBuilder.transition-duration;
+                            minimum: 0.3;
+                            maximum: 3;
+                            step: 0.1;
+                            committed => { SlideBuilder.changed(); }
+                        }
+                        Row {
+                            label: I18n.t("slide.kenBurns", I18n.rev);
+                            hint: SlideBuilder.transition == "kenburns" ? I18n.t("slide.kenBurnsOnByStyle", I18n.rev) : I18n.t("slide.kenBurnsHint", I18n.rev);
+                            VerticalLayout { alignment: center; Switch { checked <=> SlideBuilder.ken-burns; enabled: SlideBuilder.transition != "kenburns"; toggled => { SlideBuilder.changed(); } } }
+                        }
+                    }
+                    Section {
+                        title: I18n.t("slide.look", I18n.rev);
+                        Segmented { options: root.aspects; value <=> SlideBuilder.aspect; fill: true; changed-value => { SlideBuilder.changed(); } }
+                        Row {
+                            label: I18n.t("slide.background", I18n.rev);
+                            ColorSwatches {
+                                colors: [#000000, #ffffff, #1c1c24, #f5efe6, #0f2a3d, #3d0f2a];
+                                value: SlideBuilder.background;
+                                picked(c) => { SlideBuilder.background = c; SlideBuilder.changed(); }
+                            }
+                        }
+                        Row {
+                            label: I18n.t("slide.captions", I18n.rev);
+                            hint: I18n.t("slide.captionsHint", I18n.rev);
+                            VerticalLayout { alignment: center; Switch { checked <=> SlideBuilder.captions; toggled => { SlideBuilder.changed(); } } }
+                        }
+                    }
+                    Section {
+                        title: I18n.t("slide.order", I18n.rev);
+                        Row {
+                            label: I18n.t("slide.shuffle", I18n.rev);
+                            hint: I18n.t("slide.shuffleHint", I18n.rev);
+                            VerticalLayout { alignment: center; Switch { checked <=> SlideBuilder.shuffle; toggled => { SlideBuilder.changed(); } } }
+                        }
+                        Row {
+                            label: I18n.t("slide.loop", I18n.rev);
+                            hint: I18n.t("slide.loopHint", I18n.rev);
+                            VerticalLayout { alignment: center; Switch { checked <=> SlideBuilder.loop; toggled => { SlideBuilder.changed(); } } }
+                        }
+                    }
+                    Section {
+                        title: I18n.t("slide.music", I18n.rev);
+                        if SlideBuilder.has-music: HorizontalLayout {
+                            spacing: 8px;
+                            VerticalLayout { alignment: center; Image { source: Icons.music; colorize: Theme.accent; width: 16px; height: 16px; } }
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: center;
+                                Text { text: SlideBuilder.music-name; font-size: 13px; color: Theme.text; overflow: elide; }
+                                Text { text: I18n.t("slide.musicFade", I18n.rev); font-size: 11px; color: Theme.text-faint; }
+                            }
+                            IconButton { icon: VIcons.x; size: IconButtonSize.sm; label: I18n.t("common.delete", I18n.rev); clicked => { SlideBuilder.remove-music(); } }
+                        }
+                        Button {
+                            text: SlideBuilder.has-music ? I18n.t("slide.change", I18n.rev) : I18n.t("slide.pickMusic", I18n.rev);
+                            icon: Icons.music;
+                            has-icon: true;
+                            variant: ButtonVariant.secondary;
+                            size: ButtonSize.sm;
+                            clicked => { SlideBuilder.pick-music(); }
+                        }
+                    }
+                    Section {
+                        title: I18n.t("slide.exportVideo", I18n.rev);
+                        TextField { text <=> SlideBuilder.name; placeholder: I18n.t("slide.defaultName", I18n.rev); }
+                        Segmented { options: root.resolutions; value <=> SlideBuilder.res; fill: true; changed-value => { SlideBuilder.changed(); } }
+                        Row {
+                            label: I18n.t("slide.saveTo", I18n.rev);
+                            hint: SlideBuilder.target-label;
+                            VerticalLayout { alignment: center; Button { text: I18n.t("slide.change", I18n.rev); variant: ButtonVariant.ghost; size: ButtonSize.sm; clicked => { SlideBuilder.change-target(); } } }
+                        }
+                        Button {
+                            text: I18n.t("slide.exportVideo", I18n.rev);
+                            icon: VIcons.download;
+                            has-icon: true;
+                            variant: ButtonVariant.primary;
+                            enabled: !SlideBuilder.exporting && !Shell.readonly;
+                            clicked => { SlideBuilder.export(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // music picker
+    if SlideBuilder.music-open: Rectangle {
+        background: Theme.overlay;
+        TouchArea { clicked => { SlideBuilder.close-music(); } }
+        Rectangle {
+            width: Math.min(root.width - 32px, 480px);
+            height: Math.min(root.height - 80px, 560px);
+            border-radius: 20px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            clip: true;
+            TouchArea {}
+            VerticalLayout {
+                padding: 18px;
+                spacing: 12px;
+                HorizontalLayout {
+                    Text { text: I18n.t("slide.foundMusic", I18n.rev); horizontal-stretch: 1; font-family: Theme.font-display; font-size: 16px; font-weight: 600; color: Theme.text; vertical-alignment: center; }
+                    IconButton { icon: VIcons.x; label: I18n.t("common.close", I18n.rev); clicked => { SlideBuilder.close-music(); } }
+                }
+                if SlideBuilder.music-loading: HorizontalLayout { alignment: center; padding: 30px; Spinner { size: 24px; } }
+                if !SlideBuilder.music-loading && SlideBuilder.music.length == 0: Text { text: I18n.t("slide.noMusic", I18n.rev); font-size: 13px; color: Theme.text-faint; horizontal-alignment: center; }
+                Flickable {
+                    vertical-stretch: 1;
+                    content-height: list.preferred-height;
+                    list := VerticalLayout {
+                        width: parent.width;
+                        spacing: 4px;
+                        for m in SlideBuilder.music: Rectangle {
+                            height: 52px;
+                            border-radius: 12px;
+                            background: mta.has-hover ? Theme.surface-2 : transparent;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 10px;
+                                VerticalLayout { alignment: center; Image { source: Icons.music; colorize: Theme.accent; width: 18px; height: 18px; } }
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    Text { text: m.name; font-size: 13px; color: Theme.text; overflow: elide; }
+                                    Text { text: m.sub; font-size: 11px; color: Theme.text-faint; overflow: elide; }
+                                }
+                            }
+                            mta := TouchArea { mouse-cursor: pointer; clicked => { SlideBuilder.use-music(m.id); } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

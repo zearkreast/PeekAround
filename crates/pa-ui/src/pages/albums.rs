@@ -278,7 +278,7 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     let w = Rc::downgrade(app);
     st.on_slideshow(move || {
         if let Some(a) = w.upgrade() {
-            a.toast(ToastKind::Info, &a.t("native.slideshowSoon"), "");
+            crate::slideshow_ui::open_from_grid(&a);
         }
     });
 }

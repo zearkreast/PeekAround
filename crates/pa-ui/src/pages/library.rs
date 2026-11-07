@@ -711,6 +711,25 @@ fn poll_stats(a: &Rc<AppInner>) {
 }
 
 /// folder id of the sub folder cards (folder page: its folder; library: its single folder / target)
+/// "Slideshow here" on a folder card: its photos and videos, sub folders included (up to 1000).
+fn folder_slideshow(a: &Rc<AppInner>, folder_id: String, dir: String) {
+    let q = pa_core::BrowseQuery {
+        folder_id: Some(folder_id),
+        dir: Some(dir),
+        recursive: Some(true),
+        kind: Some(pa_core::KindFilter::ImageVideo),
+        limit: Some(1000),
+        ..Default::default()
+    };
+    let fut = a.backend.browse(q);
+    let w = Rc::downgrade(a);
+    a.rt.spawn_then(fut, move |r| {
+        if let (Some(a), Ok(r)) = (w.upgrade(), r) {
+            crate::slideshow_ui::open_with(&a, r.items);
+        }
+    });
+}
+
 fn folder_base(a: &AppInner) -> Option<String> {
     let route = a.route.borrow().clone();
     match &route {
@@ -782,12 +801,12 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     cb!(on_open_root, |a, id| {
         a.go(Route::Folder(id.to_string(), String::new()), true)
     });
-    cb!(on_folder_slideshow, |a, _d| {
-        a.toast(ToastKind::Info, &a.t("native.slideshowSoon"), "")
+    cb!(on_folder_slideshow, |a, dir| {
+        if let Some(f) = folder_base(&a) {
+            folder_slideshow(&a, f, dir.to_string());
+        }
     });
-    cb!(on_slideshow, |a| {
-        a.toast(ToastKind::Info, &a.t("native.slideshowSoon"), "")
-    });
+    cb!(on_slideshow, |a| { crate::slideshow_ui::open_from_grid(&a) });
     cb!(on_peek, |a, id| {
         set_archive_busy(&a, &id, "peek");
         let id2 = id.to_string();

@@ -86,6 +86,8 @@ pub struct Prefs {
     pub hover_preview: bool,
     /// memories strip on the timeline
     pub show_memories: bool,
+    /// slideshow builder settings (1.x kept them as `peek.slideshow`)
+    pub slideshow: crate::slideshow::SlideSettings,
     /// sub folder cards: "name" | "date" | "count"
     pub folder_sort: String,
     /// All | Folders per library / folder ("lib:<id>" / "dir:<id>" → "all" | "folders")
@@ -134,6 +136,7 @@ impl Default for Prefs {
             tile_favorites: true,
             hover_preview: true,
             show_memories: true,
+            slideshow: Default::default(),
             folder_sort: "name".into(),
             library_view: Default::default(),
             slide_duration: 4.0,

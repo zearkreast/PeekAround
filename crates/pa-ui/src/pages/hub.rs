@@ -399,7 +399,8 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         if let Some(a) = w.upgrade() {
             match tool.as_str() {
                 "fonts" => a.go(Route::Fonts, true),
-                // collage / slideshow builder: not built yet
+                "slideshow" => a.go(Route::Slideshow, true),
+                // collage: not built yet
                 _ => a.toast(ToastKind::Info, &a.t("native.soon.title"), ""),
             }
         }
