@@ -5,6 +5,26 @@
 <h1 align="center">PeekAround</h1>
 <p align="center"><b>Klasörlerin, en güzel haliyle.</b> · <i>Your folders, beautifully.</i></p>
 
+<p align="center">
+  <a href="https://github.com/zearkreast/PeekAround/releases"><img src="https://img.shields.io/github/v/release/zearkreast/PeekAround?include_prereleases&label=%C3%B6n%20s%C3%BCr%C3%BCm&color=f97316" alt="Ön sürüm"></a>
+  <a href="https://github.com/zearkreast/PeekAround/releases/latest"><img src="https://img.shields.io/github/v/release/zearkreast/PeekAround?label=kararl%C4%B1&color=8b5cf6" alt="Kararlı sürüm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/zearkreast/PeekAround?label=lisans&color=0ea5e9" alt="Lisans: GPL-3.0"></a>
+  <img src="https://img.shields.io/badge/Rust-Slint-b7410e" alt="Rust + Slint">
+</p>
+
+> 🦀 **Bu dal PeekAround 2.0'ın Rust + Slint ile baştan yazımıdır (alfa).** Electron ve React yok; arayüz yerel olarak çizilir. Günlük kullanım için kararlı **1.x** sürümü [`main`](https://github.com/zearkreast/PeekAround/tree/main) dalında ve [Releases](https://github.com/zearkreast/PeekAround/releases/latest) sayfasında.
+
+| Aşama | Kapsam | Durum |
+|---|---|---|
+| M1 | Sunucu (tarama, küçük resim, API) | ✅ |
+| M2 | Masaüstü (galeri, görüntüleyici, seçim, ayarlar, tepsi) | ✅ |
+| M3 | Keşfet ve harita | 🟡 büyük ölçüde |
+| M4 | Düzenleyiciler (fotoğraf, kolaj, video, slayt, fontlar) | ⏳ |
+| M5 | Yerel Android uygulaması | ⏳ |
+| M6 | Docker tarayıcı arayüzü ve CI | ⏳ |
+
+Denemek için: [v2.0.0-alpha.1](https://github.com/zearkreast/PeekAround/releases/tag/v2.0.0-alpha.1) ön sürümündeki Windows zip'i. Rust kodu `crates/` altında (`cargo build --release -p pa-desktop`); aşağıdaki özellik listesi ve kurulum adımları 1.x içindir.
+
 PeekAround; bilgisayarındaki, sunucundaki ya da telefonundaki klasörleri modern, animasyonlu bir galeriye dönüştürür.
 Fotoğraf ve videolarına göz at, izle, sürükle-bırak ile dosya/klasör/zip ekle, slayt gösterisi ve kolaj yap, fotoğraf ve videolarda basit düzenlemeler yap — **kendi fontlarınla** ve **orijinallere asla dokunmadan** (her düzenleme bir kopyaya kaydedilir).
 
@@ -76,8 +96,8 @@ Aynı uygulama üç şekilde çalışır:
 ### 🐳 Docker (ağa galeri sunmak için)
 
 ```bash
-git clone https://github.com/<kullanici>/peekaround.git
-cd peekaround
+git clone https://github.com/zearkreast/PeekAround.git
+cd PeekAround
 ```
 
 `docker/docker-compose.yml` içindeki klasör yollarını kendine göre düzenle (her `/media/<Ad>` bir kütüphane olur), sonra:
@@ -91,7 +111,7 @@ Tarayıcıdan `http://<sunucu-ip>:8080` adresine git.
 Hazır imaj (GitHub Actions ile `ghcr.io`'ya gönderilir, amd64 + arm64/Raspberry Pi):
 
 ```bash
-docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/Fotoğraflar:/media/Fotoğraflar -v ./peekaround-data:/data ghcr.io/<kullanici>/peekaround:latest
+docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/Fotoğraflar:/media/Fotoğraflar -v ./peekaround-data:/data ghcr.io/zearkreast/peekaround:main
 ```
 
 | Değişken | Varsayılan | Açıklama |
