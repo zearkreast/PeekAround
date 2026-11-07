@@ -1,0 +1,19 @@
+{
+ "type": "LibraryStats",
+ "method": "GET",
+ "url": "/api/libraries/1/stats",
+ "response": {
+  "items": 97,
+  "photos": 92,
+  "videos": 4,
+  "audio": 1,
+  "bytes": 24468135,
+  "from": 1673694000000,
+  "to": 1793998143132,
+  "folders": 11,
+  "scannedAt": 1793998143794,
+  "scanning": true,
+  "pending": 0
+ },
+ "raw": "{\"items\":97,\"photos\":92,\"videos\":4,\"audio\":1,\"bytes\":24468135,\"from\":1673694000000,\"to\":1793998143132,\"folders\":11,\"scannedAt\":1793998143794,\"scanning\":true,\"pending\":0}"
+}

@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/49",
+ "response": {
+  "id": "49",
+  "folderId": "1",
+  "dir": "Fotoğraflar/Berlin",
+  "name": "PXL_20250418_3.jpg",
+  "ext": "jpg",
+  "kind": "image",
+  "size": 34279,
+  "mtime": 1793998143108,
+  "width": 1600,
+  "height": 1067,
+  "duration": null,
+  "takenAt": 1744980480000,
+  "localAt": 1744987680000,
+  "flags": 0,
+  "thumbhash": "J4gNbYSGeHh/iHeFd3h4eXiPN/mH",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/Berlin/PXL_20250418_3.jpg",
+  "exif": {
+   "Make": "Google",
+   "Model": "Pixel 7",
+   "LensModel": "Pixel 7 back camera 6.81mm f/1.85",
+   "DateTimeOriginal": 1744987680000,
+   "latitude": 52.4961,
+   "longitude": 13.4105
+  },
+  "gps": {
+   "lat": 52.496142,
+   "lon": 13.410519
+  },
+  "place": {
+   "city": "Kreuzberg",
+   "admin1": "Berlin",
+   "cc": "DE",
+   "key": "DE-16"
+  },
+  "camera": {
+   "make": "Google",
+   "model": "Pixel 7",
+   "lens": "Pixel 7 back camera 6.81mm f/1.85"
+  },
+  "tzOffset": 120
+ },
+ "raw": "{\"id\":\"49\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/Berlin\",\"name\":\"PXL_20250418_3.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":34279,\"mtime\":1793998143108,\"width\":1600,\"height\":1067,\"duration\":null,\"takenAt\":1744980480000,\"localAt\":1744987680000,\"flags\":0,\"thumbhash\":\"J4gNbYSGeHh/iHeFd3h4eXiPN/mH\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/Berlin/PXL_20250418_3.jpg\",\"exif\":{\"Make\":\"Google\",\"Model\":\"Pixel 7\",\"LensModel\":\"Pixel 7 back camera 6.81mm f/1.85\",\"DateTimeOriginal\":1744987680000,\"latitude\":52.4961,\"longitude\":13.4105},\"gps\":{\"lat\":52.496142,\"lon\":13.410519},\"place\":{\"city\":\"Kreuzberg\",\"admin1\":\"Berlin\",\"cc\":\"DE\",\"key\":\"DE-16\"},\"camera\":{\"make\":\"Google\",\"model\":\"Pixel 7\",\"lens\":\"Pixel 7 back camera 6.81mm f/1.85\"},\"tzOffset\":120}"
+}

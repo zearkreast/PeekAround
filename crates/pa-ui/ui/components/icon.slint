@@ -1,0 +1,15 @@
+// An icon that stays vertically centred inside box layouts (a bare Image is top-aligned there).
+
+export component Icon inherits Rectangle {
+    in property <image> source;
+    in property <color> tint;
+    in property <length> size: 16px;
+    width: size;
+    min-height: size;
+    img := Image {
+        width: root.size;
+        height: root.size;
+        source: root.source;
+        colorize: root.tint;
+    }
+}

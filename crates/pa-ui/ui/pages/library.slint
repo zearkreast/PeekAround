@@ -1,0 +1,569 @@
+// Library page and folder pages (GalleryPage.tsx modes "library" / "folder" + LibraryHeader.tsx,
+// FolderCards.tsx, the temp-session / MEGA banners): header, All | Folders, sub folders, the grid.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "icons.slint";
+import { Shell, GridState } from "../globals.slint";
+import { LibState, LibIcons } from "state.slint";
+import { Cols, GridPos, Enter, SmallHead, FolderCard, RootCard, ArchiveCard, Banner, RemoteBanner } from "parts.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
+import { Spinner, EmptyState } from "../components/feedback.slint";
+import { Segmented } from "../components/inputs.slint";
+import { PopoverPanel, MenuItem, MenuLabel, MenuSep } from "../components/overlays.slint";
+import { MediaGrid } from "grid.slint";
+import { DropTarget } from "../grid/dnd.slint";
+
+component ViewToggle inherits Segmented {
+    options: [
+        { value: "all", label: I18n.t("lib2.view.all", I18n.rev), icon: PIcons.layout-grid, has-icon: true },
+        { value: "folders", label: I18n.t("lib2.view.folders", I18n.rev), icon: PIcons.folder, has-icon: true },
+    ];
+    value: LibState.view;
+    changed-value(v) => { LibState.set-view(v); }
+}
+
+// a dark glass button over the cover (`border-white/20 bg-black/35 text-white`)
+component GlassButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> spin;
+    in property <string> label;
+    callback clicked();
+    height: 40px;
+    width: text == "" ? 40px : row.preferred-width + 28px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: #ffffff33;
+    background: ta.has-hover ? #0000008c : #00000059;
+    animate background { duration: Motion.fast; }
+    row := HorizontalLayout {
+        alignment: center;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: #ffffff;
+                width: root.text == "" ? 18px : 16px;
+                height: self.width;
+                transform-rotation: root.spin ? Math.mod(animation-tick() / 0.9s, 1) * 360deg : 0deg;
+            }
+        }
+        if root.text != "": Text { text: root.text; color: #ffffff; font-size: 13px; font-weight: 500; vertical-alignment: center; }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component StatBit inherits HorizontalLayout {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> spin;
+    spacing: 6px;
+    VerticalLayout {
+        alignment: center;
+        Image {
+            source: root.icon;
+            colorize: #ffffffa6;
+            width: 14px;
+            height: 14px;
+            transform-rotation: root.spin ? Math.mod(animation-tick() / 0.9s, 1) * 360deg : 0deg;
+        }
+    }
+    Text { text: root.text; font-size: 13px; color: #ffffffa6; vertical-alignment: center; }
+}
+
+// the library banner (cover, colour chip, name, numbers, actions)
+component LibraryBanner inherits Rectangle {
+    callback more(length, length);
+    height: Math.max(232px, lay.preferred-height);
+    border-radius: 24px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: #171717;
+    clip: true;
+    if LibState.has-cover: Image {
+        width: parent.width;
+        height: parent.height;
+        source: LibState.cover;
+        image-fit: cover;
+    }
+    if !LibState.has-cover: Rectangle {
+        background: @linear-gradient(135deg, LibState.color 0%, LibState.color.mix(Theme.bg-elev, 0.25) 100%);
+    }
+    Rectangle { background: @linear-gradient(0deg, #000000d9 0%, #00000073 50%, #0000001a 100%); }
+    Rectangle { background: @linear-gradient(90deg, #00000080 0%, #00000000 100%); }
+    lay := HorizontalLayout {
+        padding: 24px;
+        spacing: 16px;
+        VerticalLayout {
+            alignment: end;
+            Rectangle {
+                width: 56px;
+                height: 56px;
+                border-radius: 16px;
+                background: LibState.color;
+                border-width: 1px;
+                border-color: #ffffff33;
+                drop-shadow-blur: 14px;
+                drop-shadow-color: #00000066;
+                Image { source: LibIcons.get(LibState.icon); colorize: #ffffff; width: 28px; height: 28px; }
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: end;
+            spacing: 6px;
+            Text {
+                text: LibState.name;
+                font-family: Theme.font-display;
+                font-size: 34px;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+                color: #ffffff;
+                overflow: elide;
+            }
+            Text { text: LibState.stats-main; font-size: 14px; font-weight: 500; color: #ffffff; overflow: elide; }
+            HorizontalLayout {
+                spacing: 12px;
+                alignment: start;
+                if LibState.stats-size != "": StatBit { icon: PIcons.hard-drive; text: LibState.stats-size; }
+                if LibState.stats-range != "": StatBit { icon: PIcons.calendar-range; text: LibState.stats-range; }
+                if LibState.stats-folders != "": StatBit { icon: PIcons.folder; text: LibState.stats-folders; }
+                if LibState.stats-scan != "": StatBit {
+                    icon: LibState.stats-scanning ? PIcons.refresh-cw : PIcons.clock-3;
+                    spin: LibState.stats-scanning;
+                    text: LibState.stats-scan;
+                }
+                if LibState.stats-indexing != "": HorizontalLayout {
+                    spacing: 6px;
+                    VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 6px;
+                            height: 6px;
+                            border-radius: 3px;
+                            background: Theme.accent;
+                            opacity: Motion.on ? 0.4 + 0.6 * Math.abs(Math.sin(animation-tick() / 1s * 180deg)) : 1;
+                        }
+                    }
+                    Text { text: LibState.stats-indexing; font-size: 13px; color: #ffffffcc; vertical-alignment: center; }
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: end;
+            HorizontalLayout {
+                spacing: 6px;
+                if LibState.can-slideshow: GlassButton {
+                    icon: Icons.play;
+                    text: I18n.t("nav.slideshow", I18n.rev);
+                    clicked => { LibState.slideshow(); }
+                }
+                GlassButton {
+                    icon: PIcons.refresh-cw;
+                    spin: LibState.rescanning;
+                    label: I18n.t("lib2.rescan", I18n.rev);
+                    clicked => { LibState.rescan(); }
+                }
+                if LibState.writable: mb := GlassButton {
+                    icon: PIcons.ellipsis;
+                    label: I18n.t("lib2.more", I18n.rev);
+                    clicked => { root.more(self.absolute-position.x + self.width, self.absolute-position.y + self.height); }
+                }
+            }
+        }
+    }
+}
+
+export component LibraryPage inherits Rectangle {
+    in property <length> window-width;
+    property <length> head-h: hdr.preferred-height + 24px;
+    property <bool> folder-mode: LibState.mode == "folder";
+    property <bool> browse: LibState.view == "folders";
+    property <length> gw: grid.grid-width;
+    property <int> rcols: Cols.of(root.window-width, 1, 1, 2, 2, 2, 3);
+    property <length> rw: GridPos.cell(gw, rcols, 12px);
+    property <int> fcols: Cols.of(root.window-width, 2, 3, 3, 4, 5, 6);
+    property <length> fw: GridPos.cell(gw, fcols, 14px);
+    property <length> fh: fw * 0.75 + 46px;
+    property <int> acols: Cols.of(root.window-width, 1, 1, 2, 2, 2, 3);
+    property <length> aw: GridPos.cell(gw, acols, 12px);
+    property <string> menu-dir;
+    property <length> menu-x;
+    property <length> menu-y;
+    property <length> lmenu-x;
+    property <length> lmenu-y;
+    property <string> menu-name;
+
+    grid := MediaGrid {
+        width: root.width;
+        height: root.height;
+        tiles: GridState.tiles;
+        headers: GridState.headers;
+        grid-height: GridState.grid-height;
+        header-height: root.head-h;
+        custom-header: true;
+        scroll-y <=> GridState.scroll-y;
+        viewport-changed(y, h, w) => {
+            GridState.viewport-changed(y, h, w);
+            Shell.title-revealed = y + self.header-height > 120px;
+        }
+        open(i) => { GridState.open(i); }
+
+        hdr := VerticalLayout {
+            y: 24px;
+            height: self.preferred-height;
+            spacing: 0px;
+
+            // temporary session (zip peek)
+            if LibState.temp: VerticalLayout {
+                padding-bottom: 24px;
+                Banner {
+                    warn: true;
+                    VerticalLayout { alignment: center; Image { source: PIcons.clock-3; colorize: Theme.warn; width: 20px; height: 20px; } }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text { text: LibState.temp-title; font-size: 14px; font-weight: 500; color: Theme.text; overflow: elide; }
+                        if LibState.temp-expires != "": Text { text: LibState.temp-expires; font-size: 12px; color: Theme.text-dim; }
+                    }
+                    VerticalLayout { alignment: center; Button { text: I18n.t("temp.extend", I18n.rev); variant: ButtonVariant.ghost; size: ButtonSize.sm; clicked => { LibState.temp-extend(); } } }
+                    VerticalLayout { alignment: center; Button { text: I18n.t("temp.close", I18n.rev); variant: ButtonVariant.ghost; size: ButtonSize.sm; clicked => { LibState.temp-close(); } } }
+                    VerticalLayout { alignment: center; Button { text: I18n.t("temp.keep", I18n.rev); variant: ButtonVariant.primary; size: ButtonSize.sm; clicked => { LibState.temp-keep(); } } }
+                }
+            }
+
+            // MEGA folders
+            for r in LibState.remotes: VerticalLayout {
+                padding-bottom: 16px;
+                RemoteBanner {
+                    data: r;
+                    writable: LibState.writable;
+                    desktop: true;
+                    refresh => { LibState.remote-refresh(r.id); }
+                    copy => { LibState.remote-copy(r.id); }
+                    link => { LibState.remote-link(r.id); }
+                    remove => { LibState.remote-remove(r.id); }
+                    login => { LibState.remote-login(); }
+                }
+            }
+
+            // library banner + All | Folders
+            if !root.folder-mode: VerticalLayout {
+                spacing: 16px;
+                padding-bottom: 28px;
+                lb := LibraryBanner {
+                    more(x, y) => {
+                        root.lmenu-x = x - root.absolute-position.x;
+                        root.lmenu-y = y - root.absolute-position.y;
+                        lib-menu.show();
+                    }
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    ViewToggle { }
+                }
+            }
+
+            // folder header: crumbs, cover, title, numbers, actions
+            if root.folder-mode: VerticalLayout {
+                spacing: 8px;
+                padding-bottom: 28px;
+                if LibState.crumbs.length > 0: HorizontalLayout {
+                    spacing: 2px;
+                    alignment: start;
+                    for c[i] in LibState.crumbs: HorizontalLayout {
+                        spacing: 2px;
+                        if i > 0: VerticalLayout { alignment: center; Image { source: Icons.chevron-right; colorize: Theme.text-faint; width: 14px; height: 14px; } }
+                        Rectangle {
+                            width: ct.preferred-width + 8px;
+                            height: 24px;
+                            border-radius: 6px;
+                            background: cta.has-hover ? Theme.surface-2 : transparent;
+                            ct := Text { text: c.label; font-size: 13px; color: cta.has-hover ? Theme.text : Theme.text-dim; }
+                            cta := TouchArea { mouse-cursor: pointer; clicked => { LibState.open-crumb(c.index); } }
+                        }
+                    }
+                    VerticalLayout { alignment: center; Image { source: Icons.chevron-right; colorize: Theme.text-faint; width: 14px; height: 14px; } }
+                }
+                HorizontalLayout {
+                    spacing: 12px;
+                    Rectangle {
+                        width: 56px;
+                        height: 56px;
+                        border-radius: 12px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: Theme.surface;
+                        clip: true;
+                        if LibState.has-cover: Image { source: LibState.cover; image-fit: cover; width: parent.width; height: parent.height; }
+                        if !LibState.has-cover: Image {
+                            source: LibState.device ? PIcons.smartphone : PIcons.images;
+                            colorize: Theme.accent;
+                            width: 20px;
+                            height: 20px;
+                        }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        spacing: 2px;
+                        Text {
+                            text: LibState.title;
+                            font-family: Theme.font-display;
+                            font-size: 32px;
+                            font-weight: 700;
+                            letter-spacing: -0.5px;
+                            color: Theme.text;
+                            overflow: elide;
+                        }
+                        Text { text: GridState.loading ? I18n.t("common.loading", I18n.rev) : GridState.subtitle; font-size: 14px; color: Theme.text-dim; overflow: elide; }
+                    }
+                    VerticalLayout {
+                        alignment: end;
+                        padding-bottom: 4px;
+                        HorizontalLayout {
+                            spacing: 8px;
+                            ViewToggle { }
+                            if LibState.can-slideshow: Button {
+                                text: I18n.t("nav.slideshow", I18n.rev);
+                                icon: Icons.play;
+                                has-icon: true;
+                                size: ButtonSize.sm;
+                                clicked => { LibState.slideshow(); }
+                            }
+                            if LibState.device: Rectangle {
+                                height: 28px;
+                                y: 2px;
+                                width: dl.preferred-width + 20px;
+                                border-radius: 14px;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                background: Theme.surface;
+                                dl := HorizontalLayout {
+                                    alignment: center;
+                                    spacing: 6px;
+                                    VerticalLayout { alignment: center; Image { source: PIcons.smartphone; colorize: Theme.text-dim; width: 14px; height: 14px; } }
+                                    Text { text: LibState.device-name; font-size: 12px; color: Theme.text-dim; vertical-alignment: center; }
+                                    VerticalLayout { alignment: center; Rectangle { width: 8px; height: 8px; border-radius: 4px; background: LibState.device-online ? Theme.ok : Theme.text-faint; } }
+                                }
+                            }
+                            if LibState.device && LibState.writable: Button {
+                                text: root.window-width >= 640px ? I18n.t("devices.copyToPc", I18n.rev) : "";
+                                icon: PIcons.hard-drive-download;
+                                has-icon: true;
+                                size: ButtonSize.sm;
+                                enabled: LibState.device-online;
+                                clicked => { LibState.copy-to-pc(); }
+                            }
+                            Button {
+                                text: root.window-width >= 1024px ? I18n.t("gallery.downloadFolder", I18n.rev) : "";
+                                icon: PIcons.download;
+                                has-icon: true;
+                                variant: ButtonVariant.ghost;
+                                size: ButtonSize.sm;
+                                clicked => { LibState.download-folder(); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if LibState.loading && GridState.total == 0: HorizontalLayout {
+                alignment: center;
+                padding: 60px;
+                Spinner { size: 28px; }
+            }
+
+            // folders of a multi-folder library root
+            if root.browse && LibState.roots.length > 0: VerticalLayout {
+                padding-bottom: 32px;
+                SmallHead { text: I18n.t("gallery.libraryRoots", I18n.rev); count: LibState.roots.length; }
+                Rectangle {
+                    height: GridPos.rows(LibState.roots.length, root.rcols) * 90px - 12px;
+                    for f[i] in LibState.roots: RootCard {
+                        x: GridPos.x(i, root.rcols, root.rw, 12px);
+                        y: GridPos.y(i, root.rcols, 78px, 12px);
+                        width: root.rw;
+                        data: f;
+                        clicked => { LibState.open-root(f.id); }
+                    }
+                }
+            }
+
+            // sub folders
+            if root.browse && LibState.folders.length > 0: VerticalLayout {
+                padding-bottom: 36px;
+                HorizontalLayout {
+                    SmallHead { horizontal-stretch: 1; text: I18n.t("gallery.folders", I18n.rev); count: LibState.folders.length; }
+                    if LibState.folders.length > 1: Rectangle {
+                        y: -4px;
+                        height: 28px;
+                        width: sr.preferred-width + 16px;
+                        border-radius: 8px;
+                        background: sta.has-hover ? Theme.surface-2 : transparent;
+                        sr := HorizontalLayout {
+                            alignment: center;
+                            spacing: 6px;
+                            VerticalLayout {
+                                alignment: center;
+                                Image {
+                                    source: LibState.folder-sort == "date" ? PIcons.calendar-range : LibState.folder-sort == "count" ? PIcons.list-filter : PIcons.arrow-down-wide-narrow;
+                                    colorize: sta.has-hover ? Theme.text : Theme.text-dim;
+                                    width: 14px;
+                                    height: 14px;
+                                }
+                            }
+                            Text {
+                                text: LibState.folder-sort == "date" ? I18n.t("lib2.folders.byDate", I18n.rev) : LibState.folder-sort == "count" ? I18n.t("lib2.folders.byCount", I18n.rev) : I18n.t("lib2.folders.byName", I18n.rev);
+                                font-size: 12px;
+                                color: sta.has-hover ? Theme.text : Theme.text-dim;
+                                vertical-alignment: center;
+                            }
+                        }
+                        sta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.menu-x = parent.absolute-position.x + parent.width - root.absolute-position.x;
+                                root.menu-y = parent.absolute-position.y + parent.height - root.absolute-position.y;
+                                sort-menu.show();
+                            }
+                        }
+                    }
+                }
+                Rectangle {
+                    height: GridPos.rows(LibState.folders.length, root.fcols) * (root.fh + 14px) - 14px;
+                    for f[i] in LibState.folders: Enter {
+                        index: i;
+                        x: GridPos.x(i, root.fcols, root.fw, 14px);
+                        y: GridPos.y(i, root.fcols, root.fh, 14px);
+                        width: root.fw;
+                        height: root.fh;
+                        FolderCard {
+                            width: parent.width;
+                            data: f;
+                            clicked => { LibState.open-dir(f.dir); }
+                            context(x, y) => {
+                                root.menu-dir = f.dir;
+                                root.menu-name = f.name;
+                                root.menu-x = self.absolute-position.x + x - root.absolute-position.x;
+                                root.menu-y = self.absolute-position.y + y - root.absolute-position.y;
+                                folder-menu.show();
+                            }
+                        }
+                        // dragged tiles dropped on a folder card move there (Ctrl: copy)
+                        dt := DropTarget {
+                            key: "folder:" + LibState.base-folder + ":" + f.dir;
+                            enabled: LibState.writable && !LibState.device && LibState.base-folder != "";
+                            width: parent.width;
+                            height: parent.height;
+                            Rectangle {
+                                border-radius: 18px;
+                                border-width: dt.hovered ? 2px : 0px;
+                                border-color: Theme.accent;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // zips here
+            if root.browse && LibState.archives.length > 0: VerticalLayout {
+                padding-bottom: 36px;
+                SmallHead { text: I18n.t("gallery.archives", I18n.rev); count: LibState.archives.length; }
+                Rectangle {
+                    height: GridPos.rows(LibState.archives.length, root.acols) * 82px - 12px;
+                    for a[i] in LibState.archives: ArchiveCard {
+                        x: GridPos.x(i, root.acols, root.aw, 12px);
+                        y: GridPos.y(i, root.acols, 70px, 12px);
+                        width: root.aw;
+                        data: a;
+                        writable: LibState.writable;
+                        peek => { LibState.peek(a.id); }
+                        extract => { LibState.extract(a.id); }
+                    }
+                }
+            }
+
+            if GridState.total > 0 && root.browse && (LibState.folders.length > 0 || LibState.archives.length > 0): SmallHead {
+                text: I18n.t("gallery.media", I18n.rev);
+                count: GridState.total;
+            }
+        }
+    }
+
+    if LibState.empty: VerticalLayout {
+        y: root.head-h;
+        height: Math.max(0px, root.height - root.head-h);
+        alignment: start;
+        EmptyState {
+            icon: GridState.error != "" ? Icons.triangle-alert : LibState.empty-hint != "" ? PIcons.cloud-upload : PIcons.image-off;
+            title: GridState.error != "" ? I18n.t("common.error", I18n.rev) : I18n.t("gallery.empty", I18n.rev);
+            body: GridState.error != "" ? GridState.error : LibState.empty-hint;
+        }
+    }
+
+    lib-menu := PopupWindow {
+        x: root.lmenu-x - 240px;
+        y: root.lmenu-y + 6px;
+        width: 240px;
+        close-policy: close-on-click-outside;
+        PopoverPanel {
+            width: parent.width;
+            MenuItem {
+                text: I18n.t("lib2.edit", I18n.rev);
+                icon: PIcons.pencil;
+                has-icon: true;
+                clicked => { lib-menu.close(); LibState.edit(); }
+            }
+            MenuItem {
+                text: I18n.t("lib2.exclusions", I18n.rev);
+                icon: PIcons.list-filter;
+                has-icon: true;
+                hint: LibState.exclusions > 0 ? I18n.t1("lib2.excluded", "n", LibState.exclusions, I18n.rev) : "";
+                clicked => { lib-menu.close(); LibState.exclusions-dialog(); }
+            }
+            if LibState.cover-picked: MenuSep { }
+            if LibState.cover-picked: MenuItem {
+                text: I18n.t("lib2.resetCover", I18n.rev);
+                icon: PIcons.image-off;
+                has-icon: true;
+                clicked => { lib-menu.close(); LibState.reset-cover(); }
+            }
+        }
+    }
+
+    sort-menu := PopupWindow {
+        x: root.menu-x - 220px;
+        y: root.menu-y + 4px;
+        width: 220px;
+        close-policy: close-on-click-outside;
+        PopoverPanel {
+            width: parent.width;
+            MenuItem { text: I18n.t("lib2.folders.byName", I18n.rev); icon: PIcons.arrow-down-wide-narrow; has-icon: true; checked: LibState.folder-sort == "name"; clicked => { sort-menu.close(); LibState.set-folder-sort("name"); } }
+            MenuItem { text: I18n.t("lib2.folders.byDate", I18n.rev); icon: PIcons.calendar-range; has-icon: true; checked: LibState.folder-sort == "date"; clicked => { sort-menu.close(); LibState.set-folder-sort("date"); } }
+            MenuItem { text: I18n.t("lib2.folders.byCount", I18n.rev); icon: PIcons.list-filter; has-icon: true; checked: LibState.folder-sort == "count"; clicked => { sort-menu.close(); LibState.set-folder-sort("count"); } }
+        }
+    }
+
+    folder-menu := PopupWindow {
+        x: Math.min(root.menu-x, root.width - 250px);
+        y: Math.min(root.menu-y, root.height - 280px);
+        width: 240px;
+        close-policy: close-on-click-outside;
+        PopoverPanel {
+            width: parent.width;
+            MenuItem { text: I18n.t("gallery.slideshowHere", I18n.rev); icon: PIcons.presentation; has-icon: true; clicked => { folder-menu.close(); LibState.folder-action("slideshow", root.menu-dir); } }
+            MenuItem { text: I18n.t("gallery.downloadFolder", I18n.rev); icon: PIcons.download; has-icon: true; clicked => { folder-menu.close(); LibState.folder-action("download", root.menu-dir); } }
+            if LibState.device && LibState.writable && LibState.device-online: MenuItem {
+                text: I18n.t("devices.copyToPc", I18n.rev); icon: PIcons.hard-drive-download; has-icon: true;
+                clicked => { folder-menu.close(); LibState.folder-action("copy-to-pc", root.menu-dir); }
+            }
+            if LibState.writable && !LibState.device: MenuSep { }
+            if LibState.writable && !LibState.device: MenuItem { text: I18n.t("common.rename", I18n.rev); icon: PIcons.pencil; has-icon: true; clicked => { folder-menu.close(); LibState.folder-action("rename", root.menu-dir); } }
+            if LibState.writable && !LibState.device: MenuItem { text: I18n.t("sel.move", I18n.rev); icon: PIcons.folder-input; has-icon: true; clicked => { folder-menu.close(); LibState.folder-action("move", root.menu-dir); } }
+            if LibState.writable && !LibState.device: MenuItem { text: I18n.t("common.delete", I18n.rev); icon: PIcons.trash-2; has-icon: true; danger: true; clicked => { folder-menu.close(); LibState.folder-action("delete", root.menu-dir); } }
+        }
+    }
+}

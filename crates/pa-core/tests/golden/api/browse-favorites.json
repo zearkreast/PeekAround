@@ -1,0 +1,123 @@
+{
+ "type": "BrowseResult",
+ "method": "GET",
+ "url": "/api/browse?libraryId=1&recursive=true&kind=favorites",
+ "response": {
+  "crumbs": [
+   {
+    "label": "Test",
+    "libraryId": "1"
+   }
+  ],
+  "folders": [
+   {
+    "name": "Ekran Görüntüleri",
+    "dir": "Ekran Görüntüleri",
+    "mediaCount": 5,
+    "coverIds": [
+     "1",
+     "2",
+     "3"
+    ],
+    "latest": 1793998143112
+   },
+   {
+    "name": "Fotoğraflar",
+    "dir": "Fotoğraflar",
+    "mediaCount": 87,
+    "coverIds": [
+     "86",
+     "87",
+     "92"
+    ],
+    "latest": 1793998143111
+   },
+   {
+    "name": "Müzik",
+    "dir": "Müzik",
+    "mediaCount": 0,
+    "coverIds": [],
+    "latest": null
+   },
+   {
+    "name": "Videolar",
+    "dir": "Videolar",
+    "mediaCount": 4,
+    "coverIds": [
+     "96",
+     "98",
+     "95"
+    ],
+    "latest": 1793998143127
+   }
+  ],
+  "roots": [],
+  "items": [
+   {
+    "id": "5",
+    "folderId": "1",
+    "dir": "Ekran Görüntüleri",
+    "name": "Screenshot_20240812-101500.png",
+    "ext": "png",
+    "kind": "image",
+    "size": 70798,
+    "mtime": 1793998143112,
+    "width": 1080,
+    "height": 2340,
+    "duration": null,
+    "takenAt": 1793998143112,
+    "localAt": 1793998143112,
+    "flags": 1,
+    "thumbhash": "lucJAwAMhiiXaWRIG4OwMgg=",
+    "favorite": true,
+    "playback": "direct"
+   },
+   {
+    "id": "4",
+    "folderId": "1",
+    "dir": "Ekran Görüntüleri",
+    "name": "Screen Shot 2023-05-02 at 10.11.12.png",
+    "ext": "png",
+    "kind": "image",
+    "size": 117305,
+    "mtime": 1793998143112,
+    "width": 2880,
+    "height": 1800,
+    "duration": null,
+    "takenAt": 1793998143112,
+    "localAt": 1793998143112,
+    "flags": 1,
+    "thumbhash": "dsYBDIIMSFZ6iHd1eYkMesVgBw==",
+    "favorite": true,
+    "playback": "direct"
+   },
+   {
+    "id": "3",
+    "folderId": "1",
+    "dir": "Ekran Görüntüleri",
+    "name": "IMG_7781.png",
+    "ext": "png",
+    "kind": "image",
+    "size": 80126,
+    "mtime": 1793998143112,
+    "width": 1170,
+    "height": 2532,
+    "duration": null,
+    "takenAt": 1793998143112,
+    "localAt": 1793998143112,
+    "flags": 1,
+    "thumbhash": "9pYGEwRKcQiHgXATOn9N3fg=",
+    "favorite": true,
+    "playback": "direct"
+   }
+  ],
+  "total": 3,
+  "archives": [],
+  "target": {
+   "folderId": "1",
+   "dir": ""
+  },
+  "gen": "mw5g6aqw.13.3.5"
+ },
+ "raw": "{\"crumbs\":[{\"label\":\"Test\",\"libraryId\":\"1\"}],\"folders\":[{\"name\":\"Ekran Görüntüleri\",\"dir\":\"Ekran Görüntüleri\",\"mediaCount\":5,\"coverIds\":[\"1\",\"2\",\"3\"],\"latest\":1793998143112},{\"name\":\"Fotoğraflar\",\"dir\":\"Fotoğraflar\",\"mediaCount\":87,\"coverIds\":[\"86\",\"87\",\"92\"],\"latest\":1793998143111},{\"name\":\"Müzik\",\"dir\":\"Müzik\",\"mediaCount\":0,\"coverIds\":[],\"latest\":null},{\"name\":\"Videolar\",\"dir\":\"Videolar\",\"mediaCount\":4,\"coverIds\":[\"96\",\"98\",\"95\"],\"latest\":1793998143127}],\"roots\":[],\"items\":[{\"id\":\"5\",\"folderId\":\"1\",\"dir\":\"Ekran Görüntüleri\",\"name\":\"Screenshot_20240812-101500.png\",\"ext\":\"png\",\"kind\":\"image\",\"size\":70798,\"mtime\":1793998143112,\"width\":1080,\"height\":2340,\"duration\":null,\"takenAt\":1793998143112,\"localAt\":1793998143112,\"flags\":1,\"thumbhash\":\"lucJAwAMhiiXaWRIG4OwMgg=\",\"favorite\":true,\"playback\":\"direct\"},{\"id\":\"4\",\"folderId\":\"1\",\"dir\":\"Ekran Görüntüleri\",\"name\":\"Screen Shot 2023-05-02 at 10.11.12.png\",\"ext\":\"png\",\"kind\":\"image\",\"size\":117305,\"mtime\":1793998143112,\"width\":2880,\"height\":1800,\"duration\":null,\"takenAt\":1793998143112,\"localAt\":1793998143112,\"flags\":1,\"thumbhash\":\"dsYBDIIMSFZ6iHd1eYkMesVgBw==\",\"favorite\":true,\"playback\":\"direct\"},{\"id\":\"3\",\"folderId\":\"1\",\"dir\":\"Ekran Görüntüleri\",\"name\":\"IMG_7781.png\",\"ext\":\"png\",\"kind\":\"image\",\"size\":80126,\"mtime\":1793998143112,\"width\":1170,\"height\":2532,\"duration\":null,\"takenAt\":1793998143112,\"localAt\":1793998143112,\"flags\":1,\"thumbhash\":\"9pYGEwRKcQiHgXATOn9N3fg=\",\"favorite\":true,\"playback\":\"direct\"}],\"total\":3,\"archives\":[],\"target\":{\"folderId\":\"1\",\"dir\":\"\"},\"gen\":\"mw5g6aqw.13.3.5\"}"
+}

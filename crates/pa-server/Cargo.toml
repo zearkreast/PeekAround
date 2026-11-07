@@ -1,0 +1,76 @@
+[package]
+name = "pa-server"
+description = "PeekAround HTTP/WS server (port of packages/server): axum + tokio + SQLite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["heif"]
+# HEIC / HEIF / AVIF thumbnails + display through libheif (pa-media)
+heif = ["pa-media/heif"]
+
+[dependencies]
+pa-core = { path = "../pa-core" }
+pa-meta = { path = "../pa-meta" }
+pa-media = { path = "../pa-media", default-features = false, features = ["svg"] }
+pa-mega = { path = "../pa-mega" }
+pa-jobs = { path = "../pa-jobs" }
+pa-link = { path = "../pa-link" }
+pa-remote = { path = "../pa-remote" }
+async-trait = "0.1"
+axum = { version = "0.8", default-features = false, features = ["ws", "http1", "tokio", "query"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["server", "server-auto", "http1", "tokio", "service"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io", "rt"] }
+rusqlite = { version = "0.37", features = ["bundled", "functions"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+indexmap = { version = "2", features = ["serde"] }
+parking_lot = "0.12"
+notify = "8"
+mdns-sd = "0.13"
+if-addrs = "0.13"
+gethostname = "1"
+iana-time-zone = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+sha1 = "0.10"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
+httpdate = "1"
+percent-encoding = "2"
+flate2 = "1"
+crc32fast = "1"
+ttf-parser = "0.25"
+brotli-decompressor = "4"
+image = { version = "0.25", default-features = false }
+regex = "1"
+url = "2"
+icu_collator = "2"
+tracing = "0.1"
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+tokio-tungstenite = "0.26"
+tokio = { version = "1", features = ["full", "test-util"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
+
+# one integration test binary (disk: every test target links the whole server)
+[[test]]
+name = "it"
+path = "tests/it/main.rs"
+
+[[test]]
+name = "conformance"
+path = "tests/conformance.rs"
+

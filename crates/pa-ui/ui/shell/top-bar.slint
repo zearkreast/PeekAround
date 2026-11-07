@@ -1,0 +1,313 @@
+// Desktop top bar (features/gallery/TopBar.tsx): title (once the page's own title scrolled away) ·
+// centred search · page actions. Native window decorations are used, so no window buttons here.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Shell, GridState, Page, PrefsState, Chrome } from "../globals.slint";
+import { PIcons } from "../pages/icons.slint";
+import { IconButton, Button, ButtonVariant, ButtonSize } from "../components/button.slint";
+import { TextField, Segmented, SegOption, Slider } from "../components/inputs.slint";
+import { PopoverPanel, MenuLabel, MenuSep, MenuItem } from "../components/overlays.slint";
+import { ProgressRing } from "../components/feedback.slint";
+import { JobsState, JobsPanel } from "jobs.slint";
+
+// tiny grid glyph of a density level (2 / 3 / 5 / 8 columns), TopBar.tsx densityIcon()
+component DensityGlyph inherits Rectangle {
+    in property <int> n;
+    in property <color> fg;
+    width: 16px;
+    height: 16px;
+    property <length> cell: 16px / n;
+    for k in n * Math.min(n, 3): Rectangle {
+        x: Math.mod(k, root.n) * root.cell + 0.5px;
+        y: Math.floor(k / root.n) * root.cell + 0.5px;
+        width: root.cell - 1px;
+        height: root.cell - 1px;
+        border-radius: 0.6px;
+        background: root.fg;
+    }
+}
+
+component DensityPicker inherits Rectangle {
+    in-out property <int> value;
+    callback changed-value(int);
+    height: 32px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface;
+    HorizontalLayout {
+        padding: 2px;
+        for lvl in 4: Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 9px;
+            background: root.value == lvl ? Theme.surface-3 : transparent;
+            animate background { duration: Motion.fast; }
+            DensityGlyph {
+                n: lvl == 0 ? 2 : lvl == 1 ? 3 : lvl == 2 ? 5 : 8;
+                fg: root.value == lvl ? Theme.text : dta.has-hover ? Theme.text-dim : Theme.text-faint;
+            }
+            dta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    if root.value != lvl {
+                        root.value = lvl;
+                        root.changed-value(lvl);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// sort / order / filter rows of the view options popover
+component CheckRow inherits Rectangle {
+    in property <string> text;
+    in property <bool> checked;
+    in property <image> icon;
+    in property <bool> has-icon;
+    callback clicked();
+    height: 34px;
+    border-radius: 10px;
+    background: ta.has-hover ? Theme.surface-2 : transparent;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+        if root.has-icon: VerticalLayout { alignment: center; Image { source: root.icon; colorize: Theme.text; width: 16px; height: 16px; } }
+        Text { text: root.text; font-size: 14px; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+        if root.checked: VerticalLayout { alignment: center; Image { source: Icons.check; colorize: Theme.accent; width: 16px; height: 16px; } }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+export component TopBar inherits Rectangle {
+    in property <string> title;
+    in property <bool> view-controls;
+    public function focus-search() { search.focus-input(); }
+    height: Theme.topbar-h;
+    background: Theme.topbar;
+    // border-b border-line
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    property <length> search-w: Math.clamp(root.width * 0.34 + Theme.rail-w * 0.34, 200px, 520px);
+    property <bool> filtered: Chrome.view-kind && PrefsState.kind != "all";
+
+    // title / breadcrumb (once the page's own title scrolled away)
+    HorizontalLayout {
+        x: 20px;
+        width: (root.width - root.search-w) / 2 - 36px;
+        height: parent.height;
+        spacing: 4px;
+        opacity: Shell.title-revealed ? 1 : 0;
+        animate opacity { duration: Motion.normal; }
+        for c[i] in Chrome.crumbs: HorizontalLayout {
+            spacing: 4px;
+            horizontal-stretch: 0;
+            Rectangle {
+                width: Math.min(ct.preferred-width + 8px, 160px);
+                height: 28px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 6px;
+                background: cta.has-hover ? Theme.surface-2 : transparent;
+                ct := Text { x: 4px; width: parent.width - 8px; text: c; font-size: 14px; color: cta.has-hover ? Theme.text : Theme.text-dim; overflow: elide; vertical-alignment: center; }
+                cta := TouchArea { mouse-cursor: pointer; clicked => { Chrome.open-crumb(i); } }
+            }
+            VerticalLayout { alignment: center; Image { source: Icons.chevron-right; colorize: Theme.text-faint; width: 14px; height: 14px; } }
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.title;
+            font-family: Theme.font-display;
+            font-size: 17px;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    search := TextField {
+        x: (root.width - self.width) / 2;
+        width: root.search-w;
+        placeholder: I18n.t("nav.search", I18n.rev);
+        icon: Icons.search;
+        has-icon: true;
+        text <=> Shell.search-text;
+        accepted(q) => { Shell.search(q); }
+    }
+
+    HorizontalLayout {
+        x: root.width - self.width - 16px;
+        width: self.preferred-width;
+        alignment: end;
+        spacing: 6px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        if root.view-controls: vo := IconButton {
+            icon: Icons.sliders-horizontal;
+            label: root.filtered ? I18n.t("gallery.viewOptions", I18n.rev) + " · " + (PrefsState.kind == "image" ? I18n.t("gallery.filter.image", I18n.rev) : PrefsState.kind == "video" ? I18n.t("gallery.filter.video", I18n.rev) : I18n.t("gallery.filter.favorites", I18n.rev)) : I18n.t("gallery.viewOptions", I18n.rev);
+            dot: root.filtered;
+            clicked => { view-popup.show(); }
+        }
+        if JobsState.jobs.length > 0: Rectangle {
+            width: 40px;
+            height: 40px;
+            jb := IconButton {
+                icon: JobsState.active > 0 && !JobsState.running ? Icons.loader-circle : Icons.layout-dashboard;
+                label: I18n.t("jobs.title", I18n.rev);
+                icon-color: JobsState.running ? transparent : Theme.text-dim;
+                dot: JobsState.active == 0;
+                dot-color: Theme.ok;
+                clicked => { JobsState.refresh(); jobs-popup.show(); }
+            }
+            if JobsState.running: ProgressRing { value: JobsState.running-progress; size: 20px; stroke: 2.5px; }
+        }
+        if Chrome.can-add && !Shell.readonly: VerticalLayout {
+            alignment: center;
+            Button {
+                text: I18n.t("common.add", I18n.rev);
+                icon: Icons.plus;
+                has-icon: true;
+                variant: ButtonVariant.primary;
+                size: ButtonSize.sm;
+                clicked => { add-popup.show(); }
+            }
+        }
+    }
+
+    view-popup := PopupWindow {
+        x: root.width - 288px - 16px;
+        y: root.height - 4px;
+        width: 288px;
+        close-policy: close-on-click-outside;
+        PopoverPanel {
+            y: 0;
+            width: parent.width;
+            if Chrome.view-kind: MenuLabel { text: I18n.t("gallery.filter", I18n.rev).to-uppercase(); }
+            if Chrome.view-kind: VerticalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                padding-bottom: 8px;
+                Segmented {
+                    small: true;
+                    fill: true;
+                    options: [
+                        { value: "all", label: I18n.t("gallery.filter.all", I18n.rev) },
+                        { value: "image", icon: Icons.images, has-icon: true, tooltip: I18n.t("gallery.filter.image", I18n.rev) },
+                        { value: "video", icon: Icons.film, has-icon: true, tooltip: I18n.t("gallery.filter.video", I18n.rev) },
+                        { value: "favorites", icon: Icons.heart, has-icon: true, tooltip: I18n.t("gallery.filter.favorites", I18n.rev) },
+                    ];
+                    value: PrefsState.kind;
+                    changed-value(v) => { PrefsState.set("kind", v); }
+                }
+            }
+            if Chrome.view-kind: MenuSep { }
+            if Chrome.view-sort: MenuLabel { text: I18n.t("gallery.sort", I18n.rev).to-uppercase(); }
+            if Chrome.view-sort: CheckRow { text: I18n.t("gallery.sort.takenAt", I18n.rev); checked: PrefsState.sort == "takenAt"; clicked => { PrefsState.set("sort", "takenAt"); } }
+            if Chrome.view-sort: CheckRow { text: I18n.t("gallery.sort.name", I18n.rev); checked: PrefsState.sort == "name"; clicked => { PrefsState.set("sort", "name"); } }
+            if Chrome.view-sort: CheckRow { text: I18n.t("gallery.sort.mtime", I18n.rev); checked: PrefsState.sort == "mtime"; clicked => { PrefsState.set("sort", "mtime"); } }
+            if Chrome.view-sort: CheckRow { text: I18n.t("gallery.sort.size", I18n.rev); checked: PrefsState.sort == "size"; clicked => { PrefsState.set("sort", "size"); } }
+            if Chrome.view-sort: MenuSep { }
+            if Chrome.view-sort: CheckRow { text: I18n.t("gallery.order.desc", I18n.rev); icon: PIcons.arrow-down-wide-narrow; has-icon: true; checked: PrefsState.order == "desc"; clicked => { PrefsState.set("order", "desc"); } }
+            if Chrome.view-sort: CheckRow { text: I18n.t("gallery.order.asc", I18n.rev); icon: PIcons.arrow-up-narrow-wide; has-icon: true; checked: PrefsState.order == "asc"; clicked => { PrefsState.set("order", "asc"); } }
+            if Chrome.view-sort: MenuSep { }
+            MenuLabel { text: I18n.t("gallery.density", I18n.rev).to-uppercase(); }
+            VerticalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                padding-top: 2px;
+                padding-bottom: 8px;
+                spacing: 12px;
+                DensityPicker {
+                    value: GridState.density;
+                    changed-value(v) => {
+                        GridState.density = v;
+                        GridState.view-changed();
+                    }
+                }
+                if GridState.density <= 1: Segmented {
+                    small: true;
+                    fill: true;
+                    options: [
+                        { value: "justified", label: I18n.t("gallery.layout.justified", I18n.rev), icon: Icons.rows-3, has-icon: true },
+                        { value: "square", label: I18n.t("gallery.layout.square", I18n.rev), icon: Icons.grid-2x2, has-icon: true },
+                    ];
+                    value: GridState.square ? "square" : "justified";
+                    changed-value(v) => {
+                        GridState.square = v == "square";
+                        GridState.view-changed();
+                    }
+                }
+                if GridState.density <= 1: VerticalLayout {
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    Slider {
+                        label: I18n.t("gallery.size", I18n.rev);
+                        value-text: Math.round(GridState.row-height) + "px";
+                        minimum: 110;
+                        maximum: 420;
+                        step: 10;
+                        value: GridState.row-height;
+                        changed-value(v) => {
+                            GridState.row-height = v;
+                            GridState.view-changed();
+                        }
+                    }
+                }
+                if GridState.density > 1: Text {
+                    x: 6px;
+                    width: parent.width - 12px;
+                    text: I18n.t("gallery.density.fixedHint", I18n.rev);
+                    font-size: 12px;
+                    color: Theme.text-faint;
+                    wrap: word-wrap;
+                }
+                Text {
+                    x: 6px;
+                    width: parent.width - 12px;
+                    text: I18n.t("gallery.density.wheelHint", I18n.rev);
+                    font-size: 11px;
+                    color: Theme.text-faint;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+
+    jobs-popup := PopupWindow {
+        x: root.width - 320px - 16px;
+        y: root.height - 4px;
+        width: 320px;
+        close-policy: close-on-click-outside;
+        PopoverPanel {
+            y: 0;
+            width: parent.width;
+            Flickable {
+                height: Math.min(480px, jp.preferred-height);
+                content-height: jp.preferred-height;
+                jp := JobsPanel { }
+            }
+        }
+    }
+
+    add-popup := PopupWindow {
+        x: root.width - 220px - 16px;
+        y: root.height - 4px;
+        width: 220px;
+        close-policy: close-on-click-outside;
+        PopoverPanel {
+            y: 0;
+            width: parent.width;
+            MenuItem { text: I18n.t("gallery.upload", I18n.rev); icon: Icons.upload; has-icon: true; clicked => { add-popup.close(); Chrome.add("upload"); } }
+            MenuItem { text: I18n.t("gallery.uploadFolder", I18n.rev); icon: Icons.folder-up; has-icon: true; clicked => { add-popup.close(); Chrome.add("upload-folder"); } }
+            MenuItem { text: I18n.t("remote.addFromLink", I18n.rev); icon: PIcons.cloud; has-icon: true; clicked => { add-popup.close(); Chrome.add("mega"); } }
+            MenuSep { }
+            MenuItem { text: I18n.t("gallery.newFolder", I18n.rev); icon: Icons.folder-plus; has-icon: true; clicked => { add-popup.close(); Chrome.add("new-folder"); } }
+        }
+    }
+}

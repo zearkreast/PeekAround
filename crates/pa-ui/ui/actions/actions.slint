@@ -1,0 +1,463 @@
+// Selection bar (SelectionBar.tsx, desktop pill), the right-click media menu (MediaMenu), the
+// action dialogs (delete confirm, rename, move / copy folder picker, album picker), the tile
+// drag ghost and the "drop files" overlay. Logic: src/actions_ui.rs.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { VIcons } from "../viewer/icons.slint";
+import { ActionItem } from "../viewer/state.slint";
+import { Dialog } from "../components/overlays.slint";
+import { TextField } from "../components/inputs.slint";
+import { Spinner } from "../components/feedback.slint";
+import { TooltipBubble } from "../components/button.slint";
+import { DragGhost } from "../grid/dnd.slint";
+import { DragState } from "../grid/input.slint";
+
+export struct PickerRow {
+    key: string,
+    label: string,
+    sub: string,
+    depth: int,
+    // library | folder | album | plus | phone
+    icon: string,
+    enabled: bool,
+    expanded: bool,
+    has-children: bool,
+    loading: bool,
+}
+
+export global ActionState {
+    // ── selection bar ──
+    in property <int> sel-count;
+    in property <string> sel-label;
+    in property <[ActionItem]> sel-actions;
+    in property <bool> sel-hidden;
+    // ── context menu ──
+    in property <bool> menu-open;
+    in property <length> menu-x;
+    in property <length> menu-y;
+    in property <[ActionItem]> menu-items;
+    // ── dialogs: "" | delete | rename | move | album ──
+    in property <string> dialog;
+    in property <string> dialog-title;
+    in property <string> dialog-body;
+    in property <string> confirm-label;
+    in property <bool> busy;
+    in property <bool> confirm-enabled: true;
+    in-out property <string> rename-text;
+    in property <[PickerRow]> picker-rows;
+    in property <string> picker-selected;
+    in property <bool> picker-loading;
+    in-out property <string> new-album-name;
+
+    callback sel-action(string);
+    callback sel-all();
+    callback sel-clear();
+    callback menu-action(string);
+    callback menu-close();
+    callback dialog-close();
+    callback dialog-confirm();
+    callback picker-click(string);
+    callback picker-toggle(string);
+    callback create-album();
+}
+
+component PillButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> active;
+    in property <bool> danger;
+    callback clicked();
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: root.active ? Theme.surface-3 : ta.has-hover ? Theme.surface-2 : transparent;
+    animate background { duration: Motion.fast; }
+    Image {
+        source: root.icon;
+        colorize: root.active ? Theme.accent-2 : root.danger && ta.has-hover ? Theme.danger : ta.has-hover ? Theme.text : Theme.text-dim;
+        width: 18px;
+        height: 18px;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    property <bool> tip;
+    Timer {
+        interval: 600ms;
+        running: ta.has-hover && !root.tip;
+        triggered => { root.tip = true; }
+    }
+    changed hovered => { if !self.hovered { root.tip = false; } }
+    out property <bool> hovered: ta.has-hover;
+    TooltipBubble {
+        text: root.label;
+        show: root.tip && ta.has-hover && !ta.pressed;
+        x: (root.width - self.width) / 2;
+        y: -self.height - 8px;
+    }
+}
+
+component Sep inherits Rectangle {
+    width: 9px;
+    Rectangle {
+        x: 4px;
+        width: 1px;
+        height: 24px;
+        background: Theme.border;
+    }
+}
+
+// `glass fixed bottom-6 left-1/2 rounded-2xl border p-1.5 pl-4 shadow-soft`
+export component SelectionBar inherits Rectangle {
+    property <bool> shown: ActionState.sel-count > 0 && !ActionState.sel-hidden;
+    property <float> k: self.shown ? 1 : 0;
+    animate k { duration: Motion.slow; easing: cubic-bezier(0.34, 1.3, 0.64, 1); }
+    visible: self.k > 0.01;
+    opacity: self.k;
+    width: lay.preferred-width;
+    height: 52px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.glass;
+    drop-shadow-blur: 40px;
+    drop-shadow-offset-y: 10px;
+    drop-shadow-color: Theme.shadow;
+    property <length> lift: (1 - self.k) * 80px;
+    TouchArea { }
+    lay := HorizontalLayout {
+        y: root.lift;
+        padding: 6px;
+        padding-left: 16px;
+        spacing: 4px;
+        Text {
+            text: ActionState.sel-label;
+            font-size: 14px;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+        Rectangle { width: 4px; }
+        PillButton {
+            icon: VIcons.square-check-big;
+            label: I18n.t("sel.all", I18n.rev);
+            clicked => { ActionState.sel-all(); }
+        }
+        Sep { }
+        for a in ActionState.sel-actions: HorizontalLayout {
+            if a.sep && a.danger: Sep { }
+            PillButton {
+                icon: a.icon;
+                label: a.label;
+                active: a.active;
+                danger: a.danger;
+                clicked => { ActionState.sel-action(a.id); }
+            }
+        }
+        Sep { }
+        PillButton {
+            icon: VIcons.x;
+            label: I18n.t("sel.clear", I18n.rev);
+            clicked => { ActionState.sel-clear(); }
+        }
+    }
+}
+
+component MenuRow inherits Rectangle {
+    in property <ActionItem> d;
+    callback clicked();
+    height: 36px;
+    border-radius: 12px;
+    background: ta.has-hover ? (root.d.danger ? Theme.danger.with-alpha(0.1) : Theme.surface-2) : transparent;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.d.icon;
+                colorize: root.d.danger ? Theme.danger : root.d.active ? Theme.accent-2 : Theme.text;
+                width: 16px;
+                height: 16px;
+            }
+        }
+        Text {
+            text: root.d.label;
+            color: root.d.danger ? Theme.danger : Theme.text;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component PickerRowView inherits Rectangle {
+    in property <PickerRow> d;
+    in property <bool> selected;
+    callback clicked();
+    callback toggle();
+    height: 40px;
+    border-radius: 10px;
+    opacity: root.d.enabled ? 1 : 0.45;
+    background: root.selected ? Theme.accent-soft : ta.has-hover && root.d.enabled ? Theme.surface-2 : transparent;
+    ta := TouchArea {
+        enabled: root.d.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+        double-clicked => { root.toggle(); }
+    }
+    HorizontalLayout {
+        padding-left: 8px + root.d.depth * 18px;
+        padding-right: 10px;
+        spacing: 8px;
+        Rectangle {
+            width: 20px;
+            if root.d.has-children: Image {
+                source: root.d.expanded ? VIcons.chevron-down : VIcons.chevron-right;
+                colorize: Theme.text-faint;
+                width: 16px;
+                height: 16px;
+            }
+            if root.d.has-children: TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.toggle(); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Image {
+                width: 18px;
+                height: 18px;
+                colorize: root.d.icon == "plus" ? Theme.accent : Theme.text-dim;
+                source: root.d.icon == "library" ? VIcons.library : root.d.icon == "album" ? VIcons.book-image
+                    : root.d.icon == "plus" ? VIcons.plus : VIcons.folder;
+            }
+        }
+        Text {
+            text: root.d.label;
+            color: root.d.icon == "plus" ? Theme.accent : Theme.text;
+            font-size: 14px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        if root.d.sub != "": Text {
+            text: root.d.sub;
+            color: Theme.text-faint;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+        if root.d.loading: VerticalLayout { alignment: center; Spinner { size: 14px; } }
+    }
+}
+
+export component ActionLayer inherits Rectangle {
+    // ── context menu ──
+    if ActionState.menu-open: Rectangle {
+        TouchArea {
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down { ActionState.menu-close(); }
+            }
+        }
+        FocusScope {
+            init => { self.focus(); }
+            key-pressed(e) => {
+                if e.text == Key.Escape { ActionState.menu-close(); return accept; }
+                reject
+            }
+        }
+        panel := Rectangle {
+            width: 232px;
+            height: ml.preferred-height;
+            x: Math.max(8px, Math.min(ActionState.menu-x, root.width - self.width - 8px));
+            y: Math.max(8px, Math.min(ActionState.menu-y, root.height - self.height - 8px));
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            drop-shadow-blur: 40px;
+            drop-shadow-offset-y: 10px;
+            drop-shadow-color: Theme.shadow;
+            property <float> k: 0;
+            init => { self.k = 1; }
+            animate k { duration: Motion.fast; }
+            opacity: self.k;
+            TouchArea { }
+            ml := VerticalLayout {
+                padding: 6px;
+                for a[i] in ActionState.menu-items: VerticalLayout {
+                    if a.sep && i > 0: Rectangle {
+                        height: 9px;
+                        Rectangle { height: 1px; background: Theme.border; }
+                    }
+                    MenuRow {
+                        d: a;
+                        clicked => { ActionState.menu-action(a.id); }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── dialogs ──
+    if ActionState.dialog == "delete": Dialog {
+        open: true;
+        danger: true;
+        title: ActionState.dialog-title;
+        panel-width: 440px;
+        confirm-label: I18n.t("common.delete", I18n.rev);
+        cancel-label: I18n.t("common.cancel", I18n.rev);
+        busy: ActionState.busy;
+        close => { ActionState.dialog-close(); }
+        confirm => { ActionState.dialog-confirm(); }
+        Text {
+            text: ActionState.dialog-body;
+            color: Theme.text-dim;
+            font-size: 14px;
+            wrap: word-wrap;
+        }
+        FocusScope {
+            init => { self.focus(); }
+            key-pressed(e) => {
+                if e.text == Key.Return { ActionState.dialog-confirm(); return accept; }
+                if e.text == Key.Escape { ActionState.dialog-close(); return accept; }
+                reject
+            }
+        }
+    }
+    if ActionState.dialog == "rename": Dialog {
+        open: true;
+        title: I18n.t("common.rename", I18n.rev);
+        panel-width: 420px;
+        confirm-label: I18n.t("common.save", I18n.rev);
+        cancel-label: I18n.t("common.cancel", I18n.rev);
+        busy: ActionState.busy;
+        confirm-enabled: ActionState.rename-text != "";
+        close => { ActionState.dialog-close(); }
+        confirm => { ActionState.dialog-confirm(); }
+        tf := TextField {
+            text <=> ActionState.rename-text;
+            init => { self.focus-input(); }
+            accepted => { ActionState.dialog-confirm(); }
+        }
+    }
+    if ActionState.dialog == "move" || ActionState.dialog == "album": Dialog {
+        open: true;
+        title: ActionState.dialog-title;
+        panel-width: 480px;
+        confirm-label: ActionState.confirm-label;
+        cancel-label: I18n.t("common.cancel", I18n.rev);
+        busy: ActionState.busy;
+        confirm-enabled: ActionState.confirm-enabled;
+        close => { ActionState.dialog-close(); }
+        confirm => { ActionState.dialog-confirm(); }
+        VerticalLayout {
+            spacing: 8px;
+            if ActionState.dialog-body != "": Text {
+                text: ActionState.dialog-body;
+                color: Theme.text-dim;
+                font-size: 13px;
+                wrap: word-wrap;
+            }
+            if ActionState.dialog == "album": HorizontalLayout {
+                spacing: 8px;
+                TextField {
+                    horizontal-stretch: 1;
+                    text <=> ActionState.new-album-name;
+                    placeholder: I18n.t("album.newName", I18n.rev);
+                    accepted => { ActionState.create-album(); }
+                }
+                Rectangle {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 12px;
+                    background: nta.has-hover ? Theme.surface-3 : Theme.surface-2;
+                    opacity: ActionState.new-album-name != "" ? 1 : 0.5;
+                    Image { source: VIcons.plus; colorize: Theme.text; width: 18px; height: 18px; }
+                    nta := TouchArea {
+                        enabled: ActionState.new-album-name != "";
+                        mouse-cursor: pointer;
+                        clicked => { ActionState.create-album(); }
+                    }
+                }
+            }
+            Rectangle {
+                height: Math.min(360px, Math.max(80px, pl.preferred-height));
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: Theme.border;
+                clip: true;
+                if ActionState.picker-loading: Spinner { }
+                Flickable {
+                    pl := VerticalLayout {
+                        padding: 4px;
+                        for r in ActionState.picker-rows: PickerRowView {
+                            d: r;
+                            selected: r.key == ActionState.picker-selected;
+                            clicked => { ActionState.picker-click(r.key); }
+                            toggle => { ActionState.picker-toggle(r.key); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── tile drag ghost ──
+    DragGhost { }
+
+    // ── OS files over the window (`drop.title` overlay of the upload drop zone) ──
+    if DragState.files-over: Rectangle {
+        background: Theme.overlay;
+        Rectangle {
+            x: 16px;
+            y: 16px;
+            width: parent.width - 32px;
+            height: parent.height - 32px;
+            border-radius: 24px;
+            border-width: 2px;
+            border-color: DragState.files-readonly ? Theme.danger : Theme.accent;
+            background: (DragState.files-readonly ? Theme.danger : Theme.accent).with-alpha(0.08);
+            VerticalLayout {
+                alignment: center;
+                spacing: 8px;
+                HorizontalLayout {
+                    alignment: center;
+                    Image {
+                        source: VIcons.upload;
+                        colorize: DragState.files-readonly ? Theme.danger : Theme.accent;
+                        width: 40px;
+                        height: 40px;
+                    }
+                }
+                Text {
+                    text: DragState.files-readonly ? I18n.t("drop.readonly", I18n.rev) : I18n.t("drop.title", I18n.rev);
+                    font-family: Theme.font-display;
+                    font-size: 22px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    horizontal-alignment: center;
+                }
+                if !DragState.files-readonly: Text {
+                    text: DragState.files-target != "" ? I18n.t1("drop.into", "name", DragState.files-target, I18n.rev) : I18n.t("drop.noTarget", I18n.rev);
+                    font-size: 14px;
+                    color: Theme.text-dim;
+                    horizontal-alignment: center;
+                }
+                if !DragState.files-readonly: Text {
+                    text: I18n.t("drop.hint", I18n.rev);
+                    font-size: 12px;
+                    color: Theme.text-faint;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}

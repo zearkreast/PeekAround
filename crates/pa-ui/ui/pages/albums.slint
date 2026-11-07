@@ -1,0 +1,313 @@
+// Albums list (features/library/AlbumsPage.tsx) and one album (AlbumPage.tsx): the album's items
+// in the regular grid, inline rename, cover, order (newest / oldest / custom), download, delete.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "icons.slint";
+import { Shell, GridState } from "../globals.slint";
+import { AlbumsState, AlbumState } from "state.slint";
+import { Cols, GridPos, Enter, PageTitle, AlbumCard } from "parts.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton } from "../components/button.slint";
+import { Spinner, EmptyState } from "../components/feedback.slint";
+import { PopoverPanel, MenuItem, MenuLabel, MenuSep } from "../components/overlays.slint";
+import { MediaGrid } from "grid.slint";
+import { ScrollPage } from "scroll.slint";
+
+export component AlbumsPage inherits Rectangle {
+    in property <length> window-width;
+    callback new-album();
+    property <length> pad: root.window-width >= 640px ? 28px : 12px;
+    property <length> cw: Math.min(root.width - 2 * pad - 12px, 1800px);
+    property <length> cx: (root.width - 12px - cw) / 2;
+    property <int> cols: Cols.of(root.window-width, 2, 3, 4, 5, 6, 7);
+    property <length> aw: GridPos.cell(cw, cols, 14px);
+
+    ScrollPage {
+        width: root.width;
+        height: root.height;
+        content-height: col.preferred-height + 24px + 112px;
+        changed scroll-y => { Shell.title-revealed = -self.scroll-y > 80px; }
+        col := VerticalLayout {
+            x: root.cx;
+            y: 24px;
+            width: root.cw;
+            spacing: 24px;
+            alignment: start;
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                PageTitle {
+                    horizontal-stretch: 1;
+                    text: I18n.t("album.title", I18n.rev);
+                    icon: PIcons.book-image;
+                    has-icon: true;
+                    sub: AlbumsState.count-text;
+                }
+                if !Shell.readonly: VerticalLayout {
+                    alignment: end;
+                    padding-bottom: 6px;
+                    Button {
+                        text: I18n.t("album.new", I18n.rev);
+                        icon: Icons.plus;
+                        has-icon: true;
+                        variant: ButtonVariant.primary;
+                        size: ButtonSize.sm;
+                        clicked => { root.new-album(); }
+                    }
+                }
+            }
+            if !AlbumsState.loaded: HorizontalLayout {
+                alignment: center;
+                padding: 80px;
+                Spinner { size: 28px; }
+            }
+            if AlbumsState.loaded && AlbumsState.albums.length == 0: EmptyState {
+                icon: PIcons.book-image;
+                title: I18n.t("album.empty.title", I18n.rev);
+                body: I18n.t("album.empty.body", I18n.rev);
+            }
+            if AlbumsState.albums.length > 0: Rectangle {
+                height: GridPos.rows(AlbumsState.albums.length, root.cols) * (root.aw + 52px + 24px) - 24px;
+                for a[i] in AlbumsState.albums: Enter {
+                    index: i;
+                    x: GridPos.x(i, root.cols, root.aw, 14px);
+                    y: GridPos.y(i, root.cols, root.aw + 52px, 24px);
+                    width: root.aw;
+                    height: root.aw + 52px;
+                    AlbumCard {
+                        width: parent.width;
+                        data: a;
+                        clicked => { AlbumsState.open(a.id); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// the album name, editable in place (Enter / blur saves, Escape cancels)
+component AlbumTitle inherits Rectangle {
+    in property <string> name;
+    callback save(string);
+    property <bool> editing;
+    height: 46px;
+    if !root.editing: Rectangle {
+        border-radius: 12px;
+        background: ta.has-hover ? Theme.surface : transparent;
+        x: -8px;
+        width: Math.min(root.width + 8px, tl.preferred-width + 16px);
+        tl := HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            spacing: 8px;
+            alignment: start;
+            Text {
+                text: root.name;
+                font-family: Theme.font-display;
+                font-size: 32px;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+                color: Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: PIcons.pencil;
+                    colorize: Theme.text-faint;
+                    width: 16px;
+                    height: 16px;
+                    opacity: ta.has-hover ? 1 : 0;
+                    animate opacity { duration: Motion.fast; }
+                }
+            }
+        }
+        ta := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                root.editing = true;
+            }
+        }
+    }
+    if root.editing: Rectangle {
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: Theme.accent;
+        background: Theme.surface;
+        x: -8px;
+        width: root.width + 8px;
+        ti := TextInput {
+            x: 8px;
+            width: parent.width - 16px;
+            text: root.name;
+            font-family: Theme.font-display;
+            font-size: 32px;
+            font-weight: 700;
+            color: Theme.text;
+            vertical-alignment: center;
+            single-line: true;
+            init => { self.focus(); self.select-all(); }
+            accepted => {
+                root.editing = false;
+                if self.text != root.name && self.text != "" { root.save(self.text); }
+            }
+            key-pressed(e) => {
+                if e.text == Key.Escape { root.editing = false; return accept; }
+                reject
+            }
+            changed has-focus => {
+                if !self.has-focus && root.editing {
+                    root.editing = false;
+                    if self.text != root.name && self.text != "" { root.save(self.text); }
+                }
+            }
+        }
+    }
+}
+
+export component AlbumPage inherits Rectangle {
+    in property <length> window-width;
+    property <length> head-h: hdr.preferred-height + 48px;
+    property <length> menu-x;
+    property <length> menu-y;
+
+    grid := MediaGrid {
+        width: root.width;
+        height: root.height;
+        tiles: GridState.tiles;
+        headers: GridState.headers;
+        grid-height: GridState.grid-height;
+        header-height: root.head-h;
+        custom-header: true;
+        scroll-y <=> GridState.scroll-y;
+        viewport-changed(y, h, w) => {
+            GridState.viewport-changed(y, h, w);
+            Shell.title-revealed = y + self.header-height > 96px;
+        }
+        open(i) => { GridState.open(i); }
+
+        hdr := HorizontalLayout {
+            y: 24px;
+            height: self.preferred-height;
+            spacing: 16px;
+            Rectangle {
+                width: 80px;
+                height: 80px;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.surface;
+                clip: true;
+                drop-shadow-blur: 4px;
+                drop-shadow-color: #0000001a;
+                if AlbumState.has-cover: Image { source: AlbumState.cover; image-fit: cover; width: parent.width; height: parent.height; }
+                if !AlbumState.has-cover: Image { source: PIcons.book-image; colorize: Theme.text-faint; width: 24px; height: 24px; }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+                AlbumTitle {
+                    name: AlbumState.name;
+                    save(n) => { AlbumState.rename(n); }
+                }
+                Text { text: AlbumState.sub; font-size: 14px; color: Theme.text-dim; overflow: elide; }
+            }
+            VerticalLayout {
+                alignment: end;
+                padding-bottom: 4px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    if GridState.total > 0: VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: I18n.t("nav.slideshow", I18n.rev);
+                            icon: Icons.play;
+                            has-icon: true;
+                            size: ButtonSize.sm;
+                            clicked => { AlbumState.slideshow(); }
+                        }
+                    }
+                    if GridState.total > 0: IconButton {
+                        icon: PIcons.download;
+                        label: I18n.t("album.download", I18n.rev);
+                        clicked => { AlbumState.download(); }
+                    }
+                    more := IconButton {
+                        icon: PIcons.ellipsis;
+                        label: I18n.t("lib2.more", I18n.rev);
+                        clicked => {
+                            root.menu-x = self.absolute-position.x + self.width - root.absolute-position.x;
+                            root.menu-y = self.absolute-position.y + self.height - root.absolute-position.y;
+                            menu.show();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    menu := PopupWindow {
+        x: root.menu-x - 240px;
+        y: root.menu-y + 6px;
+        width: 240px;
+        close-policy: close-on-click-outside;
+        PopoverPanel {
+            width: parent.width;
+            MenuLabel { text: I18n.t("album.order", I18n.rev).to-uppercase(); }
+            MenuItem {
+                text: I18n.t("album.order.desc", I18n.rev);
+                icon: PIcons.arrow-down-wide-narrow;
+                has-icon: true;
+                checked: AlbumState.order == "desc";
+                clicked => { menu.close(); AlbumState.set-order("desc"); }
+            }
+            MenuItem {
+                text: I18n.t("album.order.asc", I18n.rev);
+                icon: PIcons.arrow-up-narrow-wide;
+                has-icon: true;
+                checked: AlbumState.order == "asc";
+                clicked => { menu.close(); AlbumState.set-order("asc"); }
+            }
+            MenuItem {
+                text: I18n.t("album.order.custom", I18n.rev);
+                icon: PIcons.grip-vertical;
+                has-icon: true;
+                checked: AlbumState.order == "custom";
+                clicked => { menu.close(); AlbumState.set-order("custom"); }
+            }
+            MenuSep { }
+            if AlbumState.cover-picked: MenuItem {
+                text: I18n.t("lib2.resetCover", I18n.rev);
+                icon: PIcons.image-off;
+                has-icon: true;
+                clicked => { menu.close(); AlbumState.reset-cover(); }
+            }
+            MenuItem {
+                text: I18n.t("album.delete", I18n.rev);
+                icon: PIcons.trash-2;
+                has-icon: true;
+                danger: true;
+                clicked => { menu.close(); AlbumState.delete(); }
+            }
+        }
+    }
+
+    if GridState.loading: HorizontalLayout {
+        y: root.head-h;
+        height: 240px;
+        alignment: center;
+        Spinner { size: 28px; }
+    }
+    if !GridState.loading && GridState.total == 0: VerticalLayout {
+        y: root.head-h;
+        height: root.height - root.head-h;
+        alignment: start;
+        EmptyState {
+            icon: GridState.error != "" ? Icons.triangle-alert : PIcons.book-image;
+            title: GridState.error != "" ? I18n.t("common.error", I18n.rev) : I18n.t("album.noItems", I18n.rev);
+            body: GridState.error != "" ? GridState.error : I18n.t("album.noItemsHint", I18n.rev);
+        }
+    }
+}

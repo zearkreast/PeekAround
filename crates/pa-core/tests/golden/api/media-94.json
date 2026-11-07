@@ -1,0 +1,31 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/94",
+ "response": {
+  "id": "94",
+  "folderId": "1",
+  "dir": "Müzik",
+  "name": "arka plan.mp3",
+  "ext": "mp3",
+  "kind": "audio",
+  "size": 120349,
+  "mtime": 1793998143132,
+  "width": null,
+  "height": null,
+  "duration": 30.040816,
+  "takenAt": 1793998143132,
+  "localAt": 1793998143132,
+  "flags": 0,
+  "thumbhash": null,
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Müzik/arka plan.mp3",
+  "exif": null,
+  "gps": null,
+  "place": null,
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"94\",\"folderId\":\"1\",\"dir\":\"Müzik\",\"name\":\"arka plan.mp3\",\"ext\":\"mp3\",\"kind\":\"audio\",\"size\":120349,\"mtime\":1793998143132,\"width\":null,\"height\":null,\"duration\":30.040816,\"takenAt\":1793998143132,\"localAt\":1793998143132,\"flags\":0,\"thumbhash\":null,\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Müzik/arka plan.mp3\",\"exif\":null,\"gps\":null,\"place\":null,\"camera\":null,\"tzOffset\":null}"
+}

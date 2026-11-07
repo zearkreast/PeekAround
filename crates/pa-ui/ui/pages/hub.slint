@@ -1,0 +1,272 @@
+// Library hub "Kitaplık" (features/nav/LibraryPage.tsx): quick collections, albums, libraries
+// (with numbers), phones, temporary sessions, tools.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "icons.slint";
+import { Shell, Page } from "../globals.slint";
+import { HubState } from "state.slint";
+import { Cols, GridPos, Enter, PageTitle, SectionHead, QuickTile, LibraryCard, AlbumCard, ListRow } from "parts.slint";
+import { Button, ButtonVariant, ButtonSize } from "../components/button.slint";
+import { Spinner } from "../components/feedback.slint";
+import { ScrollBar } from "scroll.slint";
+
+export component HubPage inherits Rectangle {
+    in property <length> window-width;
+    property <length> pad: root.window-width >= 640px ? 28px : 12px;
+    property <length> cw: Math.min(root.width - 2 * pad - 12px, 1500px);
+    property <length> cx: (root.width - 12px - cw) / 2;
+    property <bool> can-edit: !Shell.readonly;
+    property <int> qcols: Cols.of(root.window-width, 2, 2, 4, 4, 4, 4);
+    property <length> qw: GridPos.cell(root.cw, qcols, 10px);
+    property <int> acols: Cols.of(root.window-width, 2, 3, 4, 5, 5, 6);
+    property <length> aw: GridPos.cell(root.cw, acols, 12px);
+    property <int> lcols: Cols.of(root.window-width, 1, 2, 2, 2, 3, 4);
+    property <length> lw: GridPos.cell(root.cw, lcols, 14px);
+    property <length> lh: lw * 9 / 16;
+    property <int> dcols: Cols.of(root.window-width, 1, 1, 2, 2, 2, 2);
+    property <length> dw: GridPos.cell(root.cw, dcols, 4px);
+    property <int> ocols: Cols.of(root.window-width, 1, 1, 3, 3, 3, 3);
+    property <length> ow: GridPos.cell(root.cw, ocols, 4px);
+
+    fl := Flickable {
+        width: root.width;
+        height: root.height;
+        content-height: col.preferred-height + 24px + 112px;
+        changed content-y => { Shell.title-revealed = -self.content-y > 80px; }
+        col := VerticalLayout {
+            x: root.cx;
+            y: 24px;
+            width: root.cw;
+            spacing: 36px;
+            alignment: start;
+
+            PageTitle {
+                padding-left: 4px;
+                text: I18n.t("lib2.hub.title", I18n.rev);
+                sub: HubState.subtitle;
+            }
+
+            // quick collections
+            Rectangle {
+                height: GridPos.rows(4, root.qcols) * 66px - 10px;
+                QuickTile {
+                    x: GridPos.x(0, root.qcols, root.qw, 10px); y: GridPos.y(0, root.qcols, 56px, 10px); width: root.qw;
+                    icon: Icons.heart; label: I18n.t("nav.favorites", I18n.rev); tint: Theme.accent-2;
+                    clicked => { HubState.open-quick("favorites"); }
+                }
+                QuickTile {
+                    x: GridPos.x(1, root.qcols, root.qw, 10px); y: GridPos.y(1, root.qcols, 56px, 10px); width: root.qw;
+                    icon: Icons.sparkles; label: I18n.t("lib2.hub.recent", I18n.rev); tint: Theme.accent;
+                    clicked => { HubState.open-quick("recent"); }
+                }
+                QuickTile {
+                    x: GridPos.x(2, root.qcols, root.qw, 10px); y: GridPos.y(2, root.qcols, 56px, 10px); width: root.qw;
+                    icon: Icons.map-pin; label: I18n.t("lib2.hub.places", I18n.rev); tint: #10b981;
+                    clicked => { HubState.open-quick("places"); }
+                }
+                QuickTile {
+                    x: GridPos.x(3, root.qcols, root.qw, 10px); y: GridPos.y(3, root.qcols, 56px, 10px); width: root.qw;
+                    icon: PIcons.copy; label: I18n.t("lib2.hub.duplicates", I18n.rev); tint: #f97316;
+                    clicked => { HubState.open-quick("duplicates"); }
+                }
+            }
+
+            // albums
+            VerticalLayout {
+                spacing: 12px;
+                SectionHead {
+                    text: I18n.t("lib2.hub.albums", I18n.rev);
+                    link: true;
+                    clicked => { Shell.navigate(Page.albums); }
+                    if root.can-edit: VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: I18n.t("album.new", I18n.rev);
+                            icon: Icons.plus;
+                            has-icon: true;
+                            variant: ButtonVariant.ghost;
+                            size: ButtonSize.sm;
+                            clicked => { HubState.new-album(); }
+                        }
+                    }
+                }
+                if HubState.albums-loaded && HubState.albums.length == 0: Text {
+                    x: 4px;
+                    text: I18n.t("lib2.hub.noAlbums", I18n.rev);
+                    font-size: 14px;
+                    color: Theme.text-dim;
+                }
+                if HubState.albums.length > 0: Rectangle {
+                    height: GridPos.rows(HubState.albums.length, root.acols) * (root.aw + 52px + 20px) - 20px;
+                    for a[i] in HubState.albums: Enter {
+                        index: i;
+                        x: GridPos.x(i, root.acols, root.aw, 12px);
+                        y: GridPos.y(i, root.acols, root.aw + 52px, 20px);
+                        width: root.aw;
+                        height: root.aw + 52px;
+                        AlbumCard {
+                            width: parent.width;
+                            data: a;
+                            clicked => { HubState.open-album(a.id); }
+                        }
+                    }
+                }
+            }
+
+            // libraries
+            VerticalLayout {
+                spacing: 12px;
+                SectionHead {
+                    text: I18n.t("lib2.hub.libraries", I18n.rev);
+                    if root.can-edit && HubState.mega: VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: root.window-width >= 640px ? I18n.t("mega.addLink", I18n.rev) : "";
+                            icon: PIcons.cloud;
+                            has-icon: true;
+                            variant: ButtonVariant.ghost;
+                            size: ButtonSize.sm;
+                            clicked => { HubState.add-mega(); }
+                        }
+                    }
+                    if root.can-edit: VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: root.window-width >= 640px ? I18n.t("nav.addLibrary", I18n.rev) : "";
+                            icon: Icons.folder-plus;
+                            has-icon: true;
+                            variant: ButtonVariant.ghost;
+                            size: ButtonSize.sm;
+                            clicked => { HubState.add-library(); }
+                        }
+                    }
+                }
+                if !HubState.loaded: HorizontalLayout {
+                    alignment: center;
+                    padding: 24px;
+                    Spinner { size: 28px; }
+                }
+                if HubState.loaded && HubState.libraries.length == 0: Rectangle {
+                    border-radius: 24px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    // (dashed in the web UI)
+                    VerticalLayout {
+                        padding-left: 20px;
+                        padding-right: 20px;
+                        padding-top: 24px;
+                        padding-bottom: 24px;
+                        spacing: 12px;
+                        alignment: start;
+                        Text { text: I18n.t("home.empty.body", I18n.rev); font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
+                        if root.can-edit: HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: I18n.t("home.empty.cta", I18n.rev);
+                                icon: Icons.plus;
+                                has-icon: true;
+                                variant: ButtonVariant.primary;
+                                clicked => { HubState.add-library(); }
+                            }
+                        }
+                    }
+                }
+                if HubState.libraries.length > 0: Rectangle {
+                    height: GridPos.rows(HubState.libraries.length, root.lcols) * (root.lh + 14px) - 14px;
+                    for l[i] in HubState.libraries: Enter {
+                        index: i;
+                        x: GridPos.x(i, root.lcols, root.lw, 14px);
+                        y: GridPos.y(i, root.lcols, root.lh, 14px);
+                        width: root.lw;
+                        height: root.lh;
+                        LibraryCard {
+                            width: parent.width;
+                            height: parent.height;
+                            data: l;
+                            index: i;
+                            can-edit: root.can-edit;
+                            clicked => { HubState.open-library(l.id); }
+                            edit => { HubState.edit-library(l.id); }
+                        }
+                    }
+                }
+            }
+
+            // phones' shared folders
+            if HubState.devices.length > 0: VerticalLayout {
+                spacing: 12px;
+                SectionHead { text: I18n.t("lib2.hub.devices", I18n.rev); }
+                Rectangle {
+                    height: GridPos.rows(HubState.devices.length, root.dcols) * 64px;
+                    for d[i] in HubState.devices: ListRow {
+                        x: GridPos.x(i, root.dcols, root.dw, 4px);
+                        y: GridPos.y(i, root.dcols, 60px, 4px);
+                        width: root.dw;
+                        opacity: d.online ? 1 : 0.6;
+                        icon: PIcons.smartphone;
+                        title: d.title;
+                        sub: d.sub;
+                        dot: true;
+                        dot-on: d.online;
+                        clicked => { HubState.open-folder(d.id); }
+                    }
+                }
+            }
+
+            // temporary sessions
+            if HubState.temp.length > 0: VerticalLayout {
+                spacing: 12px;
+                SectionHead { text: I18n.t("lib2.hub.temp", I18n.rev); }
+                Rectangle {
+                    height: GridPos.rows(HubState.temp.length, root.dcols) * 64px;
+                    for f[i] in HubState.temp: ListRow {
+                        x: GridPos.x(i, root.dcols, root.dw, 4px);
+                        y: GridPos.y(i, root.dcols, 60px, 4px);
+                        width: root.dw;
+                        icon: PIcons.clock-3;
+                        icon-color: Theme.warn;
+                        title: f.title;
+                        sub: f.sub;
+                        closable: true;
+                        close-label: I18n.t("temp.close", I18n.rev);
+                        clicked => { HubState.open-folder(f.id); }
+                        close => { HubState.close-temp(f.id); }
+                    }
+                }
+            }
+
+            // tools
+            VerticalLayout {
+                spacing: 12px;
+                SectionHead { text: I18n.t("lib2.hub.tools", I18n.rev); }
+                Rectangle {
+                    height: GridPos.rows(3, root.ocols) * 64px;
+                    ListRow {
+                        x: GridPos.x(0, root.ocols, root.ow, 4px); y: GridPos.y(0, root.ocols, 60px, 4px); width: root.ow;
+                        icon: PIcons.layout-grid; title: I18n.t("nav.collage", I18n.rev);
+                        clicked => { HubState.open-tool("collage"); }
+                    }
+                    ListRow {
+                        x: GridPos.x(1, root.ocols, root.ow, 4px); y: GridPos.y(1, root.ocols, 60px, 4px); width: root.ow;
+                        icon: PIcons.presentation; title: I18n.t("nav.slideshow", I18n.rev);
+                        clicked => { HubState.open-tool("slideshow"); }
+                    }
+                    ListRow {
+                        x: GridPos.x(2, root.ocols, root.ow, 4px); y: GridPos.y(2, root.ocols, 60px, 4px); width: root.ow;
+                        icon: PIcons.type; title: I18n.t("nav.fonts", I18n.rev);
+                        clicked => { HubState.open-tool("fonts"); }
+                    }
+                }
+            }
+        }
+    }
+    ScrollBar {
+        x: root.width - self.width;
+        height: root.height;
+        content-height: fl.content-height;
+        visible-height: fl.height;
+        offset: -fl.content-y;
+        scroll-to(o) => { fl.content-y = -o; }
+    }
+}

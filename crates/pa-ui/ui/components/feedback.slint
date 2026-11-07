@@ -1,0 +1,257 @@
+// Spinner, ProgressRing, ProgressBar, Badge, Card, Skeleton (shimmer), EmptyState, Kbd
+
+import { Theme, Motion } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Icon } from "icon.slint";
+
+export component Spinner inherits Rectangle {
+    in property <length> size: 20px;
+    in property <color> fg: Theme.text-dim;
+    // no fixed height: stays vertically centred inside box layouts
+    width: size;
+    min-height: size;
+    Image {
+        width: root.size;
+        height: root.size;
+        source: Icons.loader-circle;
+        colorize: root.fg;
+        // spins even with animations off (it is a status, not decoration) — but slower
+        transform-rotation: Math.mod(animation-tick() / (Motion.on ? 0.8s : 1.6s), 1) * 360deg;
+    }
+}
+
+// circular progress (0..1)
+export component ProgressRing inherits Rectangle {
+    in property <float> value;
+    in property <length> size: 28px;
+    in property <length> stroke: 3px;
+    property <float> v: Math.clamp(value, 0, 1);
+    animate v { duration: Motion.slow; easing: ease-out; }
+    width: size;
+    height: size;
+    Path {
+        width: root.size;
+        height: root.size;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: Theme.surface-3;
+        stroke-width: root.stroke;
+        MoveTo { x: 50; y: 4; }
+        ArcTo { x: 50; y: 96; radius-x: 46; radius-y: 46; sweep: true; }
+        ArcTo { x: 50; y: 4; radius-x: 46; radius-y: 46; sweep: true; }
+    }
+    // arc from 12 o'clock, clockwise
+    if root.v > 0.001: Path {
+        width: root.size;
+        height: root.size;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: Theme.accent;
+        stroke-width: root.stroke;
+        stroke-line-cap: round;
+        property <float> a: Math.min(root.v, 0.9999) * 2 * 3.14159265;
+        MoveTo { x: 50; y: 4; }
+        ArcTo {
+            x: 50 + 46 * Math.sin(parent.a * 1rad);
+            y: 50 - 46 * Math.cos(parent.a * 1rad);
+            radius-x: 46;
+            radius-y: 46;
+            sweep: true;
+            large-arc: parent.a > 3.14159265;
+        }
+    }
+}
+
+export component ProgressBar inherits Rectangle {
+    in property <float> value;
+    property <float> v: Math.clamp(value, 0, 1);
+    animate v { duration: Motion.slow; easing: ease-out; }
+    height: 6px;
+    border-radius: 3px;
+    background: Theme.surface-3;
+    clip: true;
+    Rectangle {
+        x: 0;
+        width: parent.width * root.v;
+        height: parent.height;
+        border-radius: 3px;
+        background: @linear-gradient(120deg, Theme.accent 0%, Theme.accent-2 100%);
+    }
+}
+
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon;
+    in property <color> fg: Theme.text-dim;
+    in property <color> fill: Theme.surface-2;
+    height: 20px;
+    border-radius: 10px;
+    background: fill;
+    horizontal-stretch: 0;
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 4px;
+        alignment: center;
+        if root.has-icon: Icon {
+            source: root.icon;
+            tint: root.fg;
+            size: 12px;
+        }
+        Text {
+            text: root.text;
+            color: root.fg;
+            font-size: 11px;
+            font-weight: 500;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component Kbd inherits Rectangle {
+    in property <string> text;
+    height: 20px;
+    width: t.preferred-width + 12px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface;
+    t := Text {
+        text: root.text;
+        font-size: 11px;
+        color: Theme.text-dim;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// rounded-3xl border bg-elev p-6 card with an icon + title header (settings parts.tsx Card)
+export component Card inherits Rectangle {
+    in property <string> title;
+    in property <image> icon;
+    in property <bool> has-icon: true;
+    in property <string> scope-label;
+    in property <image> scope-icon;
+    border-radius: 24px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev;
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        if root.title != "": HorizontalLayout {
+            spacing: 10px;
+            if root.has-icon: Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 12px;
+                background: Theme.surface-2;
+                Image {
+                    source: root.icon;
+                    colorize: Theme.accent;
+                    width: 16px;
+                    height: 16px;
+                }
+            }
+            Text {
+                text: root.title;
+                font-family: Theme.font-display;
+                font-size: 17px;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            if root.scope-label != "": VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    height: 22px;
+                    width: scope-row.preferred-width + 16px;
+                    border-radius: 11px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    scope-row := HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 4px;
+                        alignment: center;
+                        Icon {
+                            source: root.scope-icon;
+                            tint: Theme.text-faint;
+                            size: 12px;
+                        }
+                        Text {
+                            text: root.scope-label;
+                            font-size: 11px;
+                            font-weight: 500;
+                            color: Theme.text-faint;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+        @children
+    }
+}
+
+// shimmer placeholder (`.shimmer`): a light band sweeping over tile-bg every 1.6 s
+export component Skeleton inherits Rectangle {
+    in property <length> radius: Theme.tile-radius;
+    border-radius: radius;
+    background: Theme.tile-bg;
+    clip: true;
+    property <float> phase: Motion.on ? Math.mod(animation-tick() / 1.6s, 1) : 0.5;
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        x: (root.phase * 2 - 1) * parent.width;
+        background: @linear-gradient(100deg, transparent 30%, (Theme.dark ? #ffffff10 : #ffffff80) 50%, transparent 70%);
+    }
+}
+
+export component EmptyState inherits VerticalLayout {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> body;
+    alignment: center;
+    spacing: 8px;
+    padding-top: 64px;
+    padding-bottom: 64px;
+    HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 80px;
+            height: 80px;
+            border-radius: 24px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.surface;
+            drop-shadow-color: Theme.accent.with-alpha(0.2);
+            drop-shadow-blur: 40px;
+            Image {
+                source: root.icon;
+                colorize: Theme.text-dim;
+                width: 36px;
+                height: 36px;
+            }
+        }
+    }
+    Rectangle { height: 12px; }
+    Text {
+        text: root.title;
+        font-family: Theme.font-display;
+        font-size: 20px;
+        font-weight: 600;
+        color: Theme.text;
+        horizontal-alignment: center;
+    }
+    if root.body != "": Text {
+        text: root.body;
+        font-size: 14px;
+        color: Theme.text-dim;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+}

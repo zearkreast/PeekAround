@@ -1,0 +1,46 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/98",
+ "response": {
+  "id": "98",
+  "folderId": "1",
+  "dir": "Videolar",
+  "name": "yılbaşı.mp4",
+  "ext": "mp4",
+  "kind": "video",
+  "size": 28558,
+  "mtime": 1793998143127,
+  "width": 640,
+  "height": 360,
+  "duration": 4,
+  "takenAt": 1767216600000,
+  "localAt": 1767216600000,
+  "flags": 0,
+  "thumbhash": "3+cNNIRzgHF3Z3doiIigOHifrg==",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Videolar/yılbaşı.mp4",
+  "exif": null,
+  "video": {
+   "codec": "h264",
+   "fps": 25,
+   "bitrate": 57116,
+   "audioCodec": null,
+   "rotation": 0
+  },
+  "gps": {
+   "lat": 41.0422,
+   "lon": 29.0067
+  },
+  "place": {
+   "city": "Beşiktaş",
+   "admin1": "İstanbul",
+   "cc": "TR",
+   "key": "TR-34"
+  },
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"98\",\"folderId\":\"1\",\"dir\":\"Videolar\",\"name\":\"yılbaşı.mp4\",\"ext\":\"mp4\",\"kind\":\"video\",\"size\":28558,\"mtime\":1793998143127,\"width\":640,\"height\":360,\"duration\":4,\"takenAt\":1767216600000,\"localAt\":1767216600000,\"flags\":0,\"thumbhash\":\"3+cNNIRzgHF3Z3doiIigOHifrg==\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Videolar/yılbaşı.mp4\",\"exif\":null,\"video\":{\"codec\":\"h264\",\"fps\":25,\"bitrate\":57116,\"audioCodec\":null,\"rotation\":0},\"gps\":{\"lat\":41.0422,\"lon\":29.0067},\"place\":{\"city\":\"Beşiktaş\",\"admin1\":\"İstanbul\",\"cc\":\"TR\",\"key\":\"TR-34\"},\"camera\":null,\"tzOffset\":null}"
+}

@@ -1,0 +1,7 @@
+{
+ "type": "DevicesResponse",
+ "method": "GET",
+ "url": "/api/devices",
+ "response": [],
+ "raw": "[]"
+}

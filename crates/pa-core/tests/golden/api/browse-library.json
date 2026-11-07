@@ -1,0 +1,65 @@
+{
+ "type": "BrowseResult",
+ "method": "GET",
+ "url": "/api/browse?libraryId=1",
+ "response": {
+  "crumbs": [
+   {
+    "label": "Test",
+    "libraryId": "1"
+   }
+  ],
+  "folders": [
+   {
+    "name": "Ekran Görüntüleri",
+    "dir": "Ekran Görüntüleri",
+    "mediaCount": 5,
+    "coverIds": [
+     "1",
+     "2",
+     "3"
+    ],
+    "latest": 1793998143112
+   },
+   {
+    "name": "Fotoğraflar",
+    "dir": "Fotoğraflar",
+    "mediaCount": 87,
+    "coverIds": [
+     "86",
+     "87",
+     "92"
+    ],
+    "latest": 1793998143111
+   },
+   {
+    "name": "Müzik",
+    "dir": "Müzik",
+    "mediaCount": 0,
+    "coverIds": [],
+    "latest": null
+   },
+   {
+    "name": "Videolar",
+    "dir": "Videolar",
+    "mediaCount": 4,
+    "coverIds": [
+     "96",
+     "98",
+     "95"
+    ],
+    "latest": 1793998143127
+   }
+  ],
+  "roots": [],
+  "items": [],
+  "total": 0,
+  "archives": [],
+  "target": {
+   "folderId": "1",
+   "dir": ""
+  },
+  "gen": "mw5g6aqw.12.0.0"
+ },
+ "raw": "{\"crumbs\":[{\"label\":\"Test\",\"libraryId\":\"1\"}],\"folders\":[{\"name\":\"Ekran Görüntüleri\",\"dir\":\"Ekran Görüntüleri\",\"mediaCount\":5,\"coverIds\":[\"1\",\"2\",\"3\"],\"latest\":1793998143112},{\"name\":\"Fotoğraflar\",\"dir\":\"Fotoğraflar\",\"mediaCount\":87,\"coverIds\":[\"86\",\"87\",\"92\"],\"latest\":1793998143111},{\"name\":\"Müzik\",\"dir\":\"Müzik\",\"mediaCount\":0,\"coverIds\":[],\"latest\":null},{\"name\":\"Videolar\",\"dir\":\"Videolar\",\"mediaCount\":4,\"coverIds\":[\"96\",\"98\",\"95\"],\"latest\":1793998143127}],\"roots\":[],\"items\":[],\"total\":0,\"archives\":[],\"target\":{\"folderId\":\"1\",\"dir\":\"\"},\"gen\":\"mw5g6aqw.12.0.0\"}"
+}

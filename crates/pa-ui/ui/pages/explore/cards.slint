@@ -1,0 +1,752 @@
+// Explore building blocks (features/explore/cards.tsx + insights.tsx): thumbs, carousel, section,
+// memory / place / map / country / collage / colour / tile / ranked / camera / year cards.
+
+import { Theme, Motion, I18n } from "../../theme.slint";
+import { EIcons } from "icons.slint";
+import { ECard, EChip, EDot } from "state.slint";
+
+// icon names → images (Rust passes names; one table for every card)
+export global EIcon {
+    pure public function of(n: string) -> image {
+        n == "sparkles" ? EIcons.sparkles
+        : n == "film" ? EIcons.film
+        : n == "smartphone" ? EIcons.smartphone
+        : n == "scan-face" ? EIcons.scan-face
+        : n == "gallery" ? EIcons.gallery-horizontal-end
+        : n == "image-play" ? EIcons.image-play
+        : n == "heart" ? EIcons.heart
+        : n == "moon" ? EIcons.moon
+        : n == "sunset" ? EIcons.sunset
+        : n == "portrait" ? EIcons.rectangle-vertical
+        : n == "landscape" ? EIcons.rectangle-horizontal
+        : n == "square" ? EIcons.square
+        : n == "timer" ? EIcons.timer
+        : n == "clapperboard" ? EIcons.clapperboard
+        : n == "images" ? EIcons.images
+        : n == "globe" ? EIcons.globe
+        : n == "map-pin" ? EIcons.map-pin
+        : n == "map-pin-off" ? EIcons.map-pin-off
+        : n == "calendar" ? EIcons.calendar-days
+        : n == "hard-drive" ? EIcons.hard-drive
+        : n == "camera" ? EIcons.camera
+        : n == "history" ? EIcons.history
+        : n == "palette" ? EIcons.palette
+        : n == "shapes" ? EIcons.shapes
+        : n == "copy" ? EIcons.copy
+        : n == "cloud" ? EIcons.cloud
+        : n == "map" ? EIcons.map
+        : EIcons.compass
+    }
+}
+
+// a thumbnail that fades in once loaded (`Thumb`), optional hover zoom
+export component Thumb inherits Rectangle {
+    in property <image> source;
+    in property <bool> zoomed;
+    background: Theme.tile-bg;
+    clip: true;
+    property <bool> loaded: root.source.width > 0;
+    property <float> k: root.zoomed ? 1.05 : 1;
+    animate k { duration: Motion.slow * 1.2; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    Image {
+        width: root.width * root.k;
+        height: root.height * root.k;
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        source: root.source;
+        image-fit: cover;
+        opacity: root.loaded ? 1 : 0;
+        animate opacity { duration: Motion.normal * 1.4; easing: ease-out; }
+    }
+}
+
+// a country flag from the atlas (4:3)
+export component Flag inherits Rectangle {
+    in property <int> fx;
+    in property <int> fy;
+    border-radius: 3px;
+    clip: true;
+    Image {
+        width: parent.width;
+        height: parent.height;
+        source: EIcons.flags;
+        source-clip-x: root.fx;
+        source-clip-y: root.fy;
+        source-clip-width: 64;
+        source-clip-height: 48;
+        image-fit: fill;
+    }
+}
+
+// bottom gradient of the photo cards (`bg-gradient-to-t from-black/80 via-black/10 to-transparent`)
+export component Shade inherits Rectangle {
+    in property <float> strength: 0.8;
+    in property <float> mid: 0.1;
+    in property <float> top: 0;
+    background: @linear-gradient(0deg, #000000.with-alpha(root.strength) 0%, #000000.with-alpha(root.mid) 50%, #000000.with-alpha(root.top) 100%);
+}
+
+// round translucent badge with an icon (top-left of memory / collage cards)
+export component IconBadge inherits Rectangle {
+    in property <image> icon;
+    in property <length> size: 28px;
+    in property <color> fill: #00000059;
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: fill;
+    Image { source: root.icon; colorize: #ffffff; width: root.size / 2; height: root.size / 2; }
+}
+
+// a pressable card with the `.ins-card` hover lift (translateY(-3px) + shadow)
+export component CardBox inherits Rectangle {
+    in property <bool> lift: true;
+    in property <length> radius: 16px;
+    in property <length> box-height: root.height;
+    callback clicked();
+    out property <bool> hovered: ta.has-hover;
+    property <length> up: root.lift && ta.has-hover && Motion.level == 2 ? -3px : 0px;
+    animate up { duration: Motion.slow * 0.85; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    inner := Rectangle {
+        y: root.up;
+        width: root.width;
+        height: root.height;
+        @children
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Arrow inherits Rectangle {
+    in property <bool> left;
+    in property <bool> shown;
+    callback clicked();
+    out property <bool> hovered: ta.has-hover;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev;
+    drop-shadow-blur: 24px;
+    drop-shadow-offset-y: 6px;
+    drop-shadow-color: Theme.shadow;
+    opacity: root.shown ? 1 : 0;
+    animate opacity { duration: Motion.fast; }
+    Image {
+        source: root.left ? EIcons.chevron-left : EIcons.chevron-right;
+        colorize: Theme.text;
+        width: 20px;
+        height: 20px;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// horizontal scroller with arrow buttons (Carousel: snap-x, ‹ › on pointer devices, 80 % pages)
+export component Carousel inherits Rectangle {
+    // the page's side padding: the row scrolls to the window edges
+    in property <length> pad: 28px;
+    in property <length> spacing: 12px;
+    in property <length> row-height;
+    height: row-height + 4px;
+    property <length> max-x: Math.max(0px, row.preferred-width - fl.width);
+    property <bool> left-edge: -fl.content-x > 4px;
+    property <bool> right-edge: -fl.content-x < root.max-x - 4px;
+    // the parent TouchArea is hovered while the pointer is over any card (arrows show)
+    hover := TouchArea {
+        x: -root.pad;
+        // to the page's edges (the page reserves 12 px for its scrollbar on the right)
+        width: root.width + 2 * root.pad + 12px;
+        height: root.height;
+        fl := Flickable {
+            x: 0;
+            width: parent.width;
+            height: parent.height;
+            content-width: row.preferred-width;
+            content-height: root.height;
+            animate content-x { duration: Motion.slow; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+            row := HorizontalLayout {
+                padding-left: root.pad;
+                padding-right: root.pad;
+                spacing: root.spacing;
+                alignment: start;
+                height: root.row-height;
+                @children
+            }
+        }
+    }
+    function by(d: int) {
+        fl.content-x = Math.clamp(fl.content-x - d * fl.width * 0.8, -root.max-x, 0px);
+    }
+    if root.left-edge: Arrow {
+        x: -12px;
+        y: root.row-height * 0.38 - 18px;
+        left: true;
+        shown: hover.has-hover || self.hovered;
+        clicked => { root.by(-1); }
+    }
+    if root.right-edge: Arrow {
+        x: root.width - self.width + 12px;
+        y: root.row-height * 0.38 - 18px;
+        shown: hover.has-hover || self.hovered;
+        clicked => { root.by(1); }
+    }
+}
+
+// section link (`SectionLink`: accent text button, optional icon)
+export component SectionLink inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon;
+    callback clicked();
+    height: 36px;
+    min-width: lay.preferred-width;
+    border-radius: 8px;
+    background: ta.has-hover ? Theme.surface-2 : transparent;
+    lay := HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 6px;
+        alignment: center;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Image { source: root.icon; colorize: Theme.accent; width: 16px; height: 16px; }
+        }
+        Text {
+            text: root.text;
+            color: Theme.accent;
+            font-size: 13px;
+            font-weight: 500;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// a section: heading (+ count) and its content; fades / rises in once (motion pref, staggered)
+export component Section inherits VerticalLayout {
+    in property <string> title;
+    in property <string> count;
+    in property <int> order;
+    property <bool> shown: !Motion.on;
+    init => {
+        if !self.shown { tm.running = true; }
+    }
+    tm := Timer {
+        interval: root.order * 20ms + 1ms;
+        running: false;
+        triggered => { self.running = false; root.shown = true; }
+    }
+    opacity: shown ? 1 : 0;
+    animate opacity { duration: Motion.level == 2 ? 350ms : 150ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    padding-top: shown || Motion.level < 2 ? 0px : 12px;
+    padding-bottom: shown || Motion.level < 2 ? 36px : 24px;
+    animate padding-top, padding-bottom { duration: 350ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    spacing: 12px;
+    @children
+}
+
+// the heading row of a section; links go to the right (children)
+export component SectionTitle inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> count;
+    height: 36px;
+    spacing: 8px;
+    Text {
+        text: root.text;
+        font-family: Theme.font-display;
+        font-size: 20px;
+        font-weight: 600;
+        color: Theme.text;
+        vertical-alignment: center;
+    }
+    if root.count != "": Text {
+        text: root.count;
+        font-size: 12px;
+        color: Theme.text-faint;
+        vertical-alignment: center;
+    }
+    Rectangle { horizontal-stretch: 1; }
+    @children
+}
+
+// memory card (3:4 collage, gradient label, sparkles badge)
+export component MemoryCard inherits CardBox {
+    in property <ECard> d;
+    in property <length> w: 200px;
+    width: w;
+    height: w * 4 / 3;
+    lift: false;
+    Rectangle {
+        border-radius: 16px;
+        clip: true;
+        background: Theme.tile-bg;
+        drop-shadow-blur: 4px;
+        drop-shadow-color: #0000001a;
+        if root.d.covers.length >= 3: Rectangle {
+            property <length> gap: 2px;
+            property <length> rh: (parent.height - 2 * gap) / 3;
+            Thumb { x: 0; y: 0; width: parent.width; height: 2 * parent.rh + parent.gap; source: root.d.covers[0]; }
+            Thumb { x: 0; y: 2 * parent.rh + 2 * parent.gap; width: (parent.width - parent.gap) / 2; height: parent.rh; source: root.d.covers[1]; }
+            Thumb { x: (parent.width + parent.gap) / 2; y: 2 * parent.rh + 2 * parent.gap; width: (parent.width - parent.gap) / 2; height: parent.rh; source: root.d.covers[2]; }
+        }
+        if root.d.covers.length < 3: Thumb { source: root.d.covers[0]; zoomed: root.hovered; }
+        Shade { opacity: root.hovered ? 0.9 : 1; animate opacity { duration: Motion.fast; } mid: 0.15; }
+        VerticalLayout {
+            alignment: end;
+            padding: 12px;
+            spacing: 4px;
+            Text {
+                text: root.d.title;
+                font-family: Theme.font-display;
+                font-size: 17px;
+                font-weight: 600;
+                color: #ffffff;
+                wrap: word-wrap;
+            }
+            Text { text: root.d.sub; font-size: 11.5px; color: #ffffffbf; overflow: elide; }
+        }
+        IconBadge { x: 8px; y: 8px; icon: EIcons.sparkles; }
+    }
+}
+
+// a square photo card with two text lines under it (PlaceCard / CountryCard / CityCard)
+export component PhotoCard inherits CardBox {
+    in property <ECard> d;
+    in property <length> w: 168px;
+    width: w;
+    height: w + 48px;
+    VerticalLayout {
+        spacing: 0px;
+        Rectangle {
+            height: root.w;
+            border-radius: 16px;
+            clip: true;
+            Thumb { source: root.d.covers[0]; zoomed: root.hovered; }
+            if root.d.has-flag: Rectangle {
+                x: 8px;
+                y: 8px;
+                width: 36px;
+                height: 36px;
+                border-radius: 18px;
+                background: #00000059;
+                Flag { width: 22px; height: 16.5px; fx: root.d.flag-x; fy: root.d.flag-y; }
+            }
+        }
+        Rectangle { height: 8px; }
+        Text { text: root.d.title; font-size: 14px; font-weight: 500; color: Theme.text; overflow: elide; }
+        Text { text: root.d.sub; font-size: 12px; color: Theme.text-dim; overflow: elide; }
+    }
+}
+
+// decorative map card: every place as a dot in the places' bounding box
+export component MapCard inherits CardBox {
+    in property <[EDot]> dots;
+    in property <string> sub;
+    in property <length> w: 168px;
+    width: w;
+    height: w + 48px;
+    VerticalLayout {
+        Rectangle {
+            height: root.w;
+            border-radius: 16px;
+            clip: true;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: @radial-gradient(circle, Theme.accent.mix(Theme.bg-elev-2, 0.22) 0%, Theme.bg-elev-2 100%);
+            for v in [0.2, 0.4, 0.6, 0.8]: Rectangle {
+                x: Math.round(parent.width * v / 1px) * 1px;
+                width: 1px;
+                height: parent.height;
+                background: Theme.border.with-alpha(0.6);
+            }
+            for v in [0.2, 0.4, 0.6, 0.8]: Rectangle {
+                y: Math.round(parent.height * v / 1px) * 1px;
+                height: 1px;
+                width: parent.width;
+                background: Theme.border.with-alpha(0.6);
+            }
+            // dot + `box-shadow: 0 0 0 3px accent/28 %`
+            for p in root.dots: Rectangle {
+                property <length> r: p.r * (root.hovered ? 1.1 : 1);
+                animate r { duration: Motion.slow; }
+                x: parent.width * p.x - self.r / 2 - 3px;
+                y: parent.height * p.y - self.r / 2 - 3px;
+                width: self.r + 6px;
+                height: self.width;
+                border-radius: self.width / 2;
+                background: Theme.accent.with-alpha(0.28);
+                Rectangle {
+                    width: parent.r;
+                    height: parent.r;
+                    border-radius: parent.r / 2;
+                    background: Theme.accent;
+                }
+            }
+            Rectangle {
+                x: parent.width - 44px;
+                y: parent.height - 44px;
+                width: 36px;
+                height: 36px;
+                border-radius: 18px;
+                background: Theme.accent;
+                drop-shadow-blur: 12px;
+                drop-shadow-color: #00000066;
+                Image { source: EIcons.map; colorize: #ffffff; width: 16px; height: 16px; }
+            }
+        }
+        Rectangle { height: 8px; }
+        Text { text: I18n.t("explore.map", I18n.rev); font-size: 14px; font-weight: 500; color: Theme.text; overflow: elide; }
+        Text { text: root.sub; font-size: 12px; color: Theme.text-dim; overflow: elide; }
+    }
+}
+
+// 2×2 collage (or one big cover) with a gradient label (CollageCard, DayTimeCard)
+export component CollageCard inherits CardBox {
+    in property <ECard> d;
+    Rectangle {
+        border-radius: 16px;
+        clip: true;
+        background: Theme.tile-bg;
+        if root.d.covers.length >= 4: Rectangle {
+            property <length> cw: (parent.width - 2px) / 2;
+            property <length> ch: (parent.height - 2px) / 2;
+            for c[i] in root.d.covers: Thumb {
+                visible: i < 4;
+                x: Math.mod(i, 2) * (parent.cw + 2px);
+                y: Math.floor(i / 2) * (parent.ch + 2px);
+                width: parent.cw;
+                height: parent.ch;
+                source: c;
+                zoomed: root.hovered;
+            }
+        }
+        if root.d.covers.length < 4: Thumb { source: root.d.covers[0]; zoomed: root.hovered; }
+        Shade { }
+        if root.d.icon != "": IconBadge { x: 8px; y: 8px; icon: EIcon.of(root.d.icon); }
+        VerticalLayout {
+            alignment: end;
+            padding: 12px;
+            spacing: 2px;
+            Text {
+                text: root.d.title;
+                font-family: Theme.font-display;
+                font-size: 16px;
+                font-weight: 600;
+                color: #ffffff;
+                wrap: word-wrap;
+            }
+            if root.d.sub != "": Text { text: root.d.sub; font-size: 11.5px; color: #ffffffbf; overflow: elide; }
+        }
+    }
+}
+
+// year in review: 3×4 mosaic, big year, month bars
+export component YearReviewCard inherits CardBox {
+    in property <ECard> d;
+    width: 210px;
+    height: 280px;
+    Rectangle {
+        border-radius: 16px;
+        clip: true;
+        background: Theme.tile-bg;
+        property <length> cw: (self.width - 4px) / 3;
+        property <length> ch: (self.height - 6px) / 4;
+        // cell 0 spans 2×2; the others fill the remaining cells in order
+        for c[i] in root.d.covers: Thumb {
+            property <int> cell: i == 1 ? 2 : i == 2 ? 5 : i + 3;
+            visible: i < 9;
+            x: i == 0 ? 0 : Math.mod(self.cell, 3) * (parent.cw + 2px);
+            y: i == 0 ? 0 : Math.floor(self.cell / 3) * (parent.ch + 2px);
+            width: i == 0 ? 2 * parent.cw + 2px : parent.cw;
+            height: i == 0 ? 2 * parent.ch + 2px : parent.ch;
+            source: c;
+        }
+        Shade { strength: 0.85; mid: 0.25; top: 0.05; }
+        VerticalLayout {
+            alignment: end;
+            padding: 12px;
+            spacing: 4px;
+            Text {
+                text: root.d.big;
+                font-family: Theme.font-display;
+                font-size: 34px;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+                color: #ffffff;
+            }
+            Text { text: root.d.sub; font-size: 11.5px; color: #ffffffcc; overflow: elide; }
+            if root.d.months.length > 0: Rectangle {
+                height: 28px;
+                property <length> bw: (self.width - 11 * 3px) / 12;
+                for m[i] in root.d.months: Rectangle {
+                    x: i * (parent.bw + 3px);
+                    width: parent.bw;
+                    height: Math.max(m > 0 ? 0.12 : 0.04, m) * 20px;
+                    y: parent.height - self.height;
+                    border-radius: 2px;
+                    background: #ffffffcc;
+                    opacity: m > 0 ? 0.9 : 0.25;
+                }
+            }
+        }
+    }
+}
+
+// colour chip: swatch with two tilted thumbs
+export component ColorChip inherits CardBox {
+    in property <ECard> d;
+    width: 168px;
+    height: 104px;
+    Rectangle {
+        border-radius: 16px;
+        clip: true;
+        background: @linear-gradient(135deg, root.d.c1 0%, root.d.c2 100%);
+        property <int> n: Math.min(2, root.d.covers.length);
+        for c[i] in root.d.covers: Rectangle {
+            visible: i < 2;
+            x: parent.width - 8px - (parent.n - i) * 48px - (parent.n - 1 - i) * 4px;
+            transform-rotation: root.hovered && Motion.on ? (i == 0 ? -3deg : 3deg) : 0deg;
+            animate transform-rotation { duration: Motion.slow * 1.2; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+            y: 8px;
+            width: 48px;
+            height: parent.height - 16px;
+            border-radius: 12px;
+            border-width: 2px;
+            border-color: #ffffff66;
+            clip: true;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: #00000055;
+            Thumb { source: c; }
+        }
+        VerticalLayout {
+            x: 12px;
+            alignment: end;
+            padding-bottom: 10px;
+            Text { text: root.d.title; font-size: 14px; font-weight: 600; color: #ffffff; }
+            Text { text: root.d.badge; font-size: 11px; color: #ffffffd9; }
+        }
+    }
+}
+
+// grid tile with icon + label + count (TypeTile / ShapeTile)
+export component LabelTile inherits CardBox {
+    in property <ECard> d;
+    // the favourites tile has no cover: accent gradient
+    in property <bool> gradient;
+    Rectangle {
+        border-radius: 16px;
+        clip: true;
+        background: Theme.tile-bg;
+        if root.gradient: Rectangle {
+            opacity: 0.8;
+            background: @linear-gradient(135deg, Theme.accent 0%, Theme.accent-2 100%);
+        }
+        if !root.gradient: Thumb { source: root.d.covers[0]; zoomed: root.hovered; }
+        Shade { strength: 0.75; }
+        HorizontalLayout {
+            y: parent.height - self.height;
+            height: 52px;
+            padding: 10px;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                IconBadge { icon: EIcon.of(root.d.icon); fill: #ffffff33; }
+            }
+            VerticalLayout {
+                alignment: center;
+                Text { text: root.d.title; font-size: 13px; font-weight: 600; color: #ffffff; overflow: elide; }
+                if root.d.sub != "": Text { text: root.d.sub; font-size: 11px; color: #ffffffb3; overflow: elide; }
+            }
+        }
+    }
+}
+
+// largest / recently added: thumbnail + value pill
+export component RankedCard inherits CardBox {
+    in property <ECard> d;
+    width: 144px;
+    height: 144px;
+    Rectangle {
+        border-radius: 16px;
+        clip: true;
+        Thumb { source: root.d.covers[0]; zoomed: root.hovered; }
+        Rectangle {
+            x: 6px;
+            y: parent.height - self.height - 6px;
+            height: 20px;
+            width: bt.preferred-width + 16px;
+            border-radius: 10px;
+            background: #0000008c;
+            bt := Text { text: root.d.badge; font-size: 11px; font-weight: 500; color: #ffffff; }
+        }
+    }
+}
+
+// the duplicates card (two tilted thumbs + summary)
+export component DuplicatesCard inherits CardBox {
+    in property <ECard> d;
+    height: 104px;
+    Rectangle {
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: root.hovered ? Theme.surface-2 : Theme.surface;
+        HorizontalLayout {
+            padding: 12px;
+            padding-right: 20px;
+            spacing: 16px;
+            Rectangle {
+                width: 80px;
+                height: 80px;
+                property <length> shift: root.hovered && Motion.on ? 4px : 0px;
+                animate shift { duration: Motion.slow; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+                if root.d.covers.length == 0: Rectangle {
+                    width: 64px;
+                    height: 64px;
+                    x: 0;
+                    y: 0;
+                    border-radius: 12px;
+                    background: Theme.surface-2;
+                    Image { source: EIcons.copy; colorize: Theme.text-faint; width: 24px; height: 24px; }
+                }
+                for c[i] in root.d.covers: Rectangle {
+                    visible: i < 2;
+                    x: i == 0 ? -parent.shift : 16px + parent.shift;
+                    y: i == 0 ? 0px : 16px;
+                    width: 64px;
+                    height: 64px;
+                    border-radius: 12px;
+                    border-width: 2px;
+                    border-color: Theme.bg-elev;
+                    clip: true;
+                    drop-shadow-blur: 14px;
+                    drop-shadow-color: #00000066;
+                    Thumb { source: c; }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 1px;
+                Text { text: root.d.title; font-size: 15px; font-weight: 600; color: Theme.text; }
+                Text { text: root.d.sub; font-size: 13px; color: Theme.text-dim; }
+                if root.d.big != "": Text { text: root.d.big; font-size: 13px; font-weight: 500; color: Theme.accent; }
+                if root.d.extra != "": Text { text: root.d.extra; font-size: 11.5px; color: Theme.text-faint; }
+            }
+        }
+    }
+}
+
+// camera pill (round thumb + name + count)
+export component CameraChip inherits CardBox {
+    in property <ECard> d;
+    lift: false;
+    height: 48px;
+    width: lay.preferred-width;
+    Rectangle {
+        border-radius: 24px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: root.hovered ? Theme.surface-2 : Theme.surface;
+        lay := HorizontalLayout {
+            padding-left: 4px;
+            padding-right: 16px;
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 20px;
+                    clip: true;
+                    Thumb { source: root.d.covers[0]; }
+                }
+            }
+            Text { text: root.d.title; font-size: 14px; font-weight: 500; color: Theme.text; vertical-alignment: center; }
+            Text { text: root.d.badge; font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+        }
+    }
+}
+
+// a year (4:5 cover, big number)
+export component YearCard inherits CardBox {
+    in property <ECard> d;
+    width: 160px;
+    height: 200px;
+    Rectangle {
+        border-radius: 16px;
+        clip: true;
+        Thumb { source: root.d.covers[0]; zoomed: root.hovered; }
+        Shade { strength: 0.75; mid: 0.05; }
+        VerticalLayout {
+            alignment: end;
+            padding: 12px;
+            Text { text: root.d.title; font-family: Theme.font-display; font-size: 24px; font-weight: 700; color: #ffffff; }
+            Text { text: root.d.sub; font-size: 11px; color: #ffffffb3; }
+        }
+    }
+}
+
+// a pill (stats header)
+export component StatChip inherits Rectangle {
+    in property <EChip> d;
+    callback clicked();
+    height: 36px;
+    width: lay.preferred-width;
+    border-radius: 18px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: root.d.key != "" && ta.has-hover ? Theme.surface-2 : Theme.surface;
+    lay := HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 6px;
+        VerticalLayout {
+            alignment: center;
+            Image { source: EIcon.of(root.d.icon); colorize: root.d.icon == "cloud" ? #e5484d : Theme.accent; width: 16px; height: 16px; }
+        }
+        Text { text: root.d.text; font-size: 13px; font-weight: 500; color: Theme.text; vertical-alignment: center; }
+    }
+    ta := TouchArea {
+        enabled: root.d.key != "";
+        mouse-cursor: root.d.key != "" ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// shimmer box (`.shimmer` with rounded-2xl)
+export component SkeletonBox inherits Rectangle {
+    in property <length> radius: 16px;
+    border-radius: radius;
+    background: Theme.tile-bg;
+    clip: true;
+    property <float> phase: Motion.on ? Math.mod(animation-tick() / 1.6s, 1) : 0.5;
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        x: (root.phase * 2 - 1) * parent.width;
+        background: @linear-gradient(100deg, transparent 30%, (Theme.dark ? #ffffff10 : #ffffff80) 50%, transparent 70%);
+    }
+}
+
+// shimmer row of the loading state
+export component SkeletonRow inherits Rectangle {
+    in property <length> card-w: 180px;
+    in property <length> card-h: 225px;
+    height: card-h;
+    clip: true;
+    HorizontalLayout {
+        spacing: 12px;
+        alignment: start;
+        for i in 8: SkeletonBox { width: root.card-w; height: root.card-h; }
+    }
+}
+

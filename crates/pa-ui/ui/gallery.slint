@@ -1,0 +1,137 @@
+// Component gallery: every reusable component in both themes' current state (`pa-desktop --gallery`,
+// also used for the screenshot checks).
+
+import { Theme, Motion, I18n } from "theme.slint";
+import { Icons } from "icons.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "components/button.slint";
+import { TextField, Switch, Checkbox, Slider, Segmented, SegOption, ColorSwatches } from "components/inputs.slint";
+import { Select, SelectOption, PopoverPanel, MenuItem, MenuLabel, MenuSep, Dialog, Toaster, ToastData, ToastKind } from "components/overlays.slint";
+import { Spinner, ProgressRing, ProgressBar, Badge, Kbd, Card, Skeleton, EmptyState } from "components/feedback.slint";
+
+export component ComponentGallery inherits Window {
+    title: "PeekAround — components";
+    preferred-width: 1440px;
+    preferred-height: 900px;
+    background: Theme.bg;
+    default-font-family: Theme.font-sans;
+    in-out property <bool> dialog-open: false;
+    in-out property <string> seg: "dark";
+    in-out property <bool> sw: true;
+    in-out property <float> slider: 220;
+
+    HorizontalLayout {
+        padding: 28px;
+        spacing: 28px;
+        VerticalLayout {
+            spacing: 18px;
+            alignment: start;
+            Text { text: "Buttons"; font-family: Theme.font-display; font-size: 20px; font-weight: 700; color: Theme.text; }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: start;
+                Button { text: "Primary"; variant: ButtonVariant.primary; icon: Icons.plus; has-icon: true; clicked => { root.dialog-open = true; } }
+                Button { text: "Secondary"; }
+                Button { text: "Ghost"; variant: ButtonVariant.ghost; }
+                Button { text: "Danger"; variant: ButtonVariant.danger; icon: Icons.trash-2; has-icon: true; }
+                Button { text: "Glass"; variant: ButtonVariant.glass; }
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: start;
+                Button { text: "Small"; size: ButtonSize.sm; variant: ButtonVariant.primary; }
+                Button { text: "Large"; size: ButtonSize.lg; }
+                Button { text: "Loading"; loading: true; }
+                Button { text: "Disabled"; enabled: false; }
+                IconButton { icon: Icons.search; label: "Search"; }
+                IconButton { icon: Icons.sliders-horizontal; label: "Active"; active: true; dot: true; }
+                IconButton { icon: Icons.heart; label: "Glass"; glass: true; }
+                IconButton { icon: Icons.x; label: "Small"; size: IconButtonSize.sm; }
+            }
+            Text { text: "Inputs"; font-family: Theme.font-display; font-size: 20px; font-weight: 700; color: Theme.text; }
+            TextField { width: 360px; placeholder: "Search…"; icon: Icons.search; has-icon: true; }
+            HorizontalLayout {
+                spacing: 16px;
+                alignment: start;
+                Segmented {
+                    options: [
+                        { value: "dark", label: "Dark", icon: Icons.moon, has-icon: true },
+                        { value: "light", label: "Light", icon: Icons.sun, has-icon: true },
+                        { value: "system", label: "System", icon: Icons.monitor, has-icon: true },
+                    ];
+                    value <=> root.seg;
+                }
+                Switch { checked <=> root.sw; }
+                Switch { checked: false; }
+                Checkbox { label: "Checkbox"; hint: "with a hint"; checked: true; }
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                alignment: start;
+                Select {
+                    options: [{ value: "a", label: "Date taken" }, { value: "b", label: "Name" }, { value: "c", label: "Size" }];
+                    value: "a";
+                }
+                Slider { width: 260px; label: "Size"; value <=> root.slider; minimum: 110; maximum: 420; step: 10; value-text: Math.round(root.slider) + "px"; }
+            }
+            ColorSwatches { colors: [#8b5cf6, #ec4899, #f97316, #10b981, #06b6d4, #3b82f6, #eab308, #ef4444]; value: #8b5cf6; }
+            Text { text: "Feedback"; font-family: Theme.font-display; font-size: 20px; font-weight: 700; color: Theme.text; }
+            HorizontalLayout {
+                spacing: 16px;
+                alignment: start;
+                Spinner { }
+                ProgressRing { value: 0.66; }
+                VerticalLayout { alignment: center; ProgressBar { width: 160px; value: 0.4; } }
+                Badge { text: "12 items"; }
+                Badge { text: "Video"; icon: Icons.film; has-icon: true; }
+                Kbd { text: "Ctrl K"; }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                Skeleton { width: 160px; height: 110px; }
+                Skeleton { width: 90px; height: 110px; }
+                Skeleton { width: 200px; height: 110px; }
+            }
+        }
+        VerticalLayout {
+            spacing: 18px;
+            alignment: start;
+            Card {
+                width: 420px;
+                title: "Card";
+                icon: Icons.palette;
+                scope-label: "This device";
+                scope-icon: Icons.monitor;
+                Text { text: "Cards group settings rows."; color: Theme.text-dim; font-size: 14px; }
+            }
+            PopoverPanel {
+                width: 260px;
+                MenuLabel { text: "SORT"; }
+                MenuItem { text: "Date taken"; checked: true; }
+                MenuItem { text: "Name"; }
+                MenuSep { }
+                MenuItem { text: "Upload"; icon: Icons.upload; has-icon: true; }
+                MenuItem { text: "Delete"; icon: Icons.trash-2; has-icon: true; danger: true; }
+            }
+            Toaster {
+                width: 420px;
+                toasts: [
+                    { id: 1, kind: ToastKind.success, title: "Saved", body: "3 photos added to the album" },
+                    { id: 2, kind: ToastKind.error, title: "Upload failed", body: "read-only server", action: "Retry" },
+                    { id: 3, kind: ToastKind.progress, title: "Copying…", progress: 0.4 },
+                ];
+            }
+        }
+    }
+    Dialog {
+        width: root.width;
+        height: root.height;
+        open: root.dialog-open;
+        title: "New folder";
+        confirm-label: "Create";
+        cancel-label: "Cancel";
+        close => { root.dialog-open = false; }
+        confirm => { root.dialog-open = false; }
+        TextField { placeholder: "Folder name"; }
+    }
+}

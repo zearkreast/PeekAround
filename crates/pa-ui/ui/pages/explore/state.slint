@@ -1,0 +1,220 @@
+// Explore pages state: Rust (src/explore.rs) fills these; the pages only draw.
+
+// one card of any Explore row (memories, places, countries, collages, chips …)
+export struct ECard {
+    // what ExploreState.open(key) gets: "memory:<id>", "play:<id>", "place:<key>", "country:TR", "year:2024" …
+    key: string,
+    title: string,
+    sub: string,
+    // thumbnails (filled as they load: an empty image = still loading)
+    covers: [image],
+    // icon name (cards.slint EIcon)
+    icon: string,
+    // country flag cell in EIcons.flags
+    has-flag: bool,
+    flag-x: int,
+    flag-y: int,
+    // small label (ranked items: size / date; counts)
+    badge: string,
+    // colour chips: swatch (c1 → c2 gradient for black & white)
+    c1: color,
+    c2: color,
+    // year in review: items per month (0..1 of the busiest month, -1 = none)
+    months: [float],
+    // year in review: the big year; duplicates: the accent line
+    big: string,
+    // duplicates: faint 3rd line
+    extra: string,
+}
+
+export struct EChip {
+    icon: string,
+    text: string,
+    // route key ("" = not a link)
+    key: string,
+    tip: string,
+}
+
+// map card: places projected into their bounding box (fractions 0..1, radius px)
+export struct EDot {
+    x: float,
+    y: float,
+    r: length,
+}
+
+export struct ECalCell {
+    col: int,
+    row: int,
+    level: int,
+    key: string,
+    label: string,
+}
+
+export struct ECalMonth {
+    text: string,
+    col: int,
+}
+
+export struct EYearBtn {
+    year: int,
+    active: bool,
+}
+
+export global ExploreState {
+    in property <bool> loading: true;
+    in property <bool> empty;
+    in property <string> error;
+    // indexing banner: percent, -1 = hidden
+    in property <int> indexing: -1;
+    in property <[EChip]> stats;
+    in property <bool> has-size;
+    in property <string> size-local;
+    in property <string> size-cloud;
+    in property <bool> has-cloud;
+    in property <bool> can-surprise;
+    in-out property <bool> surprise-busy;
+
+    in property <[ECard]> memories;
+    in property <[ECard]> year-reviews;
+    in property <[ECard]> places;
+    in property <int> places-total;
+    in property <[EDot]> map-dots;
+    in property <string> map-sub;
+    // "12 items without location" ("" = none)
+    in property <string> no-location;
+    in property <string> no-places-text;
+    in property <[ECard]> countries;
+    in property <[ECard]> daytimes;
+    in property <[ECard]> colors;
+    in property <[ECard]> shapes;
+    in property <[ECard]> types;
+    in property <[ECard]> recent;
+    in property <[ECard]> largest;
+    in property <bool> has-dups;
+    in property <ECard> dups;
+    in property <[ECard]> cameras;
+    // camera pills wrap (Rust lays them out: months[0] = x, months[1] = y)
+    in property <length> cam-height;
+    in property <[ECard]> years;
+    // meta diagnostics link card (Settings → Explore → location & metadata)
+    in property <string> meta-line;
+    in property <float> meta-share;
+
+    // calendar heatmap
+    in property <bool> has-calendar;
+    in property <[EYearBtn]> cal-years;
+    in property <int> cal-year;
+    in property <[ECalCell]> cal-cells;
+    in property <[ECalMonth]> cal-months;
+    in property <int> cal-cols: 53;
+    in property <string> cal-total;
+    in property <bool> cal-loading;
+
+    callback open(string);
+    callback surprise();
+    callback cal-pick(int);
+    // the calendar cell under the pointer (-1 none) → tooltip
+    in-out property <int> cal-hover: -1;
+}
+
+// a result page header (src/explore.rs resolve): drawn above the shared grid
+export global EResultState {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <string> icon;
+    in property <bool> has-flag;
+    in property <int> flag-x;
+    in property <int> flag-y;
+    in property <bool> missing;
+    in property <bool> can-play;
+    in property <bool> can-map;
+    in property <string> hint;
+    in property <[ECard]> regions;
+    in property <[ECard]> cities;
+    in property <bool> no-groups;
+    in property <string> memory-id;
+    in property <string> place-key;
+}
+
+// /explore/places: places by country
+export struct EPlaceGroup {
+    cc: string,
+    name: string,
+    count: string,
+    has-flag: bool,
+    flag-x: int,
+    flag-y: int,
+    cards: [ECard],
+}
+
+export global EPlacesState {
+    in property <string> sub;
+    in property <[EPlaceGroup]> groups;
+    in property <[EDot]> dots;
+    in property <bool> loading;
+    in property <string> empty-text;
+}
+
+// /explore/duplicates
+export struct EDupItem {
+    name: string,
+    path: string,
+    cover: [image],
+    selected: bool,
+    original: bool,
+}
+
+export struct EDupGroup {
+    title: string,
+    name: string,
+    items: [EDupItem],
+}
+
+export global EDupState {
+    in property <string> summary;
+    in property <[EDupGroup]> groups;
+    in property <bool> loading: true;
+    in property <string> empty-text;
+    in property <bool> can-more;
+    in property <bool> more-busy;
+    callback open-item(int, int);
+    callback toggle(int, int);
+    callback select-extra();
+    callback more();
+}
+
+// story-style memory player (MemoryPlayer.tsx)
+export global PlayerState {
+    in property <bool> open;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool> missing;
+    in property <bool> ready;
+    in property <int> count;
+    in property <int> index;
+    // progress of the current slide 0..1
+    in property <float> progress;
+    in property <bool> paused;
+    in property <bool> ui: true;
+    // current slide: title card (cover) or an item
+    in property <bool> is-title;
+    in property <bool> is-video;
+    in property <image> image;
+    in property <bool> has-image;
+    in property <image> backdrop;
+    in property <bool> has-backdrop;
+    // Ken Burns: which variant (a / b) and 0..1 through it
+    in property <bool> kb-b;
+    in property <float> kb;
+    in property <float> aspect: 1.5;
+    // swipe-down offset
+    in property <length> drag-y;
+    callback close();
+    callback step(int);
+    callback toggle-pause();
+    callback press(length, length);
+    callback move(length, length);
+    callback release(length, length, length);
+    callback open-grid();
+    callback as-slideshow();
+}

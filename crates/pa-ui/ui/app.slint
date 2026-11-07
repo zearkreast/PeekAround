@@ -1,0 +1,251 @@
+// The app window: nav rail · (top bar / page) — Layout.tsx. Native window decorations (see README).
+
+import { Theme, Motion, I18n } from "theme.slint";
+import { Icons } from "icons.slint";
+import { Shell, GridState, PrefsState, Page, Conn } from "globals.slint";
+import { NavRail } from "shell/nav-rail.slint";
+import { TopBar } from "shell/top-bar.slint";
+import { PhotosPage } from "pages/photos.slint";
+import { SettingsPage } from "pages/settings.slint";
+import { PlaceholderPage } from "pages/placeholder.slint";
+// library hub, albums, album, library / folder pages, dialogs
+import { HubPage } from "pages/hub.slint";
+import { AlbumsPage, AlbumPage } from "pages/albums.slint";
+import { LibraryPage } from "pages/library.slint";
+import { HubState, AlbumsState, AlbumState, LibState } from "pages/state.slint";
+import { PIcons } from "pages/icons.slint";
+import { DialogLayer, Dlg } from "dialogs/dialogs.slint";
+import { JobsState, UploadPanel } from "shell/jobs.slint";
+import { Toaster } from "components/overlays.slint";
+// viewer overlay, selection bar / context menu / action dialogs / drag & drop
+import { ViewerOverlay } from "viewer/viewer.slint";
+import { ViewerState } from "viewer/state.slint";
+import { VIcons } from "viewer/icons.slint";
+import { ActionLayer, ActionState, SelectionBar } from "actions/actions.slint";
+import { GridInput, DragState } from "grid/input.slint";
+// Explore pages, memory player, map, mini map
+import { ExplorePage } from "pages/explore/home.slint";
+import { ResultPage, PlacesPage, DuplicatesPage } from "pages/explore/result.slint";
+import { MemoryPlayer } from "pages/explore/player.slint";
+import { ExploreState, EResultState, EPlacesState, EDupState, PlayerState } from "pages/explore/state.slint";
+import { MapPage } from "map/map.slint";
+import { MapState, MiniMapState } from "map/state.slint";
+
+// re-exported so Rust can reach the globals / types
+export { Theme, Motion, I18n, Shell, GridState, PrefsState, Page, Conn }
+export { TileData, HeaderData, TileKind, TileDeco } from "pages/grid.slint";
+export { ToastData, ToastKind } from "components/overlays.slint";
+export { ViewerState, VIcons, ActionState, GridInput, DragState }
+export { HubState, AlbumsState, AlbumState, LibState, PIcons, Dlg, JobsState }
+export { Chrome } from "globals.slint";
+export { PickRowData, PathRowData, TreeRowData, KeyRowData } from "dialogs/dialogs.slint";
+export { JobRowData, UploadRowData } from "shell/jobs.slint";
+export { SetState, SetRow, SetCard, SetSection, SetNav } from "pages/settings.slint";
+export { SegOption } from "components/inputs.slint";
+export { SelectOption } from "components/overlays.slint";
+export { LibCardData, AlbumCardData, RowData, FolderCardData, RootCardData, ArchiveData, CrumbData, RemoteBannerData } from "pages/state.slint";
+export { SlideData, SlideKind, ActionItem, StripItem, InfoRow } from "viewer/state.slint";
+export { PickerRow } from "actions/actions.slint";
+export { YearTick } from "grid/input.slint";
+export { ExploreState, EResultState, EPlacesState, EDupState, PlayerState, MapState, MiniMapState }
+export { ECard, EChip, EDot, ECalCell, ECalMonth, EYearBtn, EPlaceGroup, EDupGroup, EDupItem } from "pages/explore/state.slint";
+export { MapTile, MapMarker, MapPanelTile, MiniTile } from "map/state.slint";
+// the component gallery (dev aid; `pa-desktop --gallery`)
+export { ComponentGallery } from "gallery.slint";
+
+// page transition (motion: opacity 0 → 1, y 10 → 0, spring 360/34 on desktop)
+component PageFrame inherits Rectangle {
+    property <bool> shown;
+    init => { shown = true; }
+    opacity: shown ? 1 : 0;
+    animate opacity { duration: Motion.page; easing: ease-out; }
+    Rectangle {
+        y: root.shown ? 0px : Motion.page-shift;
+        animate y { duration: Motion.page; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+        width: root.width;
+        height: root.height;
+        @children
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "PeekAround";
+    icon: Icons.logo;
+    preferred-width: 1440px;
+    preferred-height: 900px;
+    min-width: 720px;
+    min-height: 480px;
+    background: Theme.bg;
+    default-font-family: Theme.font-sans;
+    default-font-size: 14px;
+    callback slideshow();
+
+    property <string> page-title: Shell.page == Page.photos ? I18n.t("nav2.photos", I18n.rev)
+        : Shell.page == Page.favorites ? I18n.t("nav.favorites", I18n.rev)
+        : Shell.page == Page.search ? GridState.title
+        : Shell.page == Page.explore ? I18n.t("explore.title", I18n.rev)
+        : Shell.page == Page.albums ? I18n.t("nav2.albums", I18n.rev)
+        : Shell.page == Page.library ? I18n.t("lib2.hub.title", I18n.rev)
+        : Shell.page == Page.album ? AlbumState.name
+        : Shell.page == Page.lib || Shell.page == Page.folder ? GridState.title
+        : Shell.page == Page.explore-result ? EResultState.title
+        : Shell.page == Page.explore-places ? I18n.t("explore.allPlaces", I18n.rev)
+        : Shell.page == Page.explore-dups ? I18n.t("insights.dup.title", I18n.rev)
+        : Shell.page == Page.explore-map ? MapState.title
+        : I18n.t("settings.title", I18n.rev);
+    property <bool> grid-page: Shell.page == Page.photos || Shell.page == Page.favorites || Shell.page == Page.search
+        || Shell.page == Page.album || Shell.page == Page.lib || Shell.page == Page.folder;
+
+    // keyboard: Ctrl+K / '/' focus the search, Alt+← back
+    fs := FocusScope {
+        key-pressed(e) => {
+            if (e.modifiers.control && e.text == "k") || e.text == "/" {
+                top.focus-search();
+                return accept;
+            }
+            if e.modifiers.alt && e.text == Key.LeftArrow {
+                Shell.back();
+                return accept;
+            }
+            // "?" shortcuts, F11 fullscreen, Ctrl + / − / 0 window zoom (desktop shell)
+            if e.text == "?" && !e.modifiers.control && !e.modifiers.alt {
+                Shell.shortcut("help");
+                return accept;
+            }
+            if e.text == Key.F11 {
+                Shell.shortcut("fullscreen");
+                return accept;
+            }
+            if e.modifiers.control && !e.modifiers.alt && (e.text == "+" || e.text == "=") {
+                Shell.shortcut("zoom-in");
+                return accept;
+            }
+            if e.modifiers.control && !e.modifiers.alt && e.text == "-" {
+                Shell.shortcut("zoom-out");
+                return accept;
+            }
+            if e.modifiers.control && !e.modifiers.alt && !e.modifiers.shift && e.text == "0" {
+                Shell.shortcut("zoom-reset");
+                return accept;
+            }
+            reject
+        }
+
+        HorizontalLayout {
+            // (above the page: its drop flyout overlaps it)
+            NavRail { z: 10; }
+            Rectangle {
+                horizontal-stretch: 1;
+                // page below the bar (the bar is drawn last: its popups / tooltips stay on top)
+                content := Rectangle {
+                    // not drawn under an opaque viewer (every frame of a video would redraw the grid)
+                    visible: !root.viewer-covers;
+                    y: Theme.topbar-h;
+                    height: parent.height - Theme.topbar-h;
+                    clip: true;
+                    if Shell.page == Page.photos: PageFrame {
+                        PhotosPage { slideshow => { root.slideshow(); } }
+                    }
+                    if Shell.page == Page.favorites: PageFrame {
+                        PhotosPage {
+                            title-icon: Icons.heart;
+                            title-icon-color: Theme.accent-2;
+                            slideshow => { root.slideshow(); }
+                        }
+                    }
+                    if Shell.page == Page.search: PageFrame {
+                        PhotosPage {
+                            title-icon: Icons.search;
+                            slideshow => { root.slideshow(); }
+                        }
+                    }
+                    if Shell.page == Page.settings: PageFrame {
+                        SettingsPage { }
+                    }
+                    if Shell.page == Page.explore: PageFrame {
+                        ExplorePage { window-width: root.width; }
+                    }
+                    // result grids, places, duplicates, map
+                    if Shell.page == Page.explore-result: PageFrame {
+                        ResultPage {
+                            window-width: root.width;
+                            back => { Shell.navigate(Page.explore); }
+                            play => { ExploreState.open("play:" + EResultState.memory-id); }
+                            slideshow => { root.slideshow(); }
+                            show-map => { ExploreState.open("map:" + EResultState.place-key); }
+                        }
+                    }
+                    if Shell.page == Page.explore-places: PageFrame {
+                        PlacesPage { window-width: root.width; back => { Shell.navigate(Page.explore); } }
+                    }
+                    if Shell.page == Page.explore-dups: PageFrame {
+                        DuplicatesPage { window-width: root.width; back => { Shell.navigate(Page.explore); } }
+                    }
+                    if Shell.page == Page.explore-map && !MapState.fullscreen: PageFrame {
+                        MapPage { window-width: root.width; }
+                    }
+                    if Shell.page == Page.albums: PageFrame {
+                        AlbumsPage { window-width: root.width; new-album => { Shell.new-album(); } }
+                    }
+                    if Shell.page == Page.library: PageFrame {
+                        HubPage { window-width: root.width; }
+                    }
+                    if Shell.page == Page.album: PageFrame {
+                        AlbumPage { window-width: root.width; }
+                    }
+                    if Shell.page == Page.lib || Shell.page == Page.folder: PageFrame {
+                        LibraryPage { window-width: root.width; }
+                    }
+                }
+                top := TopBar {
+                    visible: !root.viewer-covers;
+                    y: 0;
+                    height: Theme.topbar-h;
+                    title: root.page-title;
+                    view-controls: root.grid-page;
+                }
+            }
+        }
+    }
+
+    // selection pill over the page, viewer above everything but toasts, menus / dialogs on top
+    SelectionBar {
+        x: Theme.rail-w + (root.width - Theme.rail-w - self.width) / 2;
+        y: root.height - self.height - 24px;
+    }
+    // the map without the rail / top bar, the memory player
+    if Shell.page == Page.explore-map && MapState.fullscreen: MapPage {
+        visible: !root.viewer-covers;
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        window-width: root.width;
+    }
+    // the viewer's background is opaque once it has opened (and is not being dragged / closed)
+    property <bool> viewer-covers: ViewerState.open && ViewerState.appear >= 0.999 && !ViewerState.closing
+        && ViewerState.dismiss-y == 0;
+    if ViewerState.open: ViewerOverlay { }
+    // the memory player (above the viewer)
+    if PlayerState.open: MemoryPlayer {
+        width: root.width;
+        height: root.height;
+    }
+    ActionLayer { }
+    // upload progress, dialogs of the library / albums / devices / MEGA / settings screens
+    UploadPanel {
+        x: root.width - self.width - 20px;
+        y: root.height - self.height - 20px;
+    }
+    DialogLayer { }
+
+    Toaster {
+        width: Math.min(420px, root.width - 32px);
+        x: (root.width - self.width) / 2;
+        y: root.height - self.height - 20px;
+        height: self.preferred-height;
+        toasts: Shell.toasts;
+        dismiss(id) => { Shell.dismiss-toast(id); }
+        action(id) => { Shell.toast-action(id); }
+    }
+}

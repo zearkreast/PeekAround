@@ -1,0 +1,223 @@
+{
+ "type": "BrowseResult",
+ "method": "GET",
+ "url": "/api/browse?folderId=1&dir=Foto%C4%9Fraflar",
+ "response": {
+  "crumbs": [
+   {
+    "label": "Test",
+    "libraryId": "1"
+   },
+   {
+    "label": "Fotoğraflar",
+    "libraryId": "1",
+    "folderId": "1",
+    "dir": "Fotoğraflar"
+   }
+  ],
+  "folders": [
+   {
+    "name": "2024 Yaz Tatili",
+    "dir": "Fotoğraflar/2024 Yaz Tatili",
+    "mediaCount": 20,
+    "coverIds": [
+     "23",
+     "22",
+     "21"
+    ],
+    "latest": 1720267560000
+   },
+   {
+    "name": "Aile",
+    "dir": "Fotoğraflar/Aile",
+    "mediaCount": 20,
+    "coverIds": [
+     "34",
+     "33",
+     "32"
+    ],
+    "latest": 1781661600000
+   },
+   {
+    "name": "Berlin",
+    "dir": "Fotoğraflar/Berlin",
+    "mediaCount": 12,
+    "coverIds": [
+     "53",
+     "52",
+     "57"
+    ],
+    "latest": 1745085600000
+   },
+   {
+    "name": "Bugün Geçmişte",
+    "dir": "Fotoğraflar/Bugün Geçmişte",
+    "mediaCount": 12,
+    "coverIds": [
+     "69",
+     "68",
+     "67"
+    ],
+    "latest": 1762531200000
+   },
+   {
+    "name": "Doğa",
+    "dir": "Fotoğraflar/Doğa",
+    "mediaCount": 7,
+    "coverIds": [
+     "71",
+     "74",
+     "76"
+    ],
+    "latest": 1793998143109
+   },
+   {
+    "name": "Kapadokya 2023",
+    "dir": "Fotoğraflar/Kapadokya 2023",
+    "mediaCount": 9,
+    "coverIds": [
+     "85",
+     "84",
+     "83"
+    ],
+    "latest": 1694964600000
+   },
+   {
+    "name": "Komik",
+    "dir": "Fotoğraflar/Komik",
+    "mediaCount": 2,
+    "coverIds": [
+     "86",
+     "87"
+    ],
+    "latest": 1793998143111
+   }
+  ],
+  "roots": [],
+  "items": [
+   {
+    "id": "93",
+    "folderId": "1",
+    "dir": "Fotoğraflar",
+    "name": "ekran_4.webp",
+    "ext": "webp",
+    "kind": "image",
+    "size": 13570,
+    "mtime": 1793998143110,
+    "width": 1800,
+    "height": 810,
+    "duration": null,
+    "takenAt": 1793998143110,
+    "localAt": 1793998143110,
+    "flags": 0,
+    "thumbhash": "ptYNM5aHeHlwiOd4h3B5CFc=",
+    "favorite": false,
+    "playback": "direct"
+   },
+   {
+    "id": "92",
+    "folderId": "1",
+    "dir": "Fotoğraflar",
+    "name": "ekran_3.webp",
+    "ext": "webp",
+    "kind": "image",
+    "size": 11594,
+    "mtime": 1793998143110,
+    "width": 1800,
+    "height": 810,
+    "duration": null,
+    "takenAt": 1793998143110,
+    "localAt": 1793998143110,
+    "flags": 0,
+    "thumbhash": "qPgZI4SHeId/h0d3iI98x/g=",
+    "favorite": false,
+    "playback": "direct"
+   },
+   {
+    "id": "91",
+    "folderId": "1",
+    "dir": "Fotoğraflar",
+    "name": "ekran_2.webp",
+    "ext": "webp",
+    "kind": "image",
+    "size": 15988,
+    "mtime": 1793998143109,
+    "width": 1600,
+    "height": 1200,
+    "duration": null,
+    "takenAt": 1793998143109,
+    "localAt": 1793998143109,
+    "flags": 0,
+    "thumbhash": "4YcaJY54h3d/h4h2iHeIeIh2gPkn",
+    "favorite": false,
+    "playback": "direct"
+   },
+   {
+    "id": "90",
+    "folderId": "1",
+    "dir": "Fotoğraflar",
+    "name": "ekran_1.webp",
+    "ext": "webp",
+    "kind": "image",
+    "size": 13550,
+    "mtime": 1793998143109,
+    "width": 1600,
+    "height": 1200,
+    "duration": null,
+    "takenAt": 1793998143109,
+    "localAt": 1793998143109,
+    "flags": 0,
+    "thumbhash": "J4gNbYR5d3ePeHd0iHh3iXd/x/h4",
+    "favorite": false,
+    "playback": "direct"
+   },
+   {
+    "id": "88",
+    "folderId": "1",
+    "dir": "Fotoğraflar",
+    "name": "aile_1 kopya.jpg",
+    "ext": "jpg",
+    "kind": "image",
+    "size": 27971,
+    "mtime": 1793998143134,
+    "width": 900,
+    "height": 1600,
+    "duration": null,
+    "takenAt": 1673683200000,
+    "localAt": 1673694000000,
+    "flags": 0,
+    "thumbhash": "J4gNbAJ3+IdYiIeXh3d4f0f4mA==",
+    "favorite": false,
+    "playback": "direct"
+   }
+  ],
+  "total": 5,
+  "archives": [
+   {
+    "id": "89",
+    "folderId": "1",
+    "dir": "Fotoğraflar",
+    "name": "düğün_albümü.zip",
+    "ext": "zip",
+    "kind": "archive",
+    "size": 119561,
+    "mtime": 1793998143105,
+    "width": null,
+    "height": null,
+    "duration": null,
+    "takenAt": 1793998143105,
+    "localAt": 1793998143105,
+    "flags": 0,
+    "thumbhash": null,
+    "favorite": false,
+    "playback": "direct"
+   }
+  ],
+  "target": {
+   "folderId": "1",
+   "dir": "Fotoğraflar"
+  },
+  "gen": "mw5g6aqw.12.5.93"
+ },
+ "raw": "{\"crumbs\":[{\"label\":\"Test\",\"libraryId\":\"1\"},{\"label\":\"Fotoğraflar\",\"libraryId\":\"1\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar\"}],\"folders\":[{\"name\":\"2024 Yaz Tatili\",\"dir\":\"Fotoğraflar/2024 Yaz Tatili\",\"mediaCount\":20,\"coverIds\":[\"23\",\"22\",\"21\"],\"latest\":1720267560000},{\"name\":\"Aile\",\"dir\":\"Fotoğraflar/Aile\",\"mediaCount\":20,\"coverIds\":[\"34\",\"33\",\"32\"],\"latest\":1781661600000},{\"name\":\"Berlin\",\"dir\":\"Fotoğraflar/Berlin\",\"mediaCount\":12,\"coverIds\":[\"53\",\"52\",\"57\"],\"latest\":1745085600000},{\"name\":\"Bugün Geçmişte\",\"dir\":\"Fotoğraflar/Bugün Geçmişte\",\"mediaCount\":12,\"coverIds\":[\"69\",\"68\",\"67\"],\"latest\":1762531200000},{\"name\":\"Doğa\",\"dir\":\"Fotoğraflar/Doğa\",\"mediaCount\":7,\"coverIds\":[\"71\",\"74\",\"76\"],\"latest\":1793998143109},{\"name\":\"Kapadokya 2023\",\"dir\":\"Fotoğraflar/Kapadokya 2023\",\"mediaCount\":9,\"coverIds\":[\"85\",\"84\",\"83\"],\"latest\":1694964600000},{\"name\":\"Komik\",\"dir\":\"Fotoğraflar/Komik\",\"mediaCount\":2,\"coverIds\":[\"86\",\"87\"],\"latest\":1793998143111}],\"roots\":[],\"items\":[{\"id\":\"93\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar\",\"name\":\"ekran_4.webp\",\"ext\":\"webp\",\"kind\":\"image\",\"size\":13570,\"mtime\":1793998143110,\"width\":1800,\"height\":810,\"duration\":null,\"takenAt\":1793998143110,\"localAt\":1793998143110,\"flags\":0,\"thumbhash\":\"ptYNM5aHeHlwiOd4h3B5CFc=\",\"favorite\":false,\"playback\":\"direct\"},{\"id\":\"92\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar\",\"name\":\"ekran_3.webp\",\"ext\":\"webp\",\"kind\":\"image\",\"size\":11594,\"mtime\":1793998143110,\"width\":1800,\"height\":810,\"duration\":null,\"takenAt\":1793998143110,\"localAt\":1793998143110,\"flags\":0,\"thumbhash\":\"qPgZI4SHeId/h0d3iI98x/g=\",\"favorite\":false,\"playback\":\"direct\"},{\"id\":\"91\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar\",\"name\":\"ekran_2.webp\",\"ext\":\"webp\",\"kind\":\"image\",\"size\":15988,\"mtime\":1793998143109,\"width\":1600,\"height\":1200,\"duration\":null,\"takenAt\":1793998143109,\"localAt\":1793998143109,\"flags\":0,\"thumbhash\":\"4YcaJY54h3d/h4h2iHeIeIh2gPkn\",\"favorite\":false,\"playback\":\"direct\"},{\"id\":\"90\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar\",\"name\":\"ekran_1.webp\",\"ext\":\"webp\",\"kind\":\"image\",\"size\":13550,\"mtime\":1793998143109,\"width\":1600,\"height\":1200,\"duration\":null,\"takenAt\":1793998143109,\"localAt\":1793998143109,\"flags\":0,\"thumbhash\":\"J4gNbYR5d3ePeHd0iHh3iXd/x/h4\",\"favorite\":false,\"playback\":\"direct\"},{\"id\":\"88\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar\",\"name\":\"aile_1 kopya.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":27971,\"mtime\":1793998143134,\"width\":900,\"height\":1600,\"duration\":null,\"takenAt\":1673683200000,\"localAt\":1673694000000,\"flags\":0,\"thumbhash\":\"J4gNbAJ3+IdYiIeXh3d4f0f4mA==\",\"favorite\":false,\"playback\":\"direct\"}],\"total\":5,\"archives\":[{\"id\":\"89\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar\",\"name\":\"düğün_albümü.zip\",\"ext\":\"zip\",\"kind\":\"archive\",\"size\":119561,\"mtime\":1793998143105,\"width\":null,\"height\":null,\"duration\":null,\"takenAt\":1793998143105,\"localAt\":1793998143105,\"flags\":0,\"thumbhash\":null,\"favorite\":false,\"playback\":\"direct\"}],\"target\":{\"folderId\":\"1\",\"dir\":\"Fotoğraflar\"},\"gen\":\"mw5g6aqw.12.5.93\"}"
+}

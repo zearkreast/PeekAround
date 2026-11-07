@@ -1,0 +1,25 @@
+{
+ "type": "AlbumMembership",
+ "method": "POST",
+ "url": "/api/albums/membership",
+ "body": {
+  "ids": [
+   "94",
+   "96",
+   "5",
+   "4",
+   "3",
+   "2",
+   "1",
+   "87",
+   "86",
+   "93"
+  ]
+ },
+ "response": {
+  "counts": {
+   "1": 6
+  }
+ },
+ "raw": "{\"counts\":{\"1\":6}}"
+}

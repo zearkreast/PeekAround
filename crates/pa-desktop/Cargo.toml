@@ -1,0 +1,56 @@
+[package]
+name = "pa-desktop"
+description = "PeekAround desktop app: the Slint UI with the PeekAround server in-process, tray, autostart, notifications"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version = "1.92"
+build = "build.rs"
+
+[[bin]]
+name = "peekaround-desktop"
+path = "src/main.rs"
+
+[features]
+default = ["heif", "software-renderer"]
+# HEIC / HEIF / AVIF via libheif (system library; for the Windows cross build see packaging/win-libheif.sh)
+heif = ["pa-server/heif"]
+# Slint's software renderer as a fallback (VMs / RDP without OpenGL 2.1; wine smoke tests): SLINT_BACKEND=winit-software
+software-renderer = ["slint/renderer-software"]
+
+[dependencies]
+pa-ui = { path = "../pa-ui" }
+pa-client = { path = "../pa-client" }
+pa-server = { path = "../pa-server", default-features = false }
+pa-core = { path = "../pa-core" }
+slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "unstable-winit-030"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "net", "macros"] }
+log = "0.4"
+tracing = { version = "0.1", features = ["log"] }
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+interprocess = "2"
+trash = "5"
+open = "5"
+auto-launch = "0.6"
+image = { version = "0.25", default-features = false, features = ["png"] }
+# read-only access to the Electron app's Chromium localStorage (first-run prefs migration)
+rusty-leveldb = "4"
+
+[target.'cfg(windows)'.dependencies]
+tray-icon = "0.26"
+rfd = { version = "0.17", default-features = false }
+notify-rust = "4"
+raw-window-handle = "0.6"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_UI_Shell"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+ksni = "0.3"
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+notify-rust = { version = "4", default-features = false, features = ["z"] }
+
+[build-dependencies]
+embed-resource = "3"

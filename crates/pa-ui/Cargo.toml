@@ -1,0 +1,46 @@
+[package]
+name = "pa-ui"
+description = "PeekAround Slint UI (all screens + view models), backend-agnostic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version = "1.92"
+
+[features]
+default = ["http", "desktop"]
+# the Backend implementation over the HTTP/WS API (pa-client)
+http = ["dep:pa-client"]
+# windowing: winit on Windows / Linux / macOS, android-activity (NativeActivity) on Android
+desktop = ["slint/backend-winit", "slint/unstable-winit-030", "audio", "clipboard"]
+# audio output of the video / audio player (cpal; without it audio plays to a null sink)
+audio = ["dep:cpal"]
+# copy path → system clipboard
+clipboard = ["dep:arboard"]
+android = ["slint/backend-android-activity-06"]
+
+[dependencies]
+# femtovg (OpenGL) renderer on winit; no Qt, no skia (prebuilt binaries / huge source build)
+slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "renderer-femtovg"] }
+pa-core = { path = "../pa-core", default-features = false }
+pa-client = { path = "../pa-client", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+bytes = "1"
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["webp", "jpeg", "png"] }
+thumbhash = "0.1"
+# LAN address QR code (Settings → Network)
+qrcode = { version = "0.14", default-features = false }
+lru = "0.12"
+log = "0.4"
+dirs = "6"
+cpal = { version = "0.16", optional = true }
+arboard = { version = "3", default-features = false, optional = true }
+
+[build-dependencies]
+slint-build = "=1.18.1"
+
+[dev-dependencies]
+regex-lite = "0.1"

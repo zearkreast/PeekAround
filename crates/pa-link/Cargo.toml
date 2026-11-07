@@ -1,0 +1,40 @@
+[package]
+name = "pa-link"
+description = "PeekAround phone link: WebSocket control plane, PUT reply data plane, pairing, device folders, transfers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["axum"]
+# ready-made axum glue: WebSocket session pump, reply-PUT / pull-GET / file responses
+axum = ["dep:axum"]
+
+[dependencies]
+pa-core = { path = "../pa-core" }
+pa-jobs = { path = "../pa-jobs" }
+pa-meta = { path = "../pa-meta" }
+async-trait = "0.1"
+axum = { version = "0.8", default-features = false, features = ["ws", "tokio", "http1", "json"], optional = true }
+base64 = "0.22"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+httpdate = "1"
+percent-encoding = "2"
+rand = "0.8"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["sync", "time", "rt", "macros", "fs", "io-util"] }
+tokio-util = { version = "0.7", features = ["io", "rt"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util", "net"] }
+axum = { version = "0.8", default-features = false, features = ["ws", "tokio", "http1", "query"] }
+tokio-tungstenite = "0.29"
+reqwest = { version = "0.12", default-features = false, features = ["stream"] }
+hex = "0.4"

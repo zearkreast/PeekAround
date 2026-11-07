@@ -1,0 +1,59 @@
+// Grid interaction state shared with Rust (src/actions_ui.rs + src/grid/interact.rs):
+// pointer / keyboard input of the media grid, selection mode, lasso, fast scroller data,
+// in-app drag & drop of tiles and OS file drops.
+
+export struct YearTick {
+    // grid y of the first group of the year
+    y: length,
+    label: string,
+}
+
+export global GridInput {
+    // hovered / keyboard-focused tile (-1: none)
+    in property <int> hover-index: -1;
+    in property <int> focus-index: -1;
+    // some tiles are selected (check circles always shown, clicks toggle)
+    in property <bool> selecting;
+    in property <int> selected-count;
+    // lasso rectangle (grid coordinates)
+    in property <bool> lasso;
+    in property <length> lasso-x;
+    in property <length> lasso-y;
+    in property <length> lasso-w;
+    in property <length> lasso-h;
+    // bump to give the grid the keyboard focus (after the viewer closed)
+    in property <int> focus-request;
+    // header "select day" hover (group index, -1: none)
+    in property <int> hover-group: -1;
+    // fast scroller
+    in property <[YearTick]> ticks;
+    in-out property <bool> fast-dragging;
+    pure callback label-at(/* grid y */ length) -> string;
+
+    // kind: 0 down, 1 up, 2 move, 3 cancel, 4 leave · button: 0 left, 1 right, 2 middle
+    // x / y: grid coordinates · ox / oy: window position of the grid origin
+    callback pointer(/* kind */ int, /* button */ int, length, length, length, length, /* ctrl|meta */ bool, /* shift */ bool);
+    // wheel with Ctrl: density change (returns true when handled)
+    callback wheel(length, length, /* dy */ length, /* ctrl */ bool) -> bool;
+    // grid keyboard (arrows, Enter, Space, Ctrl+A, Esc, Delete, F2…)
+    callback key(/* text */ string, /* ctrl|meta */ bool, /* shift */ bool, /* alt */ bool) -> bool;
+}
+
+// ── drag & drop (tiles → albums / libraries / folders, OS files → upload) ──
+export global DragState {
+    // a tile drag is in flight (window coordinates of the pointer)
+    in property <bool> active;
+    in property <length> x;
+    in property <length> y;
+    in property <int> count;
+    in property <image> ghost;
+    // key of the DropTarget under the pointer ("" none) + whether it accepts the drop
+    in-out property <string> over;
+    // OS files hovering over the window (winit HoveredFile) and where they would go
+    in property <bool> files-over;
+    in property <string> files-target;
+    in property <bool> files-readonly;
+    // a DropTarget reports itself (hovered with a drag in flight) / leaves
+    callback enter(/* key */ string);
+    callback leave(/* key */ string);
+}

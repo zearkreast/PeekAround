@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/25",
+ "response": {
+  "id": "25",
+  "folderId": "1",
+  "dir": "Fotoğraflar/2024 Yaz Tatili",
+  "name": "PANO_20240705_181500.jpg",
+  "ext": "jpg",
+  "kind": "image",
+  "size": 52059,
+  "mtime": 1793998143105,
+  "width": 3000,
+  "height": 1000,
+  "duration": null,
+  "takenAt": 1720192500000,
+  "localAt": 1720203300000,
+  "flags": 4,
+  "thumbhash": "KLYVEoB4eId/h0iHZ3pQFPY=",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/2024 Yaz Tatili/PANO_20240705_181500.jpg",
+  "exif": {
+   "Make": "samsung",
+   "Model": "SM-G991B",
+   "LensModel": "Samsung Galaxy S21 back camera 5.4mm f/1.8",
+   "DateTimeOriginal": 1720203300000,
+   "latitude": 36.8721,
+   "longitude": 30.638
+  },
+  "gps": {
+   "lat": 36.8721,
+   "lon": 30.638
+  },
+  "place": {
+   "city": "Konyaaltı",
+   "admin1": "Antalya",
+   "cc": "TR",
+   "key": "TR-07"
+  },
+  "camera": {
+   "make": "Samsung",
+   "model": "SM-G991B",
+   "lens": "Samsung Galaxy S21 back camera 5.4mm f/1.8"
+  },
+  "tzOffset": 180
+ },
+ "raw": "{\"id\":\"25\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/2024 Yaz Tatili\",\"name\":\"PANO_20240705_181500.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":52059,\"mtime\":1793998143105,\"width\":3000,\"height\":1000,\"duration\":null,\"takenAt\":1720192500000,\"localAt\":1720203300000,\"flags\":4,\"thumbhash\":\"KLYVEoB4eId/h0iHZ3pQFPY=\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/2024 Yaz Tatili/PANO_20240705_181500.jpg\",\"exif\":{\"Make\":\"samsung\",\"Model\":\"SM-G991B\",\"LensModel\":\"Samsung Galaxy S21 back camera 5.4mm f/1.8\",\"DateTimeOriginal\":1720203300000,\"latitude\":36.8721,\"longitude\":30.638},\"gps\":{\"lat\":36.8721,\"lon\":30.638},\"place\":{\"city\":\"Konyaaltı\",\"admin1\":\"Antalya\",\"cc\":\"TR\",\"key\":\"TR-07\"},\"camera\":{\"make\":\"Samsung\",\"model\":\"SM-G991B\",\"lens\":\"Samsung Galaxy S21 back camera 5.4mm f/1.8\"},\"tzOffset\":180}"
+}

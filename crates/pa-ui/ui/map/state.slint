@@ -1,0 +1,117 @@
+// Map state (src/map.rs): the slippy map is drawn from these models; Rust owns the view,
+// the tiles (proxy + LRU + fade), the clusters and the gestures.
+
+// one tile slot (a slot keeps its tile while it stays in view: the fade-in runs once)
+export struct MapTile {
+    x: length,
+    y: length,
+    size: length,
+    image: image,
+    // drawn from an ancestor tile (zooming): the part of it to show, in image px
+    clip-x: int,
+    clip-y: int,
+    clip-w: int,
+    clip-h: int,
+    loaded: bool,
+    visible: bool,
+    // under the real tiles (ancestor fallbacks)
+    back: bool,
+}
+
+// a photo marker / cluster (`.peek-marker`): cover + count badge; x / y = the point (tail tip)
+export struct MapMarker {
+    x: length,
+    y: length,
+    cover: image,
+    count: int,
+    label: string,
+    hovered: bool,
+    visible: bool,
+}
+
+// a thumbnail of the side panel's justified grid
+export struct MapPanelTile {
+    index: int,
+    x: length,
+    y: length,
+    w: length,
+    h: length,
+    image: image,
+    video: bool,
+    badge: string,
+    visible: bool,
+}
+
+export global MapState {
+    in property <[MapTile]> tiles;
+    // ancestor tiles standing in while zooming (drawn under `tiles`)
+    in property <[MapTile]> back-tiles;
+    in property <[MapMarker]> markers;
+    in property <bool> tiles-on: true;
+    // osm / topo in dark themes (the darkened tiles are decoded that way in Rust)
+    in property <string> style;
+    in property <string> style-label;
+    in property <string> attribution;
+    in property <string> title;
+    in property <string> in-view;
+    in property <bool> loading;
+    in property <bool> empty;
+    in property <string> no-location;
+    in property <bool> place-mode;
+    // tile banner: "" | "offline" | "refused" | "unknown" | "off"
+    in property <string> problem;
+    in property <string> problem-text;
+    // focused item ("Show on map"): the ring
+    in property <bool> focus-on;
+    in property <length> focus-x;
+    in property <length> focus-y;
+    in property <bool> fullscreen;
+    in property <bool> grabbing;
+    // side panel ("photos in this area")
+    in-out property <bool> panel-open: true;
+    in property <bool> has-points;
+    in property <string> panel-count;
+    in property <[MapPanelTile]> panel-tiles;
+    in property <length> panel-height;
+    in property <bool> panel-loading;
+    in-out property <length> panel-scroll;
+
+    callback viewport(length, length);
+    callback press(length, length);
+    callback drag(length, length);
+    callback release(length, length);
+    callback hover(length, length);
+    callback leave();
+    callback wheel(length, length, length, length);
+    callback dbl(length, length);
+    callback pinch-start();
+    callback pinch(float, length, length);
+    callback pinch-end();
+    callback fit();
+    callback zoom-by(int);
+    callback cycle-style();
+    callback retry();
+    callback nogps();
+    callback toggle-fullscreen();
+    callback panel-viewport(length, length, length);
+    callback panel-open-item(int);
+    callback key(string);
+}
+
+// the viewer's mini map (MiniMap.tsx): 3×3 tiles around the point, pin in the middle
+export struct MiniTile {
+    x: length,
+    y: length,
+    image: image,
+}
+
+export global MiniMapState {
+    in property <bool> on;
+    in property <[MiniTile]> tiles;
+    // the point's offset inside the 768 px block (256 + px, 256 + py)
+    in property <length> ox: 384px;
+    in property <length> oy: 384px;
+    in property <bool> failed;
+    in property <string> attribution;
+    callback open();
+}

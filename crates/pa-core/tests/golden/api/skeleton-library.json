@@ -1,0 +1,248 @@
+{
+ "type": "BrowseSkeleton",
+ "method": "GET",
+ "url": "/api/browse/skeleton?libraryId=1&recursive=true",
+ "response": {
+  "gen": "mw5g6aqw.13.97.98",
+  "total": 97,
+  "kindCounts": {
+   "image": 92,
+   "video": 4,
+   "audio": 1
+  },
+  "aspects": "gKNQnFCjnICRsLCRkZiYgJiYo4Cjo4BcZ26RZ7CwZ5Gjo6OYZ6NckZGRsJiwkZGRmLCYZ8ORmICYgFyAXKNno5ijmLCwo5hnmGeAkZGYgICAZ5iYkZGYsJGRgKqRgJhcXA==",
+  "days": [
+   {
+    "key": "2026-11-06",
+    "count": 15,
+    "place": null
+   },
+   {
+    "key": "2026-06-17",
+    "count": 1,
+    "place": "Kadıköy"
+   },
+   {
+    "key": "2026-03-26",
+    "count": 1,
+    "place": "Beşiktaş"
+   },
+   {
+    "key": "2026-01-01",
+    "count": 1,
+    "place": "Üsküdar"
+   },
+   {
+    "key": "2025-12-31",
+    "count": 1,
+    "place": "Beşiktaş"
+   },
+   {
+    "key": "2025-11-07",
+    "count": 1,
+    "place": "Beşiktaş"
+   },
+   {
+    "key": "2025-11-06",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2025-11-05",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2025-11-04",
+    "count": 1,
+    "place": "Üsküdar"
+   },
+   {
+    "key": "2025-10-09",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2025-07-18",
+    "count": 1,
+    "place": "Üsküdar"
+   },
+   {
+    "key": "2025-06-01",
+    "count": 1,
+    "place": "Kadıköy"
+   },
+   {
+    "key": "2025-04-26",
+    "count": 1,
+    "place": "Üsküdar"
+   },
+   {
+    "key": "2025-04-19",
+    "count": 6,
+    "place": "Berlin"
+   },
+   {
+    "key": "2025-04-18",
+    "count": 6,
+    "place": "Kreuzberg"
+   },
+   {
+    "key": "2025-02-08",
+    "count": 3,
+    "place": "Çankaya"
+   },
+   {
+    "key": "2025-02-01",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2024-11-10",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2024-11-07",
+    "count": 1,
+    "place": "Üsküdar"
+   },
+   {
+    "key": "2024-11-06",
+    "count": 1,
+    "place": "Beyoğlu"
+   },
+   {
+    "key": "2024-11-05",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2024-11-04",
+    "count": 1,
+    "place": "Üsküdar"
+   },
+   {
+    "key": "2024-08-19",
+    "count": 1,
+    "place": "Beşiktaş"
+   },
+   {
+    "key": "2024-07-06",
+    "count": 2,
+    "place": "Muratpaşa"
+   },
+   {
+    "key": "2024-07-05",
+    "count": 5,
+    "place": "Kemer"
+   },
+   {
+    "key": "2024-07-04",
+    "count": 6,
+    "place": "Muratpaşa"
+   },
+   {
+    "key": "2024-07-03",
+    "count": 5,
+    "place": "Muratpaşa"
+   },
+   {
+    "key": "2024-07-02",
+    "count": 4,
+    "place": "Muratpaşa"
+   },
+   {
+    "key": "2024-05-27",
+    "count": 1,
+    "place": "Beşiktaş"
+   },
+   {
+    "key": "2024-03-05",
+    "count": 1,
+    "place": "Üsküdar"
+   },
+   {
+    "key": "2023-12-13",
+    "count": 1,
+    "place": "Şişli"
+   },
+   {
+    "key": "2023-11-07",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2023-11-06",
+    "count": 1,
+    "place": "Şişli"
+   },
+   {
+    "key": "2023-11-05",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2023-11-04",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2023-09-20",
+    "count": 1,
+    "place": "Üsküdar"
+   },
+   {
+    "key": "2023-09-17",
+    "count": 3,
+    "place": "Ürgüp"
+   },
+   {
+    "key": "2023-09-16",
+    "count": 3,
+    "place": "Ürgüp"
+   },
+   {
+    "key": "2023-09-15",
+    "count": 3,
+    "place": "Ürgüp"
+   },
+   {
+    "key": "2023-06-29",
+    "count": 1,
+    "place": "Beşiktaş"
+   },
+   {
+    "key": "2023-06-02",
+    "count": 1,
+    "place": null
+   },
+   {
+    "key": "2023-06-01",
+    "count": 1,
+    "place": null
+   },
+   {
+    "key": "2023-05-30",
+    "count": 2,
+    "place": "Fatih"
+   },
+   {
+    "key": "2023-05-29",
+    "count": 1,
+    "place": null
+   },
+   {
+    "key": "2023-04-07",
+    "count": 1,
+    "place": "Fatih"
+   },
+   {
+    "key": "2023-01-14",
+    "count": 2,
+    "place": "Fatih"
+   }
+  ]
+ },
+ "raw": "{\"gen\":\"mw5g6aqw.13.97.98\",\"total\":97,\"kindCounts\":{\"image\":92,\"video\":4,\"audio\":1},\"aspects\":\"gKNQnFCjnICRsLCRkZiYgJiYo4Cjo4BcZ26RZ7CwZ5Gjo6OYZ6NckZGRsJiwkZGRmLCYZ8ORmICYgFyAXKNno5ijmLCwo5hnmGeAkZGYgICAZ5iYkZGYsJGRgKqRgJhcXA==\",\"days\":[{\"key\":\"2026-11-06\",\"count\":15,\"place\":null},{\"key\":\"2026-06-17\",\"count\":1,\"place\":\"Kadıköy\"},{\"key\":\"2026-03-26\",\"count\":1,\"place\":\"Beşiktaş\"},{\"key\":\"2026-01-01\",\"count\":1,\"place\":\"Üsküdar\"},{\"key\":\"2025-12-31\",\"count\":1,\"place\":\"Beşiktaş\"},{\"key\":\"2025-11-07\",\"count\":1,\"place\":\"Beşiktaş\"},{\"key\":\"2025-11-06\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2025-11-05\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2025-11-04\",\"count\":1,\"place\":\"Üsküdar\"},{\"key\":\"2025-10-09\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2025-07-18\",\"count\":1,\"place\":\"Üsküdar\"},{\"key\":\"2025-06-01\",\"count\":1,\"place\":\"Kadıköy\"},{\"key\":\"2025-04-26\",\"count\":1,\"place\":\"Üsküdar\"},{\"key\":\"2025-04-19\",\"count\":6,\"place\":\"Berlin\"},{\"key\":\"2025-04-18\",\"count\":6,\"place\":\"Kreuzberg\"},{\"key\":\"2025-02-08\",\"count\":3,\"place\":\"Çankaya\"},{\"key\":\"2025-02-01\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2024-11-10\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2024-11-07\",\"count\":1,\"place\":\"Üsküdar\"},{\"key\":\"2024-11-06\",\"count\":1,\"place\":\"Beyoğlu\"},{\"key\":\"2024-11-05\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2024-11-04\",\"count\":1,\"place\":\"Üsküdar\"},{\"key\":\"2024-08-19\",\"count\":1,\"place\":\"Beşiktaş\"},{\"key\":\"2024-07-06\",\"count\":2,\"place\":\"Muratpaşa\"},{\"key\":\"2024-07-05\",\"count\":5,\"place\":\"Kemer\"},{\"key\":\"2024-07-04\",\"count\":6,\"place\":\"Muratpaşa\"},{\"key\":\"2024-07-03\",\"count\":5,\"place\":\"Muratpaşa\"},{\"key\":\"2024-07-02\",\"count\":4,\"place\":\"Muratpaşa\"},{\"key\":\"2024-05-27\",\"count\":1,\"place\":\"Beşiktaş\"},{\"key\":\"2024-03-05\",\"count\":1,\"place\":\"Üsküdar\"},{\"key\":\"2023-12-13\",\"count\":1,\"place\":\"Şişli\"},{\"key\":\"2023-11-07\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2023-11-06\",\"count\":1,\"place\":\"Şişli\"},{\"key\":\"2023-11-05\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2023-11-04\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2023-09-20\",\"count\":1,\"place\":\"Üsküdar\"},{\"key\":\"2023-09-17\",\"count\":3,\"place\":\"Ürgüp\"},{\"key\":\"2023-09-16\",\"count\":3,\"place\":\"Ürgüp\"},{\"key\":\"2023-09-15\",\"count\":3,\"place\":\"Ürgüp\"},{\"key\":\"2023-06-29\",\"count\":1,\"place\":\"Beşiktaş\"},{\"key\":\"2023-06-02\",\"count\":1,\"place\":null},{\"key\":\"2023-06-01\",\"count\":1,\"place\":null},{\"key\":\"2023-05-30\",\"count\":2,\"place\":\"Fatih\"},{\"key\":\"2023-05-29\",\"count\":1,\"place\":null},{\"key\":\"2023-04-07\",\"count\":1,\"place\":\"Fatih\"},{\"key\":\"2023-01-14\",\"count\":2,\"place\":\"Fatih\"}]}"
+}

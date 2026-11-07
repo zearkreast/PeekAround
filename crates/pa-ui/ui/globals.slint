@@ -1,0 +1,95 @@
+// App state shared between Rust and the .slint pages (Rust owns the logic, see src/app.rs).
+
+import { ToastData } from "components/overlays.slint";
+import { TileData, HeaderData } from "pages/grid.slint";
+
+// album = one album, lib = a library page, folder = a folder page (Shell.route-* hold the ids)
+// explore-result = an Explore result grid, explore-places, explore-dups, explore-map
+export enum Page { photos, explore, favorites, albums, library, settings, search, album, lib, folder, explore-result, explore-places, explore-dups, explore-map }
+export enum Conn { connecting, online, offline }
+
+export global Shell {
+    in-out property <Page> page: Page.photos;
+    // bumps on every navigation (page transitions replay even for the same page, e.g. a new search)
+    in-out property <int> nav-serial;
+    in property <Conn> conn: Conn.connecting;
+    in property <bool> scanning;
+    in property <float> scan-progress;
+    in property <string> scan-text;
+    in property <string> server-label;
+    in property <bool> readonly;
+    in-out property <string> search-text;
+    in-out property <string> settings-section: "appearance";
+    // desktop top bar: the page title shows once the page's own big title scrolled away
+    in-out property <bool> title-revealed;
+    in property <[ToastData]> toasts;
+    callback navigate(Page);
+    // new album dialog (hub, albums page)
+    callback new-album();
+    // "help" | "fullscreen" | "zoom-in" | "zoom-out" | "zoom-reset"
+    callback shortcut(string);
+    callback back();
+    callback search(string);
+    callback dismiss-toast(int);
+    callback toast-action(int);
+}
+
+export global GridState {
+    in property <[TileData]> tiles;
+    in property <[HeaderData]> headers;
+    in property <length> grid-height;
+    in-out property <length> scroll-y;
+    in property <bool> loading: true;
+    in property <string> error;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <int> total;
+    // view options (TopBar ViewOptions): density 0..3, justified / square, row height
+    in-out property <int> density: 1;
+    in-out property <bool> square;
+    in-out property <float> row-height: 220;
+    callback viewport-changed(length, length, length);
+    callback open(int);
+    callback view-changed();
+    callback retry();
+}
+
+// Settings → Appearance / Gallery values (persisted by Rust in ui-prefs.json)
+export global PrefsState {
+    in-out property <string> lang: "tr";
+    in-out property <string> theme: "dark";
+    in-out property <color> accent: #8b5cf6;
+    in-out property <string> motion: "full";
+    in-out property <bool> wide-sidebar;
+    in-out property <string> date-format: "locale";
+    in-out property <string> hour-cycle: "auto";
+    in-out property <string> week-start: "mon";
+    in-out property <string> sort: "takenAt";
+    in-out property <string> order: "desc";
+    // view filter: all / image / video / favorites
+    in-out property <string> kind: "all";
+    // tile decorations (Settings → Gallery: tileNames / tileDuration / tileFavorites)
+    in-out property <bool> tile-names;
+    in-out property <bool> tile-duration: true;
+    in-out property <bool> tile-favorites: true;
+    in property <[color]> accents: [#8b5cf6, #ec4899, #f97316, #10b981, #06b6d4, #3b82f6, #eab308, #ef4444];
+    // a preview string of the date format setting ("Example: 5 Tem 2024 14:30")
+    in property <string> date-preview;
+    in property <string> time-preview;
+    callback set(/* key */ string, /* value */ string);
+    callback set-accent(color);
+}
+
+// what the top bar offers on the current page (TopBar.tsx useChrome)
+export global Chrome {
+    // the page honours the sort / the type filter of the view options
+    in property <bool> view-sort: true;
+    in property <bool> view-kind: true;
+    // "Add" (upload / new folder) to the open folder
+    in property <bool> can-add;
+    // folder pages: breadcrumb in the bar (parents; the title is the last part)
+    in property <[string]> crumbs;
+    callback open-crumb(int);
+    // "upload" | "upload-folder" | "new-folder"
+    callback add(string);
+}

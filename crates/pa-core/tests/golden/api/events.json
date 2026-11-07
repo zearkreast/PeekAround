@@ -1,0 +1,255 @@
+{
+ "type": "ServerEvent[]",
+ "response": [
+  {
+   "type": "hello",
+   "info": {
+    "name": "PeekAround",
+    "version": "1.3.0",
+    "apiVersion": 1,
+    "mode": "server",
+    "hostname": "vm",
+    "scanning": false,
+    "caps": {
+     "upload": true,
+     "fileOps": true,
+     "nativeFolders": false,
+     "browseHost": true,
+     "videoJobs": true,
+     "slideshowExport": true,
+     "zipDownload": true,
+     "trash": "folder",
+     "readonly": false,
+     "lanShare": false
+    },
+    "lan": {
+     "enabled": true,
+     "urls": [
+      "http://192.0.2.2:18901"
+     ]
+    }
+   }
+  },
+  {
+   "type": "albums",
+   "ids": [
+    "3"
+   ]
+  },
+  {
+   "type": "albums",
+   "ids": [
+    "3"
+   ]
+  },
+  {
+   "type": "scan",
+   "scanning": true,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "folders"
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "job",
+   "job": {
+    "id": "7d3218dc-5681-4a9b-b055-53e21721cc70",
+    "type": "video-edit",
+    "title": "eski_kayit_edit.mp4",
+    "status": "queued",
+    "progress": 0,
+    "error": null,
+    "result": null,
+    "createdAt": 1793998185572
+   }
+  },
+  {
+   "type": "job",
+   "job": {
+    "id": "7d3218dc-5681-4a9b-b055-53e21721cc70",
+    "type": "video-edit",
+    "title": "eski_kayit_edit.mp4",
+    "status": "running",
+    "progress": 0,
+    "error": null,
+    "result": null,
+    "createdAt": 1793998185572
+   }
+  },
+  {
+   "type": "scan",
+   "scanning": true,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "folders"
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "scan",
+   "scanning": true,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "folders"
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "job",
+   "job": {
+    "id": "7d3218dc-5681-4a9b-b055-53e21721cc70",
+    "type": "video-edit",
+    "title": "eski_kayit_edit.mp4",
+    "status": "running",
+    "progress": 0,
+    "error": null,
+    "result": null,
+    "createdAt": 1793998185572
+   }
+  },
+  {
+   "type": "media",
+   "folderId": "1",
+   "dirs": [
+    "Videolar"
+   ],
+   "reason": "change"
+  },
+  {
+   "type": "scan",
+   "scanning": true,
+   "done": 0,
+   "total": 2
+  },
+  {
+   "type": "job",
+   "job": {
+    "id": "7d3218dc-5681-4a9b-b055-53e21721cc70",
+    "type": "video-edit",
+    "title": "eski_kayit_edit.mp4",
+    "status": "done",
+    "progress": 1,
+    "error": null,
+    "result": {
+     "folderId": "1",
+     "dir": "Videolar",
+     "name": "eski_kayit_edit_edit.gif"
+    },
+    "createdAt": 1793998185572
+   }
+  },
+  {
+   "type": "scan",
+   "scanning": true,
+   "done": 1,
+   "total": 2
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 2,
+   "total": 2
+  },
+  {
+   "type": "media",
+   "folderId": "1",
+   "dirs": [
+    "Videolar"
+   ],
+   "reason": "add"
+  },
+  {
+   "type": "media",
+   "folderId": "1",
+   "dirs": [
+    "Videolar"
+   ],
+   "reason": "meta"
+  },
+  {
+   "type": "media",
+   "folderId": "1",
+   "dirs": [
+    "Videolar"
+   ],
+   "reason": "thumb"
+  },
+  {
+   "type": "explore"
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  },
+  {
+   "type": "scan",
+   "scanning": false,
+   "done": 0,
+   "total": 0
+  }
+ ],
+ "raw": "[{\"type\":\"hello\",\"info\":{\"name\":\"PeekAround\",\"version\":\"1.3.0\",\"apiVersion\":1,\"mode\":\"server\",\"hostname\":\"vm\",\"scanning\":false,\"caps\":{\"upload\":true,\"fileOps\":true,\"nativeFolders\":false,\"browseHost\":true,\"videoJobs\":true,\"slideshowExport\":true,\"zipDownload\":true,\"trash\":\"folder\",\"readonly\":false,\"lanShare\":false},\"lan\":{\"enabled\":true,\"urls\":[\"http://192.0.2.2:18901\"]}}},{\"type\":\"albums\",\"ids\":[\"3\"]},{\"type\":\"albums\",\"ids\":[\"3\"]},{\"type\":\"scan\",\"scanning\":true,\"done\":0,\"total\":0},{\"type\":\"folders\"},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"job\",\"job\":{\"id\":\"7d3218dc-5681-4a9b-b055-53e21721cc70\",\"type\":\"video-edit\",\"title\":\"eski_kayit_edit.mp4\",\"status\":\"queued\",\"progress\":0,\"error\":null,\"result\":null,\"createdAt\":1793998185572}},{\"type\":\"job\",\"job\":{\"id\":\"7d3218dc-5681-4a9b-b055-53e21721cc70\",\"type\":\"video-edit\",\"title\":\"eski_kayit_edit.mp4\",\"status\":\"running\",\"progress\":0,\"error\":null,\"result\":null,\"createdAt\":1793998185572}},{\"type\":\"scan\",\"scanning\":true,\"done\":0,\"total\":0},{\"type\":\"folders\"},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"scan\",\"scanning\":true,\"done\":0,\"total\":0},{\"type\":\"folders\"},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"job\",\"job\":{\"id\":\"7d3218dc-5681-4a9b-b055-53e21721cc70\",\"type\":\"video-edit\",\"title\":\"eski_kayit_edit.mp4\",\"status\":\"running\",\"progress\":0,\"error\":null,\"result\":null,\"createdAt\":1793998185572}},{\"type\":\"media\",\"folderId\":\"1\",\"dirs\":[\"Videolar\"],\"reason\":\"change\"},{\"type\":\"scan\",\"scanning\":true,\"done\":0,\"total\":2},{\"type\":\"job\",\"job\":{\"id\":\"7d3218dc-5681-4a9b-b055-53e21721cc70\",\"type\":\"video-edit\",\"title\":\"eski_kayit_edit.mp4\",\"status\":\"done\",\"progress\":1,\"error\":null,\"result\":{\"folderId\":\"1\",\"dir\":\"Videolar\",\"name\":\"eski_kayit_edit_edit.gif\"},\"createdAt\":1793998185572}},{\"type\":\"scan\",\"scanning\":true,\"done\":1,\"total\":2},{\"type\":\"scan\",\"scanning\":false,\"done\":2,\"total\":2},{\"type\":\"media\",\"folderId\":\"1\",\"dirs\":[\"Videolar\"],\"reason\":\"add\"},{\"type\":\"media\",\"folderId\":\"1\",\"dirs\":[\"Videolar\"],\"reason\":\"meta\"},{\"type\":\"media\",\"folderId\":\"1\",\"dirs\":[\"Videolar\"],\"reason\":\"thumb\"},{\"type\":\"explore\"},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0},{\"type\":\"scan\",\"scanning\":false,\"done\":0,\"total\":0}]"
+}

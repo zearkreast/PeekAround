@@ -1,0 +1,28 @@
+{
+ "type": "Job",
+ "method": "POST",
+ "url": "/api/jobs/video-edit",
+ "body": {
+  "sourceId": "96",
+  "trim": {
+   "start": 0,
+   "end": 1
+  },
+  "output": {
+   "format": "mp4",
+   "height": 120,
+   "quality": "low"
+  }
+ },
+ "response": {
+  "id": "0542531f-ddd9-4a40-8d54-025e6b345502",
+  "type": "video-edit",
+  "title": "eski_kayit.mkv",
+  "status": "running",
+  "progress": 0,
+  "error": null,
+  "result": null,
+  "createdAt": 1793998163818
+ },
+ "raw": "{\"id\":\"0542531f-ddd9-4a40-8d54-025e6b345502\",\"type\":\"video-edit\",\"title\":\"eski_kayit.mkv\",\"status\":\"running\",\"progress\":0,\"error\":null,\"result\":null,\"createdAt\":1793998163818}"
+}

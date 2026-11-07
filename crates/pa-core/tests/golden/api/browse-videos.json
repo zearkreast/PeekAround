@@ -1,0 +1,142 @@
+{
+ "type": "BrowseResult",
+ "method": "GET",
+ "url": "/api/browse?libraryId=1&recursive=true&kind=video",
+ "response": {
+  "crumbs": [
+   {
+    "label": "Test",
+    "libraryId": "1"
+   }
+  ],
+  "folders": [
+   {
+    "name": "Ekran Görüntüleri",
+    "dir": "Ekran Görüntüleri",
+    "mediaCount": 5,
+    "coverIds": [
+     "1",
+     "2",
+     "3"
+    ],
+    "latest": 1793998143112
+   },
+   {
+    "name": "Fotoğraflar",
+    "dir": "Fotoğraflar",
+    "mediaCount": 87,
+    "coverIds": [
+     "86",
+     "87",
+     "92"
+    ],
+    "latest": 1793998143111
+   },
+   {
+    "name": "Müzik",
+    "dir": "Müzik",
+    "mediaCount": 0,
+    "coverIds": [],
+    "latest": null
+   },
+   {
+    "name": "Videolar",
+    "dir": "Videolar",
+    "mediaCount": 4,
+    "coverIds": [
+     "96",
+     "98",
+     "95"
+    ],
+    "latest": 1793998143127
+   }
+  ],
+  "roots": [],
+  "items": [
+   {
+    "id": "96",
+    "folderId": "1",
+    "dir": "Videolar",
+    "name": "eski_kayit.mkv",
+    "ext": "mkv",
+    "kind": "video",
+    "size": 9004184,
+    "mtime": 1793998143127,
+    "width": 640,
+    "height": 360,
+    "duration": 10.023,
+    "takenAt": 1793998143127,
+    "localAt": 1793998143127,
+    "flags": 0,
+    "thumbhash": "ihcCBID9a57tY2qGyDkDFtq/fA==",
+    "favorite": false,
+    "playback": "transcode"
+   },
+   {
+    "id": "98",
+    "folderId": "1",
+    "dir": "Videolar",
+    "name": "yılbaşı.mp4",
+    "ext": "mp4",
+    "kind": "video",
+    "size": 28558,
+    "mtime": 1793998143127,
+    "width": 640,
+    "height": 360,
+    "duration": 4,
+    "takenAt": 1767216600000,
+    "localAt": 1767216600000,
+    "flags": 0,
+    "thumbhash": "3+cNNIRzgHF3Z3doiIigOHifrg==",
+    "favorite": false,
+    "playback": "direct"
+   },
+   {
+    "id": "95",
+    "folderId": "1",
+    "dir": "Videolar",
+    "name": "dikey_klip.mp4",
+    "ext": "mp4",
+    "kind": "video",
+    "size": 6940824,
+    "mtime": 1793998143123,
+    "width": 720,
+    "height": 1280,
+    "duration": 8,
+    "takenAt": 1720094400000,
+    "localAt": 1720094400000,
+    "flags": 0,
+    "thumbhash": "IPgRRBKMp3f4d2eId3eTldC49g==",
+    "favorite": false,
+    "playback": "direct"
+   },
+   {
+    "id": "97",
+    "folderId": "1",
+    "dir": "Videolar",
+    "name": "gün batımı.mp4",
+    "ext": "mp4",
+    "kind": "video",
+    "size": 4638276,
+    "mtime": 1793998143115,
+    "width": 1280,
+    "height": 720,
+    "duration": 12,
+    "takenAt": 1720029600000,
+    "localAt": 1720029600000,
+    "flags": 0,
+    "thumbhash": "H/gJtIxwhI14eId3d4iPh/iIhw==",
+    "favorite": false,
+    "playback": "direct"
+   }
+  ],
+  "total": 4,
+  "archives": [],
+  "target": {
+   "folderId": "1",
+   "dir": ""
+  },
+  "gen": "mw5g6aqw.13.4.98"
+ },
+ "raw": "{\"crumbs\":[{\"label\":\"Test\",\"libraryId\":\"1\"}],\"folders\":[{\"name\":\"Ekran Görüntüleri\",\"dir\":\"Ekran Görüntüleri\",\"mediaCount\":5,\"coverIds\":[\"1\",\"2\",\"3\"],\"latest\":1793998143112},{\"name\":\"Fotoğraflar\",\"dir\":\"Fotoğraflar\",\"mediaCount\":87,\"coverIds\":[\"86\",\"87\",\"92\"],\"latest\":1793998143111},{\"name\":\"Müzik\",\"dir\":\"Müzik\",\"mediaCount\":0,\"coverIds\":[],\"latest\":null},{\"name\":\"Videolar\",\"dir\":\"Videolar\",\"mediaCount\":4,\"coverIds\":[\"96\",\"98\",\"95\"],\"latest\":1793998143127}],\"roots\":[],\"items\":[{\"id\":\"96\",\"folderId\":\"1\",\"dir\":\"Videolar\",\"name\":\"eski_kayit.mkv\",\"ext\":\"mkv\",\"kind\":\"video\",\"size\":9004184,\"mtime\":1793998143127,\"width\":640,\"height\":360,\"duration\":10.023,\"takenAt\":1793998143127,\"localAt\":1793998143127,\"flags\":0,\"thumbhash\":\"ihcCBID9a57tY2qGyDkDFtq/fA==\",\"favorite\":false,\"playback\":\"transcode\"},{\"id\":\"98\",\"folderId\":\"1\",\"dir\":\"Videolar\",\"name\":\"yılbaşı.mp4\",\"ext\":\"mp4\",\"kind\":\"video\",\"size\":28558,\"mtime\":1793998143127,\"width\":640,\"height\":360,\"duration\":4,\"takenAt\":1767216600000,\"localAt\":1767216600000,\"flags\":0,\"thumbhash\":\"3+cNNIRzgHF3Z3doiIigOHifrg==\",\"favorite\":false,\"playback\":\"direct\"},{\"id\":\"95\",\"folderId\":\"1\",\"dir\":\"Videolar\",\"name\":\"dikey_klip.mp4\",\"ext\":\"mp4\",\"kind\":\"video\",\"size\":6940824,\"mtime\":1793998143123,\"width\":720,\"height\":1280,\"duration\":8,\"takenAt\":1720094400000,\"localAt\":1720094400000,\"flags\":0,\"thumbhash\":\"IPgRRBKMp3f4d2eId3eTldC49g==\",\"favorite\":false,\"playback\":\"direct\"},{\"id\":\"97\",\"folderId\":\"1\",\"dir\":\"Videolar\",\"name\":\"gün batımı.mp4\",\"ext\":\"mp4\",\"kind\":\"video\",\"size\":4638276,\"mtime\":1793998143115,\"width\":1280,\"height\":720,\"duration\":12,\"takenAt\":1720029600000,\"localAt\":1720029600000,\"flags\":0,\"thumbhash\":\"H/gJtIxwhI14eId3d4iPh/iIhw==\",\"favorite\":false,\"playback\":\"direct\"}],\"total\":4,\"archives\":[],\"target\":{\"folderId\":\"1\",\"dir\":\"\"},\"gen\":\"mw5g6aqw.13.4.98\"}"
+}

@@ -1,0 +1,37 @@
+{
+  "tr": {
+    "native.soon.title": "Yakında burada",
+    "native.soon.body": "Bu bölüm yeni yerel arayüze taşınıyor. Şimdilik Fotoğraflar, Favoriler, arama ve Görünüm ayarları hazır.",
+    "native.slideshowSoon": "Slayt gösterisi yeni arayüze birazdan geliyor",
+    "native.viewerSoon": "Görüntüleyici yeni arayüze birazdan geliyor",
+    "native.connected": "{name} sunucusuna bağlandı",
+    "native.noAudioDevice": "Ses çıkışı yok — sessiz oynatılıyor",
+    "native.copyPath": "Yolu kopyala",
+    "native.pathCopied": "Yol kopyalandı",
+    "native.savedTo": "“{name}” kaydedildi",
+    "native.videoUnavailable": "Bu öğe oynatılamıyor",
+    "native.upload": "Yükle",
+    "settings.lanShareHint": "Aynı ağdaki telefon ve tabletlerde PeekAround uygulaması bu bilgisayara bağlanabilir. Tarayıcıdan erişim yalnızca Docker sunucusunda var.",
+    "native.lanScanApp": "Telefondaki PeekAround uygulamasıyla okut",
+    "native.addressCopied": "Adres kopyalandı",
+    "viewer.path": "Dosya yolu",
+    "native.pairTitle": "{name} bağlanmak istiyor"
+  },
+  "en": {
+    "native.soon.title": "Coming soon",
+    "native.soon.body": "This section is being moved to the new native UI. Photos, Favorites, search and the Appearance settings are ready.",
+    "native.slideshowSoon": "The slideshow is coming to the new UI soon",
+    "native.viewerSoon": "The viewer is coming to the new UI soon",
+    "native.connected": "Connected to {name}",
+    "native.noAudioDevice": "No audio output — playing silently",
+    "native.copyPath": "Copy path",
+    "native.pathCopied": "Path copied",
+    "native.savedTo": "Saved “{name}”",
+    "native.videoUnavailable": "This item can’t be played",
+    "native.upload": "Upload",
+    "settings.lanShareHint": "The PeekAround app on phones and tablets on the same network can connect to this computer. Browser access is only available with the Docker server.",
+    "native.lanScanApp": "Scan it in the PeekAround app on your phone",
+    "native.addressCopied": "Address copied",
+    "native.pairTitle": "{name} wants to connect"
+  }
+}

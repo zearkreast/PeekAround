@@ -1,0 +1,17 @@
+{
+ "type": "BrowseSkeleton",
+ "method": "GET",
+ "url": "/api/browse/skeleton?libraryId=1&recursive=true&sort=name",
+ "response": {
+  "gen": "mw5g6aqw.13.97.98",
+  "total": 97,
+  "kindCounts": {
+   "image": 92,
+   "video": 4,
+   "audio": 1
+  },
+  "aspects": "kYCYkYCYo4BQnLBnkaNnsKOjmGejXKrDUJiwmGeRmICAXICjZ5ijmLCwo5huo6OwsJGRo4CAZ5iYkZGYsFyRnICRkZGYmGeYZ4CRmICYmFxnkbBcXICjo4CwkZGRgJGRmA==",
+  "days": null
+ },
+ "raw": "{\"gen\":\"mw5g6aqw.13.97.98\",\"total\":97,\"kindCounts\":{\"image\":92,\"video\":4,\"audio\":1},\"aspects\":\"kYCYkYCYo4BQnLBnkaNnsKOjmGejXKrDUJiwmGeRmICAXICjZ5ijmLCwo5huo6OwsJGRo4CAZ5iYkZGYsFyRnICRkZGYmGeYZ4CRmICYmFxnkbBcXICjo4CwkZGRgJGRmA==\",\"days\":null}"
+}

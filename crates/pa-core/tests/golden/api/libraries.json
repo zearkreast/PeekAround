@@ -1,0 +1,40 @@
+{
+ "type": "LibrariesResponse",
+ "method": "GET",
+ "url": "/api/libraries",
+ "response": {
+  "libraries": [
+   {
+    "id": "1",
+    "name": "Test",
+    "color": "#8b5cf6",
+    "icon": "images",
+    "sort": 0,
+    "folders": [
+     {
+      "id": "1",
+      "path": "/tmp/claude-0/-home-user/0be13da1-d5a1-51d7-96bc-92ae259ef06d/scratchpad/r1/lib",
+      "name": "lib",
+      "libraryId": "1",
+      "temp": false,
+      "expiresAt": null,
+      "sourceName": null,
+      "mediaCount": 97,
+      "device": null,
+      "remote": null
+     }
+    ],
+    "mediaCount": 97,
+    "coverId": null,
+    "options": {
+     "exclude": [],
+     "minBytes": 0,
+     "showHidden": null
+    }
+   }
+  ],
+  "temp": [],
+  "devices": []
+ },
+ "raw": "{\"libraries\":[{\"id\":\"1\",\"name\":\"Test\",\"color\":\"#8b5cf6\",\"icon\":\"images\",\"sort\":0,\"folders\":[{\"id\":\"1\",\"path\":\"/tmp/claude-0/-home-user/0be13da1-d5a1-51d7-96bc-92ae259ef06d/scratchpad/r1/lib\",\"name\":\"lib\",\"libraryId\":\"1\",\"temp\":false,\"expiresAt\":null,\"sourceName\":null,\"mediaCount\":97,\"device\":null,\"remote\":null}],\"mediaCount\":97,\"coverId\":null,\"options\":{\"exclude\":[],\"minBytes\":0,\"showHidden\":null}}],\"temp\":[],\"devices\":[]}"
+}

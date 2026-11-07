@@ -2,6 +2,8 @@ node_modules/
 dist/
 release/
 *.log
+# (a LevelDB write-ahead log: test fixture of the Electron prefs migration)
+!crates/pa-desktop/tests/fixtures/electron-localstorage/leveldb/*.log
 .DS_Store
 /data/
 /fixtures/
@@ -17,6 +19,9 @@ packages/android/android/app/src/main/assets/public/
 
 # local Docker data (compose bind mount)
 docker/peekaround-data/
+
+# Rust build output
+/target/
 
 # local files
 .local-project-files

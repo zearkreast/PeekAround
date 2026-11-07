@@ -1,0 +1,28 @@
+// Pages that are not ported to the native UI yet.
+
+import { Theme, I18n } from "../theme.slint";
+import { EmptyState } from "../components/feedback.slint";
+
+export component PlaceholderPage inherits Rectangle {
+    in property <string> title;
+    in property <image> icon;
+    VerticalLayout {
+        padding-left: 28px;
+        padding-right: 28px;
+        padding-top: 24px;
+        alignment: start;
+        Text {
+            text: root.title;
+            font-family: Theme.font-display;
+            font-size: 34px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            color: Theme.text;
+        }
+        EmptyState {
+            icon: root.icon;
+            title: I18n.t("native.soon.title", I18n.rev);
+            body: I18n.t("native.soon.body", I18n.rev);
+        }
+    }
+}

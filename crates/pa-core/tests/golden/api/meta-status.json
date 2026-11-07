@@ -1,0 +1,25 @@
+{
+ "type": "MetaStatus",
+ "method": "GET",
+ "url": "/api/meta/status",
+ "response": {
+  "libraries": [
+   {
+    "id": "1",
+    "name": "Test",
+    "total": 96,
+    "withLocation": 78,
+    "withoutLocation": 18,
+    "pending": 0,
+    "unreadable": 0,
+    "messaging": 0
+   }
+  ],
+  "enriching": false,
+  "indexing": {
+   "done": 96,
+   "total": 96
+  }
+ },
+ "raw": "{\"libraries\":[{\"id\":\"1\",\"name\":\"Test\",\"total\":96,\"withLocation\":78,\"withoutLocation\":18,\"pending\":0,\"unreadable\":0,\"messaging\":0}],\"enriching\":false,\"indexing\":{\"done\":96,\"total\":96}}"
+}

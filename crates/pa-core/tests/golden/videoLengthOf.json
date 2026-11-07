@@ -1,0 +1,1 @@
+[{"args":[3],"out":"short"},{"args":[60],"out":null},{"args":[600],"out":"long"},{"args":[null],"out":null},{"args":[0],"out":null},{"args":[-1],"out":null},{"args":[15],"out":null},{"args":[14.99],"out":"short"},{"args":[300],"out":null},{"args":[300.01],"out":"long"}]

@@ -1,0 +1,31 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/1",
+ "response": {
+  "id": "1",
+  "folderId": "1",
+  "dir": "Ekran Görüntüleri",
+  "name": "Bildschirmfoto 2025-04-19 um 09.30.00.png",
+  "ext": "png",
+  "kind": "image",
+  "size": 33782,
+  "mtime": 1793998143112,
+  "width": 1440,
+  "height": 900,
+  "duration": null,
+  "takenAt": 1793998143112,
+  "localAt": 1793998143112,
+  "flags": 1,
+  "thumbhash": "dMoBFIINR1Z1h3dweXXygqczBw==",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Ekran Görüntüleri/Bildschirmfoto 2025-04-19 um 09.30.00.png",
+  "exif": null,
+  "gps": null,
+  "place": null,
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"1\",\"folderId\":\"1\",\"dir\":\"Ekran Görüntüleri\",\"name\":\"Bildschirmfoto 2025-04-19 um 09.30.00.png\",\"ext\":\"png\",\"kind\":\"image\",\"size\":33782,\"mtime\":1793998143112,\"width\":1440,\"height\":900,\"duration\":null,\"takenAt\":1793998143112,\"localAt\":1793998143112,\"flags\":1,\"thumbhash\":\"dMoBFIINR1Z1h3dweXXygqczBw==\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Ekran Görüntüleri/Bildschirmfoto 2025-04-19 um 09.30.00.png\",\"exif\":null,\"gps\":null,\"place\":null,\"camera\":null,\"tzOffset\":null}"
+}

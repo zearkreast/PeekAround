@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/95",
+ "response": {
+  "id": "95",
+  "folderId": "1",
+  "dir": "Videolar",
+  "name": "dikey_klip.mp4",
+  "ext": "mp4",
+  "kind": "video",
+  "size": 6940824,
+  "mtime": 1793998143123,
+  "width": 720,
+  "height": 1280,
+  "duration": 8,
+  "takenAt": 1720094400000,
+  "localAt": 1720094400000,
+  "flags": 0,
+  "thumbhash": "IPgRRBKMp3f4d2eId3eTldC49g==",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Videolar/dikey_klip.mp4",
+  "exif": null,
+  "video": {
+   "codec": "h264",
+   "fps": 30,
+   "bitrate": 6940824,
+   "audioCodec": null,
+   "rotation": 0
+  },
+  "gps": {
+   "lat": 41.0082,
+   "lon": 28.9784
+  },
+  "place": {
+   "city": "Fatih",
+   "admin1": "İstanbul",
+   "cc": "TR",
+   "key": "TR-34"
+  },
+  "camera": {
+   "make": "Google",
+   "model": "Pixel 7",
+   "lens": null
+  },
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"95\",\"folderId\":\"1\",\"dir\":\"Videolar\",\"name\":\"dikey_klip.mp4\",\"ext\":\"mp4\",\"kind\":\"video\",\"size\":6940824,\"mtime\":1793998143123,\"width\":720,\"height\":1280,\"duration\":8,\"takenAt\":1720094400000,\"localAt\":1720094400000,\"flags\":0,\"thumbhash\":\"IPgRRBKMp3f4d2eId3eTldC49g==\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Videolar/dikey_klip.mp4\",\"exif\":null,\"video\":{\"codec\":\"h264\",\"fps\":30,\"bitrate\":6940824,\"audioCodec\":null,\"rotation\":0},\"gps\":{\"lat\":41.0082,\"lon\":28.9784},\"place\":{\"city\":\"Fatih\",\"admin1\":\"İstanbul\",\"cc\":\"TR\",\"key\":\"TR-34\"},\"camera\":{\"make\":\"Google\",\"model\":\"Pixel 7\",\"lens\":null},\"tzOffset\":null}"
+}

@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/85",
+ "response": {
+  "id": "85",
+  "folderId": "1",
+  "dir": "Fotoğraflar/Kapadokya 2023",
+  "name": "DSC_3108.jpg",
+  "ext": "jpg",
+  "kind": "image",
+  "size": 31753,
+  "mtime": 1793998143107,
+  "width": 1200,
+  "height": 1200,
+  "duration": null,
+  "takenAt": 1694953800000,
+  "localAt": 1694964600000,
+  "flags": 0,
+  "thumbhash": "YagSRwp4h3h/h3h1iGeIh3d4h/hnqH8F",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/Kapadokya 2023/DSC_3108.jpg",
+  "exif": {
+   "Make": "NIKON CORPORATION",
+   "Model": "NIKON D750",
+   "LensModel": "AF-S NIKKOR 24-120mm f/4G ED VR",
+   "DateTimeOriginal": 1694964600000,
+   "latitude": 38.6557,
+   "longitude": 34.8419
+  },
+  "gps": {
+   "lat": 38.655717,
+   "lon": 34.841881
+  },
+  "place": {
+   "city": "Avanos",
+   "admin1": "Nevşehir",
+   "cc": "TR",
+   "key": "TR-50"
+  },
+  "camera": {
+   "make": "Nikon",
+   "model": "D750",
+   "lens": "AF-S NIKKOR 24-120mm f/4G ED VR"
+  },
+  "tzOffset": 180
+ },
+ "raw": "{\"id\":\"85\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/Kapadokya 2023\",\"name\":\"DSC_3108.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":31753,\"mtime\":1793998143107,\"width\":1200,\"height\":1200,\"duration\":null,\"takenAt\":1694953800000,\"localAt\":1694964600000,\"flags\":0,\"thumbhash\":\"YagSRwp4h3h/h3h1iGeIh3d4h/hnqH8F\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/Kapadokya 2023/DSC_3108.jpg\",\"exif\":{\"Make\":\"NIKON CORPORATION\",\"Model\":\"NIKON D750\",\"LensModel\":\"AF-S NIKKOR 24-120mm f/4G ED VR\",\"DateTimeOriginal\":1694964600000,\"latitude\":38.6557,\"longitude\":34.8419},\"gps\":{\"lat\":38.655717,\"lon\":34.841881},\"place\":{\"city\":\"Avanos\",\"admin1\":\"Nevşehir\",\"cc\":\"TR\",\"key\":\"TR-50\"},\"camera\":{\"make\":\"Nikon\",\"model\":\"D750\",\"lens\":\"AF-S NIKKOR 24-120mm f/4G ED VR\"},\"tzOffset\":180}"
+}

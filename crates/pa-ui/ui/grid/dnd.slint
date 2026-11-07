@@ -1,0 +1,65 @@
+// Drop targets for dragged tiles. Any screen (nav rail albums, album cards, library rows,
+// folder rows) wraps an element in a DropTarget with a key; Rust (src/actions_ui.rs) performs
+// the drop: "album:<id>" adds to the album, "folder:<folderId>:<dir>" moves (Ctrl: copies),
+// "library:<id>" copies into the library's first folder, "new-album" creates one.
+//
+//     DropTarget { key: "album:" + a.id; Rectangle { background: parent.hovered ? … : … } }
+//
+// Hit testing is geometric (the grid keeps the pointer grabbed during the drag): the target
+// compares the drag position with its own absolute position.
+
+import { Theme, Motion } from "../theme.slint";
+import { DragState } from "input.slint";
+
+export component DropTarget inherits Rectangle {
+    in property <string> key;
+    in property <bool> enabled: true;
+    out property <bool> hovered: enabled && DragState.active
+        && DragState.x >= self.absolute-position.x && DragState.x < self.absolute-position.x + self.width
+        && DragState.y >= self.absolute-position.y && DragState.y < self.absolute-position.y + self.height;
+    changed hovered => {
+        if self.hovered { DragState.enter(self.key); } else { DragState.leave(self.key); }
+    }
+    @children
+}
+
+// the ghost under the pointer while tiles are dragged (dragGhost(): 64 px thumbnail + count badge)
+export component DragGhost inherits Rectangle {
+    visible: DragState.active;
+    x: DragState.x - 24px;
+    y: DragState.y - 24px;
+    width: 64px;
+    height: 64px;
+    Rectangle {
+        border-radius: 14px;
+        background: #222;
+        border-width: 2px;
+        border-color: #ffffff;
+        clip: true;
+        drop-shadow-blur: 24px;
+        drop-shadow-offset-y: 8px;
+        drop-shadow-color: #00000073;
+        Image {
+            width: parent.width;
+            height: parent.height;
+            source: DragState.ghost;
+            image-fit: cover;
+        }
+    }
+    if DragState.count > 1: Rectangle {
+        x: parent.width - self.width + 8px;
+        y: -8px;
+        height: 22px;
+        width: Math.max(22px, t.preferred-width + 12px);
+        border-radius: 11px;
+        background: Theme.accent;
+        t := Text {
+            text: DragState.count;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}

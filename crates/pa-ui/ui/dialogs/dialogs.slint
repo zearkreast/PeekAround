@@ -1,0 +1,1234 @@
+// Dialogs of the library / albums / devices / MEGA screens: confirm, text prompt, library
+// editor (LibraryEditor.tsx), exclusions (ExclusionsDialog.tsx), folder picker (FolderPicker.tsx +
+// HostFolderPicker), MEGA link (MegaDialog.tsx), phone pairing (PairingDialog.tsx), send to phone,
+// zip prompt (DropZone.tsx), keyboard shortcuts (Shortcuts.tsx). Rust: src/pages/dialogs.rs.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "../pages/icons.slint";
+import { LibIcons } from "../pages/state.slint";
+import { Dialog } from "../components/overlays.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
+import { TextField, Switch, Checkbox, Segmented, SegOption, ColorSwatches } from "../components/inputs.slint";
+import { Select, SelectOption } from "../components/overlays.slint";
+import { Spinner, Kbd } from "../components/feedback.slint";
+
+export struct PickRowData {
+    key: string,
+    label: string,
+    // "folder" | "lib" | "drive" | "header" (phone name: not clickable)
+    kind: string,
+    color: color,
+    icon: string,
+    disabled: bool,
+    sub: string,
+}
+
+export struct PathRowData {
+    id: string,
+    name: string,
+    path: string,
+    remote: bool,
+    pending: bool,
+}
+
+export struct TreeRowData {
+    id: string,
+    name: string,
+    size: string,
+    depth: int,
+    dir: bool,
+    // "all" | "none" | "some"
+    state: string,
+    expanded: bool,
+    // "image" | "video" | "audio" | "archive" | ""
+    kind: string,
+    dim: bool,
+}
+
+export struct KeyRowData {
+    group: string,
+    label: string,
+    keys: [string],
+}
+
+export global Dlg {
+    // the main dialog: "" | "library" | "exclusions" | "mega" | "pair" | "zip" | "link" | "shortcuts"
+    in-out property <string> open;
+    // over it: "" | "confirm" | "prompt" | "picker"
+    in-out property <string> top;
+    // confirm / prompt
+    in property <string> c-title;
+    in property <string> c-body;
+    in property <string> c-label;
+    in property <bool> c-danger;
+    in property <bool> busy;
+    in-out property <string> prompt-text;
+    in property <string> prompt-placeholder;
+    // library editor
+    in property <bool> lib-new;
+    in-out property <string> lib-name;
+    in-out property <color> lib-color: #8b5cf6;
+    in-out property <string> lib-icon: "images";
+    in property <[PathRowData]> lib-folders;
+    in property <bool> lib-mega;
+    in property <[color]> accents: [#8b5cf6, #ec4899, #f97316, #10b981, #06b6d4, #3b82f6, #eab308, #ef4444];
+    in property <[string]> icons: ["images", "camera", "film", "heart", "mountain", "plane", "palette", "star", "music", "baby", "house", "sun", "flower", "paw", "trophy", "folder", "cloud"];
+    // exclusions
+    in property <string> ex-title;
+    in-out property <string> ex-text;
+    in property <[string]> ex-suggest;
+    in-out property <string> ex-min: "0";
+    in property <[SegOption]> ex-sizes;
+    // -1 = library default, 0 = off, 1 = on
+    in-out property <int> ex-hidden: -1;
+    // folder picker
+    in property <string> pick-title;
+    in property <string> pick-confirm;
+    in property <string> pick-path;
+    in property <bool> pick-can-back;
+    in property <bool> pick-can-new;
+    in property <bool> pick-can-confirm;
+    in property <bool> pick-loading;
+    in property <bool> pick-host;
+    in property <[PickRowData]> pick-rows;
+    in-out property <bool> pick-naming;
+    in-out property <string> pick-new-name;
+    in-out property <string> pick-manual;
+    // MEGA
+    in property <string> mega-title;
+    in property <string> mega-intro;
+    in-out property <string> mega-stage: "input";
+    in-out property <string> mega-url;
+    in property <string> mega-error;
+    in property <bool> mega-retry;
+    in property <string> mega-name;
+    in property <string> mega-summary;
+    in property <bool> mega-truncated;
+    in property <bool> mega-can-stream: true;
+    in-out property <string> mega-how: "stream";
+    in property <string> mega-media;
+    in property <bool> mega-has-libs;
+    in-out property <string> mega-where: "new";
+    in-out property <string> mega-lib-name;
+    in-out property <string> mega-lib;
+    in property <[SelectOption]> mega-libs;
+    in property <bool> mega-folder;
+    in property <string> mega-root-state: "none";
+    in property <[TreeRowData]> mega-tree;
+    in property <bool> mega-more-rows;
+    in-out property <string> mega-mode: "extract";
+    in property <string> mega-target;
+    in property <bool> mega-zip-ask;
+    in property <string> mega-zip-text;
+    in-out property <string> mega-zip: "extract";
+    in property <string> mega-selected;
+    in property <bool> mega-can-import;
+    in property <bool> readonly;
+    // pairing
+    in property <string> pair-name;
+    in property <string> pair-model;
+    in property <[string]> pair-digits;
+    in property <string> pick-empty;
+    // zip prompt
+    in property <string> zip-text;
+    in-out property <bool> zip-remember;
+    // dropped / picked folders: link into a library or copy
+    in property <string> link-text;
+    // keyboard shortcuts
+    in property <[KeyRowData]> shortcuts;
+    callback close();
+    callback close-top();
+    callback confirm();
+    callback confirm-top();
+    callback lib-pick();
+    callback lib-remove-path(string);
+    callback lib-remove-folder(string);
+    callback lib-rescan-folder(string);
+    callback lib-delete();
+    callback lib-add-mega();
+    callback ex-add(string);
+    callback pick-open(string);
+    callback pick-back();
+    callback pick-create();
+    callback pick-manual-add();
+    callback mega-inspect();
+    callback mega-other();
+    callback mega-toggle(string);
+    callback mega-expand(string);
+    callback mega-toggle-all();
+    callback mega-pick-target();
+    callback mega-add();
+    callback mega-import();
+    callback pair-approve();
+    callback pair-reject();
+    callback zip-choose(string);
+    callback link-choose(string);
+}
+
+// label above a control (`Field`)
+component Field inherits VerticalLayout {
+    in property <string> label;
+    in property <string> hint;
+    spacing: 6px;
+    Text { text: root.label; font-size: 13px; font-weight: 500; color: Theme.text-dim; }
+    @children
+    if root.hint != "": Text { text: root.hint; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+}
+
+component TriBox inherits Rectangle {
+    in property <string> state;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border-width: state == "none" ? 1px : 0px;
+    border-color: Theme.border-strong;
+    background: state == "none" ? transparent : Theme.accent;
+    if root.state == "all": Image { source: Icons.check-heavy; colorize: #ffffff; width: 14px; height: 14px; }
+    if root.state == "some": Rectangle { width: 10px; height: 2.5px; border-radius: 1px; background: #ffffff; }
+}
+
+// "stream" / "copy" choice card of the MEGA dialog
+component HowCard inherits Rectangle {
+    in property <bool> active;
+    in property <image> icon;
+    in property <string> title;
+    in property <string> hint;
+    in property <string> badge;
+    callback clicked();
+    height: lay.preferred-height;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: active ? Theme.accent : Theme.border;
+    background: active ? Theme.accent.with-alpha(0.1) : ta.has-hover ? Theme.surface : transparent;
+    lay := VerticalLayout {
+        padding: 12px;
+        spacing: 4px;
+        HorizontalLayout {
+            spacing: 8px;
+            Rectangle {
+                width: 24px;
+                height: 24px;
+                border-radius: 8px;
+                background: root.active ? Theme.accent : Theme.surface-2;
+                Image { source: root.icon; colorize: root.active ? #ffffff : Theme.text-dim; width: 16px; height: 16px; }
+            }
+            Text { text: root.title; font-size: 14px; font-weight: 500; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+            if root.badge != "": Rectangle {
+                width: bt.preferred-width + 12px;
+                height: 18px;
+                y: 3px;
+                border-radius: 9px;
+                background: Theme.ok.with-alpha(0.15);
+                bt := Text { text: root.badge; font-size: 10px; font-weight: 600; color: Theme.ok; }
+            }
+        }
+        Text { text: root.hint; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component LibraryEditor inherits Dialog {
+    open: Dlg.open == "library";
+    title: Dlg.lib-new ? I18n.t("lib.new", I18n.rev) : I18n.t("lib.edit", I18n.rev);
+    panel-width: 520px;
+    confirm-label: Dlg.lib-new ? I18n.t("common.create", I18n.rev) : I18n.t("common.save", I18n.rev);
+    cancel-label: I18n.t("common.cancel", I18n.rev);
+    busy: Dlg.busy;
+    confirm-enabled: !Dlg.lib-new || Dlg.lib-folders.length > 0;
+    close => { Dlg.close(); }
+    confirm => { Dlg.confirm(); }
+    VerticalLayout {
+        spacing: 20px;
+        padding-bottom: 8px;
+        HorizontalLayout {
+            spacing: 16px;
+            Rectangle {
+                width: 56px;
+                height: 56px;
+                border-radius: 16px;
+                background: Dlg.lib-color;
+                animate background { duration: Motion.normal; }
+                drop-shadow-blur: 14px;
+                drop-shadow-color: Dlg.lib-color.with-alpha(0.45);
+                Image { source: LibIcons.get(Dlg.lib-icon); colorize: #ffffff; width: 28px; height: 28px; }
+            }
+            Field {
+                horizontal-stretch: 1;
+                label: I18n.t("lib.name", I18n.rev);
+                TextField { text <=> Dlg.lib-name; }
+            }
+        }
+        Field {
+            label: I18n.t("lib.color", I18n.rev);
+            HorizontalLayout {
+                alignment: start;
+                ColorSwatches {
+                    colors: Dlg.accents;
+                    value: Dlg.lib-color;
+                    picked(c) => { Dlg.lib-color = c; }
+                }
+            }
+        }
+        Field {
+            label: I18n.t("lib.icon", I18n.rev);
+            Rectangle {
+                height: Math.ceil(Dlg.icons.length / Math.max(1, Math.floor((self.width + 6px) / 42px))) * 42px - 6px;
+                property <int> per: Math.max(1, Math.floor((self.width + 6px) / 42px));
+                for ic[i] in Dlg.icons: Rectangle {
+                    x: Math.mod(i, parent.per) * 42px;
+                    y: Math.floor(i / parent.per) * 42px;
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 12px;
+                    border-width: Dlg.lib-icon == ic ? 0px : 1px;
+                    border-color: Theme.border;
+                    background: Dlg.lib-icon == ic ? Theme.surface-3 : transparent;
+                    Image { source: LibIcons.get(ic); colorize: Dlg.lib-icon == ic || ita.has-hover ? Theme.text : Theme.text-faint; width: 16px; height: 16px; }
+                    ita := TouchArea { mouse-cursor: pointer; clicked => { Dlg.lib-icon = ic; } }
+                }
+            }
+        }
+        Field {
+            label: I18n.t("lib.folders", I18n.rev);
+            VerticalLayout {
+                spacing: 6px;
+                for f in Dlg.lib-folders: Rectangle {
+                    height: 48px;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: f.pending ? Theme.border-strong : Theme.border;
+                    background: f.pending ? transparent : Theme.surface;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 6px;
+                        spacing: 10px;
+                        VerticalLayout {
+                            alignment: center;
+                            Image {
+                                source: f.remote ? PIcons.cloud : PIcons.folder;
+                                colorize: f.remote ? #e5484d : f.pending ? Theme.ok : Theme.accent;
+                                width: 16px;
+                                height: 16px;
+                            }
+                        }
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            if !f.pending: Text { text: f.name; font-size: 14px; color: Theme.text; overflow: elide; }
+                            Text { text: f.path; font-size: f.pending ? 12px : 11px; font-family: "monospace"; color: f.pending ? Theme.text : Theme.text-faint; overflow: elide; }
+                        }
+                        if !f.pending: VerticalLayout {
+                            alignment: center;
+                            IconButton {
+                                icon: Icons.refresh-cw;
+                                label: f.remote ? I18n.t("mega.refresh", I18n.rev) : I18n.t("gallery.rescan", I18n.rev);
+                                size: IconButtonSize.sm;
+                                icon-size: 16px;
+                                clicked => { Dlg.lib-rescan-folder(f.id); }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            IconButton {
+                                icon: Icons.x;
+                                label: f.pending ? I18n.t("common.remove", I18n.rev) : I18n.t("lib.removeFolder", I18n.rev);
+                                size: IconButtonSize.sm;
+                                icon-size: 16px;
+                                clicked => {
+                                    if f.pending { Dlg.lib-remove-path(f.path); } else { Dlg.lib-remove-folder(f.id); }
+                                }
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Button {
+                        text: I18n.t("lib.addFolder", I18n.rev);
+                        icon: Icons.plus;
+                        has-icon: true;
+                        clicked => { Dlg.lib-pick(); }
+                    }
+                    if Dlg.lib-mega: Button {
+                        text: I18n.t("mega.addLink", I18n.rev);
+                        icon: PIcons.cloud;
+                        has-icon: true;
+                        variant: ButtonVariant.ghost;
+                        clicked => { Dlg.lib-add-mega(); }
+                    }
+                }
+            }
+        }
+        if !Dlg.lib-new: HorizontalLayout {
+            alignment: start;
+            Button {
+                text: I18n.t("lib.delete", I18n.rev);
+                icon: PIcons.trash-2;
+                has-icon: true;
+                variant: ButtonVariant.ghost;
+                clicked => { Dlg.lib-delete(); }
+            }
+        }
+    }
+}
+
+component ExclusionsDialog inherits Dialog {
+    open: Dlg.open == "exclusions";
+    title: Dlg.ex-title;
+    panel-width: 540px;
+    confirm-label: I18n.t("common.save", I18n.rev);
+    cancel-label: I18n.t("common.cancel", I18n.rev);
+    busy: Dlg.busy;
+    close => { Dlg.close(); }
+    confirm => { Dlg.confirm(); }
+    VerticalLayout {
+        spacing: 16px;
+        padding-bottom: 8px;
+        Text { text: I18n.t("lib2.ex.body", I18n.rev); font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
+        Field {
+            label: I18n.t("lib2.ex.patterns", I18n.rev);
+            hint: I18n.t("lib2.ex.patternsHint", I18n.rev);
+            Rectangle {
+                height: 120px;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: ti.has-focus ? Theme.accent : Theme.border;
+                background: Theme.surface;
+                clip: true;
+                ti := TextInput {
+                    x: 12px;
+                    y: 8px;
+                    width: parent.width - 24px;
+                    height: parent.height - 16px;
+                    text <=> Dlg.ex-text;
+                    single-line: false;
+                    wrap: word-wrap;
+                    font-family: "monospace";
+                    font-size: 13px;
+                    color: Theme.text;
+                    selection-background-color: Theme.accent.with-alpha(0.45);
+                }
+                if Dlg.ex-text == "": Text {
+                    x: 12px;
+                    y: 8px;
+                    width: parent.width - 24px;
+                    text: I18n.t("lib2.ex.placeholder", I18n.rev);
+                    font-family: "monospace";
+                    font-size: 13px;
+                    color: Theme.text-faint;
+                    wrap: word-wrap;
+                }
+            }
+        }
+        // suggestions (chips)
+        Rectangle {
+            property <length> chip-w: 150px;
+            property <int> per: Math.max(1, Math.floor(self.width / (chip-w + 6px)));
+            height: Math.ceil((Dlg.ex-suggest.length + 1) / per) * 34px;
+            Text { x: 0; y: 6px; text: I18n.t("lib2.ex.suggest", I18n.rev); font-size: 12px; color: Theme.text-faint; }
+            for s[i] in Dlg.ex-suggest: Rectangle {
+                x: Math.mod(i + 1, parent.per) * (parent.chip-w + 6px);
+                y: Math.floor((i + 1) / parent.per) * 34px;
+                width: Math.min(parent.chip-w, cl.preferred-width + 24px);
+                height: 28px;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: sa.has-hover ? Theme.accent : Theme.border;
+                background: Theme.surface;
+                cl := HorizontalLayout {
+                    alignment: center;
+                    spacing: 4px;
+                    VerticalLayout { alignment: center; Image { source: Icons.plus; colorize: Theme.text-dim; width: 12px; height: 12px; } }
+                    Text { text: s; font-family: "monospace"; font-size: 11.5px; color: sa.has-hover ? Theme.text : Theme.text-dim; vertical-alignment: center; overflow: elide; }
+                }
+                sa := TouchArea { mouse-cursor: pointer; clicked => { Dlg.ex-add(s); } }
+            }
+        }
+        Field {
+            label: I18n.t("lib2.ex.minSize", I18n.rev);
+            hint: I18n.t("lib2.ex.minSizeHint", I18n.rev);
+            HorizontalLayout {
+                alignment: start;
+                Segmented {
+                    small: true;
+                    options: Dlg.ex-sizes;
+                    value <=> Dlg.ex-min;
+                }
+            }
+        }
+        Rectangle {
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.surface;
+            height: hl.preferred-height;
+            hl := HorizontalLayout {
+                padding: 14px;
+                spacing: 16px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    Text { text: I18n.t("lib2.ex.hidden", I18n.rev); font-size: 14px; font-weight: 500; color: Theme.text; }
+                    Text { text: Dlg.ex-hidden < 0 ? I18n.t("lib2.ex.hiddenDefault", I18n.rev) : I18n.t("lib2.ex.hiddenHint", I18n.rev); font-size: 12px; color: Theme.text-dim; wrap: word-wrap; }
+                }
+                if Dlg.ex-hidden >= 0: VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: I18n.t("common.reset", I18n.rev);
+                        font-size: 12px;
+                        color: ra.has-hover ? Theme.text : Theme.text-faint;
+                        ra := TouchArea { mouse-cursor: pointer; clicked => { Dlg.ex-hidden = -1; } }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Switch {
+                        checked: Dlg.ex-hidden == 1;
+                        toggled(v) => { Dlg.ex-hidden = v ? 1 : 0; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component MegaDialog inherits Dialog {
+    open: Dlg.open == "mega";
+    title: Dlg.mega-title;
+    panel-width: 640px;
+    close => { Dlg.close(); }
+    VerticalLayout {
+        spacing: 14px;
+        padding-bottom: 12px;
+        if Dlg.mega-stage != "tree": VerticalLayout {
+            spacing: 12px;
+            Text { text: Dlg.mega-intro; font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
+            HorizontalLayout {
+                spacing: 8px;
+                mu := TextField {
+                    horizontal-stretch: 1;
+                    text <=> Dlg.mega-url;
+                    placeholder: "https://mega.nz/folder/…#…";
+                    icon: PIcons.cloud;
+                    has-icon: true;
+                    accepted => { Dlg.mega-inspect(); }
+                    init => { self.focus-input(); }
+                }
+                Button {
+                    text: I18n.t("remote.inspect", I18n.rev);
+                    variant: ButtonVariant.primary;
+                    loading: Dlg.mega-stage == "loading";
+                    enabled: Dlg.mega-url != "";
+                    clicked => { Dlg.mega-inspect(); }
+                }
+            }
+            if Dlg.mega-stage == "loading": Rectangle {
+                height: 52px;
+                border-radius: 16px;
+                background: Theme.surface;
+                HorizontalLayout {
+                    padding-left: 16px;
+                    spacing: 12px;
+                    alignment: start;
+                    Spinner { }
+                    Text { text: I18n.t("remote.loading", I18n.rev); font-size: 14px; color: Theme.text-dim; vertical-alignment: center; }
+                }
+            }
+            if Dlg.mega-stage == "error": Rectangle {
+                border-radius: 16px;
+                background: Theme.danger.with-alpha(0.1);
+                height: el.preferred-height;
+                el := HorizontalLayout {
+                    padding: 16px;
+                    spacing: 12px;
+                    Image { source: Icons.triangle-alert; colorize: Theme.danger; width: 16px; height: 16px; }
+                    Text { text: Dlg.mega-error; font-size: 14px; color: Theme.danger; wrap: word-wrap; horizontal-stretch: 1; }
+                    if Dlg.mega-retry: Text {
+                        text: I18n.t("common.retry", I18n.rev);
+                        font-size: 14px;
+                        font-weight: 600;
+                        color: Theme.danger;
+                        TouchArea { mouse-cursor: pointer; clicked => { Dlg.mega-inspect(); } }
+                    }
+                }
+            }
+            Text { text: I18n.t("remote.pasteHint", I18n.rev); font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+        }
+        if Dlg.mega-stage == "tree": VerticalLayout {
+            spacing: 16px;
+            HorizontalLayout {
+                spacing: 12px;
+                Rectangle {
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 16px;
+                    background: #d9272e26;
+                    Image { source: PIcons.cloud; colorize: #e5484d; width: 20px; height: 20px; }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    Text { text: Dlg.mega-name; font-size: 15px; font-weight: 500; color: Theme.text; overflow: elide; }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        alignment: start;
+                        Text { text: Dlg.mega-summary; font-size: 12px; color: Theme.text-faint; }
+                        if Dlg.mega-truncated: Text { text: "· " + I18n.t("remote.truncated", I18n.rev); font-size: 12px; color: Theme.warn; }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: I18n.t("remote.otherLink", I18n.rev);
+                        font-size: 12px;
+                        color: ol.has-hover ? Theme.text : Theme.text-faint;
+                        ol := TouchArea { mouse-cursor: pointer; clicked => { Dlg.mega-other(); } }
+                    }
+                }
+            }
+            if Dlg.mega-can-stream: HorizontalLayout {
+                spacing: 8px;
+                HowCard {
+                    horizontal-stretch: 1;
+                    active: Dlg.mega-how == "stream";
+                    icon: Icons.play;
+                    title: I18n.t("mega.choose.stream", I18n.rev);
+                    badge: I18n.t("mega.choose.recommended", I18n.rev);
+                    hint: I18n.t("mega.choose.streamHint", I18n.rev);
+                    clicked => { Dlg.mega-how = "stream"; }
+                }
+                HowCard {
+                    horizontal-stretch: 1;
+                    active: Dlg.mega-how == "copy";
+                    icon: PIcons.hard-drive-download;
+                    title: I18n.t("mega.choose.copy", I18n.rev);
+                    hint: I18n.t("mega.choose.copyHint", I18n.rev);
+                    clicked => { Dlg.mega-how = "copy"; }
+                }
+            }
+            // stream: a folder of a new / an existing library
+            if Dlg.mega-how == "stream": VerticalLayout {
+                spacing: 12px;
+                Rectangle {
+                    height: 42px;
+                    border-radius: 16px;
+                    background: Theme.surface;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        spacing: 8px;
+                        alignment: start;
+                        VerticalLayout { alignment: center; Image { source: PIcons.image; colorize: Theme.text-faint; width: 16px; height: 16px; } }
+                        Text { text: Dlg.mega-media; font-size: 14px; color: Theme.text-dim; vertical-alignment: center; }
+                    }
+                }
+                if Dlg.mega-has-libs: HorizontalLayout {
+                    alignment: start;
+                    Segmented {
+                        options: [
+                            { value: "new", label: I18n.t("mega.lib.new", I18n.rev), icon: Icons.library, has-icon: true },
+                            { value: "existing", label: I18n.t("mega.lib.existing", I18n.rev), icon: PIcons.folder, has-icon: true },
+                        ];
+                        value <=> Dlg.mega-where;
+                    }
+                }
+                if Dlg.mega-where == "new" || !Dlg.mega-has-libs: Field {
+                    label: I18n.t("mega.lib.name", I18n.rev);
+                    TextField { text <=> Dlg.mega-lib-name; }
+                }
+                if Dlg.mega-where == "existing" && Dlg.mega-has-libs: Field {
+                    label: I18n.t("mega.lib.pick", I18n.rev);
+                    Select {
+                        width: parent.width;
+                        options: Dlg.mega-libs;
+                        value <=> Dlg.mega-lib;
+                    }
+                }
+                Rectangle { height: 1px; background: Theme.border; }
+                HorizontalLayout {
+                    alignment: end;
+                    Button {
+                        text: I18n.t("mega.add", I18n.rev);
+                        icon: PIcons.cloud;
+                        has-icon: true;
+                        variant: ButtonVariant.primary;
+                        loading: Dlg.busy;
+                        enabled: !Dlg.readonly && (Dlg.mega-where != "existing" || Dlg.mega-lib != "");
+                        clicked => { Dlg.mega-add(); }
+                    }
+                }
+            }
+            // copy: pick files, destination, zips
+            if Dlg.mega-how == "copy": VerticalLayout {
+                spacing: 12px;
+                Rectangle {
+                    border-radius: 16px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface;
+                    height: tl.preferred-height;
+                    clip: true;
+                    tl := VerticalLayout {
+                        if Dlg.mega-folder: Rectangle {
+                            height: 44px;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 12px;
+                                VerticalLayout { alignment: center; TriBox { state: Dlg.mega-root-state; } }
+                                Text { text: I18n.t("remote.selectAll", I18n.rev); font-size: 14px; font-weight: 500; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+                                Text { text: I18n.t("remote.mediaPreselected", I18n.rev); font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+                            }
+                            TouchArea { mouse-cursor: pointer; clicked => { Dlg.mega-toggle-all(); } }
+                            Rectangle { y: parent.height - 1px; height: 1px; background: Theme.border; }
+                        }
+                        Flickable {
+                            height: Math.min(300px, Dlg.mega-tree.length * 40px + 8px + (Dlg.mega-more-rows ? 30px : 0px));
+                            content-height: Dlg.mega-tree.length * 40px + 8px + (Dlg.mega-more-rows ? 30px : 0px);
+                            VerticalLayout {
+                                padding: 4px;
+                                for r in Dlg.mega-tree: Rectangle {
+                                    height: 40px;
+                                    border-radius: 8px;
+                                    background: rta.has-hover ? Theme.surface-2 : transparent;
+                                    opacity: r.dim ? 0.55 : 1;
+                                    HorizontalLayout {
+                                        padding-left: 4px + r.depth * 18px;
+                                        padding-right: 8px;
+                                        spacing: 8px;
+                                        Rectangle {
+                                            width: 28px;
+                                            if r.dir: Image {
+                                                source: Icons.chevron-right;
+                                                colorize: Theme.text-faint;
+                                                width: 16px;
+                                                height: 16px;
+                                                transform-rotation: r.expanded ? 90deg : 0deg;
+                                                animate transform-rotation { duration: Motion.fast; }
+                                            }
+                                            if r.dir: TouchArea { mouse-cursor: pointer; clicked => { Dlg.mega-expand(r.id); } }
+                                        }
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                VerticalLayout { alignment: center; TriBox { state: r.state; } }
+                                                VerticalLayout {
+                                                    alignment: center;
+                                                    Image {
+                                                        source: r.dir ? PIcons.folder : r.kind == "image" ? PIcons.image : r.kind == "video" ? PIcons.film : r.kind == "audio" ? PIcons.music : r.kind == "archive" ? PIcons.archive : PIcons.file-up;
+                                                        colorize: r.dir ? Theme.accent : r.kind == "archive" ? Theme.warn : Theme.text-faint;
+                                                        width: 16px;
+                                                        height: 16px;
+                                                    }
+                                                }
+                                                Text { text: r.name; font-size: 14px; color: Theme.text; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                                Text { text: r.size; font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+                                            }
+                                            rta := TouchArea { mouse-cursor: pointer; clicked => { Dlg.mega-toggle(r.id); } }
+                                        }
+                                    }
+                                }
+                                if Dlg.mega-more-rows: Text { height: 30px; text: I18n.t("remote.moreRows", I18n.rev); font-size: 12px; color: Theme.text-faint; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Segmented {
+                        options: [
+                            { value: "extract", label: I18n.t("remote.mode.extract", I18n.rev), icon: PIcons.folder-input, has-icon: true },
+                            { value: "temp", label: I18n.t("remote.mode.temp", I18n.rev), icon: PIcons.clock-3, has-icon: true },
+                        ];
+                        value <=> Dlg.mega-mode;
+                    }
+                }
+                Text { text: Dlg.mega-mode == "extract" ? I18n.t("remote.mode.extractHint", I18n.rev) : I18n.t("remote.mode.tempHint", I18n.rev); font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+                if Dlg.mega-mode == "extract": Rectangle {
+                    height: 48px;
+                    border-radius: 16px;
+                    background: Theme.surface;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 8px;
+                        spacing: 8px;
+                        VerticalLayout { alignment: center; Image { source: PIcons.folder; colorize: Theme.accent; width: 16px; height: 16px; } }
+                        Text {
+                            text: Dlg.mega-target != "" ? Dlg.mega-target : I18n.t("remote.noTarget", I18n.rev);
+                            font-size: 14px;
+                            color: Dlg.mega-target != "" ? Theme.text : Theme.text-faint;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Button {
+                                text: Dlg.mega-target != "" ? I18n.t("slide.change", I18n.rev) : I18n.t("remote.pickFolder", I18n.rev);
+                                variant: ButtonVariant.ghost;
+                                size: ButtonSize.sm;
+                                clicked => { Dlg.mega-pick-target(); }
+                            }
+                        }
+                    }
+                }
+                if Dlg.mega-zip-ask: Rectangle {
+                    border-radius: 16px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    height: zl.preferred-height;
+                    zl := VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Image { source: PIcons.archive; colorize: Theme.warn; width: 16px; height: 16px; }
+                            Text { text: Dlg.mega-zip-text; font-size: 14px; color: Theme.text; }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Segmented {
+                                small: true;
+                                options: [
+                                    { value: "extract", label: I18n.t("zip.extract", I18n.rev) },
+                                    { value: "temp", label: I18n.t("zip.temp", I18n.rev) },
+                                    { value: "keep", label: I18n.t("zip.keep", I18n.rev) },
+                                ];
+                                value <=> Dlg.mega-zip;
+                            }
+                        }
+                    }
+                }
+                Rectangle { height: 1px; background: Theme.border; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: Dlg.mega-selected; font-size: 14px; color: Theme.text-dim; vertical-alignment: center; horizontal-stretch: 1; }
+                    Button {
+                        text: I18n.t("remote.import", I18n.rev);
+                        variant: ButtonVariant.primary;
+                        loading: Dlg.busy;
+                        enabled: Dlg.mega-can-import && !Dlg.readonly;
+                        clicked => { Dlg.mega-import(); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component PairDialog inherits Dialog {
+    open: Dlg.open == "pair";
+    panel-width: 440px;
+    close => { Dlg.close(); }
+    VerticalLayout {
+        spacing: 0px;
+        padding-top: 16px;
+        padding-bottom: 8px;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 64px;
+                height: 64px;
+                border-radius: 16px;
+                background: @linear-gradient(120deg, Theme.accent 0%, Theme.accent-2 100%);
+                drop-shadow-blur: 30px;
+                drop-shadow-offset-y: 12px;
+                drop-shadow-color: Theme.accent.with-alpha(0.5);
+                Image { source: PIcons.smartphone; colorize: #ffffff; width: 32px; height: 32px; }
+            }
+        }
+        Rectangle { height: 16px; }
+        Text { text: I18n.t1("native.pairTitle", "name", Dlg.pair-name, I18n.rev); font-family: Theme.font-display; font-size: 20px; font-weight: 600; color: Theme.text; horizontal-alignment: center; wrap: word-wrap; }
+        if Dlg.pair-model != "": Text { text: Dlg.pair-model; font-size: 14px; color: Theme.text-faint; horizontal-alignment: center; }
+        Rectangle { height: 12px; }
+        Text { text: I18n.t("devices.pair.body", I18n.rev); font-size: 14px; color: Theme.text-dim; horizontal-alignment: center; wrap: word-wrap; }
+        Rectangle { height: 20px; }
+        if Dlg.pair-digits.length > 0: HorizontalLayout {
+            alignment: center;
+            spacing: 8px;
+            for ch in Dlg.pair-digits: Rectangle {
+                width: 44px;
+                height: 56px;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.surface;
+                Text {
+                    text: ch;
+                    font-family: Theme.font-display;
+                    font-size: 30px;
+                    font-weight: 700;
+                    color: Theme.text;
+                }
+            }
+        }
+        Rectangle { height: 16px; }
+        Text { text: I18n.t("devices.pair.hint", I18n.rev); font-size: 12px; color: Theme.text-faint; horizontal-alignment: center; wrap: word-wrap; }
+        Rectangle { height: 24px; }
+        HorizontalLayout {
+            spacing: 10px;
+            Button {
+                horizontal-stretch: 1;
+                text: I18n.t("devices.pair.reject", I18n.rev);
+                icon: Icons.x;
+                has-icon: true;
+                size: ButtonSize.lg;
+                enabled: !Dlg.busy;
+                clicked => { Dlg.pair-reject(); }
+            }
+            Button {
+                horizontal-stretch: 1;
+                text: I18n.t("devices.pair.approve", I18n.rev);
+                icon: Icons.check;
+                has-icon: true;
+                variant: ButtonVariant.primary;
+                size: ButtonSize.lg;
+                loading: Dlg.busy;
+                clicked => { Dlg.pair-approve(); }
+            }
+        }
+    }
+}
+
+// a big choice button (DropZone.tsx Choice)
+component Choice inherits Rectangle {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> hint;
+    in property <bool> primary;
+    callback clicked();
+    height: cl.preferred-height;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: primary ? Theme.accent.with-alpha(0.45) : Theme.border;
+    background: primary ? Theme.accent.with-alpha(ta.has-hover ? 0.16 : 0.1) : ta.has-hover ? Theme.surface-2 : Theme.surface;
+    animate background { duration: Motion.fast; }
+    cl := HorizontalLayout {
+        padding: 16px;
+        spacing: 16px;
+        VerticalLayout {
+            alignment: start;
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                border-radius: 12px;
+                background: root.primary ? @linear-gradient(120deg, Theme.accent 0%, Theme.accent-2 100%) : Theme.surface-3;
+                Image { source: root.icon; colorize: root.primary ? #ffffff : Theme.text; width: 20px; height: 20px; }
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 2px;
+            alignment: center;
+            Text { text: root.title; font-size: 15px; font-weight: 500; color: Theme.text; }
+            Text { text: root.hint; font-size: 13px; color: Theme.text-dim; wrap: word-wrap; }
+        }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component ZipDialog inherits Dialog {
+    open: Dlg.open == "zip";
+    panel-width: 480px;
+    close => { Dlg.zip-choose(""); }
+    VerticalLayout {
+        spacing: 0px;
+        padding-top: 16px;
+        padding-bottom: 8px;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 64px;
+                height: 64px;
+                border-radius: 16px;
+                background: @linear-gradient(120deg, Theme.accent 0%, Theme.accent-2 100%);
+                drop-shadow-blur: 30px;
+                drop-shadow-offset-y: 12px;
+                drop-shadow-color: Theme.accent.with-alpha(0.5);
+                Image { source: PIcons.archive; colorize: #ffffff; width: 32px; height: 32px; }
+            }
+        }
+        Rectangle { height: 12px; }
+        Text { text: I18n.t("zip.title", I18n.rev); font-family: Theme.font-display; font-size: 20px; font-weight: 600; color: Theme.text; horizontal-alignment: center; }
+        Text { text: Dlg.zip-text; font-size: 14px; color: Theme.text-dim; horizontal-alignment: center; wrap: word-wrap; }
+        Rectangle { height: 16px; }
+        VerticalLayout {
+            spacing: 10px;
+            Choice {
+                primary: true;
+                icon: PIcons.folder-input;
+                title: I18n.t("zip.extract", I18n.rev);
+                hint: I18n.t("zip.extractHint", I18n.rev);
+                clicked => { Dlg.zip-choose("extract"); }
+            }
+            Choice {
+                icon: PIcons.clock-3;
+                title: I18n.t("zip.temp", I18n.rev);
+                hint: I18n.t("zip.tempHint", I18n.rev);
+                clicked => { Dlg.zip-choose("temp"); }
+            }
+        }
+        Rectangle { height: 14px; }
+        HorizontalLayout {
+            spacing: 12px;
+            Checkbox {
+                horizontal-stretch: 1;
+                label: I18n.t("zip.remember", I18n.rev);
+                hint: I18n.t("zip.rememberHint", I18n.rev);
+                checked <=> Dlg.zip-remember;
+            }
+            VerticalLayout {
+                alignment: start;
+                HorizontalLayout {
+                    spacing: 6px;
+                    Image { source: PIcons.archive; colorize: ka.has-hover ? Theme.text : Theme.text-faint; width: 14px; height: 14px; }
+                    Text { text: I18n.t("zip.keep", I18n.rev); font-size: 12px; color: ka.has-hover ? Theme.text : Theme.text-faint; }
+                    ka := TouchArea { mouse-cursor: pointer; clicked => { Dlg.zip-choose("keep"); } }
+                }
+            }
+        }
+    }
+}
+
+component LinkDialog inherits Dialog {
+    open: Dlg.open == "link";
+    title: I18n.t("link.title", I18n.rev);
+    panel-width: 480px;
+    close => { Dlg.link-choose(""); }
+    VerticalLayout {
+        spacing: 10px;
+        padding-bottom: 12px;
+        Text { text: Dlg.link-text; font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
+        Rectangle { height: 6px; }
+        Choice {
+            primary: true;
+            icon: PIcons.link;
+            title: I18n.t("link.link", I18n.rev);
+            hint: I18n.t("link.linkHint", I18n.rev);
+            clicked => { Dlg.link-choose("link"); }
+        }
+        Choice {
+            icon: PIcons.copy;
+            title: I18n.t("link.copy", I18n.rev);
+            hint: I18n.t("link.copyHint", I18n.rev);
+            clicked => { Dlg.link-choose("copy"); }
+        }
+    }
+}
+
+component ShortcutsDialog inherits Dialog {
+    open: Dlg.open == "shortcuts";
+    title: I18n.t("pref.sec.shortcuts", I18n.rev);
+    panel-width: 720px;
+    close => { Dlg.close(); }
+    Flickable {
+        height: Math.min(560px, sl.preferred-height);
+        content-height: sl.preferred-height;
+        sl := VerticalLayout {
+            padding-bottom: 8px;
+            spacing: 0px;
+            for k[i] in Dlg.shortcuts: VerticalLayout {
+                if k.group != "": Text {
+                    height: 34px;
+                    vertical-alignment: bottom;
+                    text: k.group.to-uppercase();
+                    font-size: 11px;
+                    font-weight: 600;
+                    letter-spacing: 0.6px;
+                    color: Theme.text-faint;
+                }
+                if k.label != "": HorizontalLayout {
+                    height: 34px;
+                    spacing: 8px;
+                    Text { text: k.label; font-size: 14px; color: Theme.text-dim; vertical-alignment: center; horizontal-stretch: 1; }
+                    for key in k.keys: VerticalLayout { alignment: center; Kbd { text: key; } }
+                }
+            }
+        }
+    }
+}
+
+component ConfirmDialog inherits Dialog {
+    open: Dlg.top == "confirm";
+    title: Dlg.c-title;
+    panel-width: 440px;
+    confirm-label: Dlg.c-label;
+    cancel-label: I18n.t("common.cancel", I18n.rev);
+    danger: Dlg.c-danger;
+    busy: Dlg.busy;
+    close => { Dlg.close-top(); }
+    confirm => { Dlg.confirm-top(); }
+    if Dlg.c-body != "": Text { text: Dlg.c-body; font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
+}
+
+component PromptDialog inherits Dialog {
+    open: Dlg.top == "prompt";
+    title: Dlg.c-title;
+    panel-width: 400px;
+    confirm-label: Dlg.c-label;
+    cancel-label: I18n.t("common.cancel", I18n.rev);
+    busy: Dlg.busy;
+    confirm-enabled: Dlg.prompt-text != "";
+    close => { Dlg.close-top(); }
+    confirm => { Dlg.confirm-top(); }
+    VerticalLayout {
+        padding-bottom: 8px;
+        if Dlg.top == "prompt": TextField {
+            text <=> Dlg.prompt-text;
+            placeholder: Dlg.prompt-placeholder;
+            init => { self.focus-input(); }
+            accepted => { Dlg.confirm-top(); }
+        }
+    }
+}
+
+component PickerDialog inherits Dialog {
+    open: Dlg.top == "picker";
+    title: Dlg.pick-title;
+    panel-width: Dlg.pick-host ? 560px : 480px;
+    confirm-label: Dlg.pick-confirm;
+    cancel-label: I18n.t("common.cancel", I18n.rev);
+    confirm-enabled: Dlg.pick-can-confirm;
+    close => { Dlg.close-top(); }
+    confirm => { Dlg.confirm-top(); }
+    VerticalLayout {
+        spacing: 12px;
+        padding-bottom: 8px;
+        HorizontalLayout {
+            spacing: 8px;
+            IconButton {
+                icon: Icons.arrow-left;
+                label: I18n.t("common.back", I18n.rev);
+                size: IconButtonSize.sm;
+                enabled: Dlg.pick-can-back;
+                clicked => { Dlg.pick-back(); }
+            }
+            Text {
+                text: Dlg.pick-path;
+                font-size: 14px;
+                font-weight: 500;
+                font-family: Dlg.pick-host ? "monospace" : Theme.font-sans;
+                color: Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+            if Dlg.pick-can-new: IconButton {
+                icon: Icons.folder-plus;
+                label: I18n.t("gallery.newFolder", I18n.rev);
+                size: IconButtonSize.sm;
+                clicked => { Dlg.pick-naming = true; Dlg.pick-new-name = ""; }
+            }
+        }
+        if Dlg.pick-naming: HorizontalLayout {
+            spacing: 8px;
+            TextField {
+                horizontal-stretch: 1;
+                text <=> Dlg.pick-new-name;
+                placeholder: I18n.t("gallery.newFolderName", I18n.rev);
+                init => { self.focus-input(); }
+                accepted => { Dlg.pick-create(); }
+            }
+            Button {
+                text: I18n.t("common.create", I18n.rev);
+                variant: ButtonVariant.primary;
+                enabled: Dlg.pick-new-name != "";
+                clicked => { Dlg.pick-create(); }
+            }
+        }
+        Rectangle {
+            height: Dlg.pick-host ? 288px : 320px;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.surface;
+            clip: true;
+            if Dlg.pick-loading: Spinner { }
+            if !Dlg.pick-loading: Flickable {
+                content-height: Dlg.pick-rows.length * 42px + 68px;
+                VerticalLayout {
+                    padding: 4px;
+                    if Dlg.pick-rows.length == 0 && Dlg.pick-empty != "": Text {
+                        height: 60px;
+                        text: Dlg.pick-empty;
+                        font-size: 14px;
+                        color: Theme.text-faint;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    for r in Dlg.pick-rows: Rectangle {
+                        height: r.kind == "header" ? 34px : 42px;
+                        border-radius: 12px;
+                        background: pra.has-hover && r.kind != "header" && !r.disabled ? Theme.surface-2 : transparent;
+                        opacity: r.disabled ? 0.4 : 1;
+                        if r.kind == "header": HorizontalLayout {
+                            padding-left: 12px;
+                            padding-top: 8px;
+                            spacing: 6px;
+                            alignment: start;
+                            VerticalLayout { alignment: center; Image { source: PIcons.smartphone; colorize: Theme.text-faint; width: 14px; height: 14px; } }
+                            Text { text: r.label.to-uppercase(); font-size: 12px; font-weight: 600; letter-spacing: 0.5px; color: Theme.text-faint; vertical-alignment: center; }
+                            VerticalLayout { alignment: center; Rectangle { width: 6px; height: 6px; border-radius: 3px; background: r.icon == "online" ? Theme.ok : Theme.text-faint; } }
+                            if r.sub != "": Text { text: r.sub; font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+                        }
+                        if r.kind != "header": HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 10px;
+                            if r.kind == "lib": VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: 24px;
+                                    height: 24px;
+                                    border-radius: 6px;
+                                    background: r.color;
+                                    Image { source: LibIcons.get(r.icon); colorize: #ffffff; width: 14px; height: 14px; }
+                                }
+                            }
+                            if r.kind != "lib": VerticalLayout {
+                                alignment: center;
+                                Image { source: r.kind == "drive" ? PIcons.hard-drive : PIcons.folder; colorize: Theme.accent; width: 16px; height: 16px; }
+                            }
+                            Text { text: r.label; font-size: 14px; color: Theme.text; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                            VerticalLayout { alignment: center; Image { source: Icons.chevron-right; colorize: Theme.text-faint; width: 16px; height: 16px; } }
+                        }
+                        pra := TouchArea {
+                            enabled: r.kind != "header" && !r.disabled;
+                            mouse-cursor: pointer;
+                            clicked => { Dlg.pick-open(r.key); }
+                        }
+                    }
+                }
+            }
+        }
+        if Dlg.pick-host: HorizontalLayout {
+            spacing: 8px;
+            TextField {
+                horizontal-stretch: 1;
+                text <=> Dlg.pick-manual;
+                placeholder: I18n.t("lib.pathHint", I18n.rev);
+                accepted => { Dlg.pick-manual-add(); }
+            }
+            Button {
+                text: I18n.t("common.add", I18n.rev);
+                enabled: Dlg.pick-manual != "";
+                clicked => { Dlg.pick-manual-add(); }
+            }
+        }
+    }
+}
+
+// every dialog of this file, stacked (main one, then the confirm / prompt / picker over it)
+export component DialogLayer inherits Rectangle {
+    LibraryEditor { }
+    ExclusionsDialog { }
+    MegaDialog { }
+    PairDialog { }
+    ZipDialog { }
+    LinkDialog { }
+    ShortcutsDialog { }
+    PickerDialog { }
+    PromptDialog { }
+    ConfirmDialog { }
+}

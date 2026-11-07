@@ -1,0 +1,31 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/4",
+ "response": {
+  "id": "4",
+  "folderId": "1",
+  "dir": "Ekran Görüntüleri",
+  "name": "Screen Shot 2023-05-02 at 10.11.12.png",
+  "ext": "png",
+  "kind": "image",
+  "size": 117305,
+  "mtime": 1793998143112,
+  "width": 2880,
+  "height": 1800,
+  "duration": null,
+  "takenAt": 1793998143112,
+  "localAt": 1793998143112,
+  "flags": 1,
+  "thumbhash": "dsYBDIIMSFZ6iHd1eYkMesVgBw==",
+  "favorite": true,
+  "playback": "direct",
+  "path": "lib/Ekran Görüntüleri/Screen Shot 2023-05-02 at 10.11.12.png",
+  "exif": null,
+  "gps": null,
+  "place": null,
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"4\",\"folderId\":\"1\",\"dir\":\"Ekran Görüntüleri\",\"name\":\"Screen Shot 2023-05-02 at 10.11.12.png\",\"ext\":\"png\",\"kind\":\"image\",\"size\":117305,\"mtime\":1793998143112,\"width\":2880,\"height\":1800,\"duration\":null,\"takenAt\":1793998143112,\"localAt\":1793998143112,\"flags\":1,\"thumbhash\":\"dsYBDIIMSFZ6iHd1eYkMesVgBw==\",\"favorite\":true,\"playback\":\"direct\",\"path\":\"lib/Ekran Görüntüleri/Screen Shot 2023-05-02 at 10.11.12.png\",\"exif\":null,\"gps\":null,\"place\":null,\"camera\":null,\"tzOffset\":null}"
+}

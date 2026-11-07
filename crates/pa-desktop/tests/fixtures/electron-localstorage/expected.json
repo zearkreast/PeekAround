@@ -1,0 +1,12 @@
+{
+  "lang": "en", "theme": "light", "accent": "#06b6d4", "motion": "reduced", "gridMode": "square",
+  "rowHeight": 260.0, "sort": "mtime", "order": "asc", "kind": "image", "wideSidebar": true,
+  "infoOpen": true, "hoverPreview": false, "gridZoomDesktop": 2, "dateHeaders": false, "groupBy": "month",
+  "tileNames": true, "tileDuration": false, "tileFavorites": false, "confirmDelete": false,
+  "viewerBg": "tint", "filmstrip": false, "infoDefault": "closed", "zoomStep": 1.8, "dblZoom": 3.0,
+  "videoAutoplay": false, "videoMuted": true, "loopShortSec": 15.0, "videoSpeed": 1.25,
+  "rememberVolume": false, "videoVolume": 0.4, "showMemories": false, "weekStart": "sun",
+  "dateFormat": "iso", "hourCycle": "h23", "hideLocation": true,
+  "libraryView": { "lib:1": "folders", "dir:f3": "all" }, "folderSort": "date",
+  "slideDuration": 6.0, "slideTransition": "kenburns"
+}

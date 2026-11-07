@@ -1,0 +1,28 @@
+{
+ "type": "BrowseSkeleton",
+ "method": "GET",
+ "url": "/api/browse/skeleton?folderId=1&dir=Foto%C4%9Fraflar%2FBerlin",
+ "response": {
+  "gen": "mw5g6aqw.13.12.57",
+  "total": 12,
+  "kindCounts": {
+   "image": 12,
+   "video": 0,
+   "audio": 0
+  },
+  "aspects": "Z7CwZ5Gjo6OYZ6Nc",
+  "days": [
+   {
+    "key": "2025-04-19",
+    "count": 6,
+    "place": "Berlin"
+   },
+   {
+    "key": "2025-04-18",
+    "count": 6,
+    "place": "Kreuzberg"
+   }
+  ]
+ },
+ "raw": "{\"gen\":\"mw5g6aqw.13.12.57\",\"total\":12,\"kindCounts\":{\"image\":12,\"video\":0,\"audio\":0},\"aspects\":\"Z7CwZ5Gjo6OYZ6Nc\",\"days\":[{\"key\":\"2025-04-19\",\"count\":6,\"place\":\"Berlin\"},{\"key\":\"2025-04-18\",\"count\":6,\"place\":\"Kreuzberg\"}]}"
+}

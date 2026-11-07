@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/21",
+ "response": {
+  "id": "21",
+  "folderId": "1",
+  "dir": "Fotoğraflar/2024 Yaz Tatili",
+  "name": "IMG_2415.jpg",
+  "ext": "jpg",
+  "kind": "image",
+  "size": 42734,
+  "mtime": 1793998143105,
+  "width": 1067,
+  "height": 1600,
+  "duration": null,
+  "takenAt": 1720192680000,
+  "localAt": 1720203480000,
+  "flags": 0,
+  "thumbhash": "ptYNLRSGaHCH53h3iYaolodweQhH",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/2024 Yaz Tatili/IMG_2415.jpg",
+  "exif": {
+   "Make": "samsung",
+   "Model": "SM-G991B",
+   "LensModel": "Samsung Galaxy S21 back camera 5.4mm f/1.8",
+   "DateTimeOriginal": 1720203480000,
+   "latitude": 36.6039,
+   "longitude": 30.5634
+  },
+  "gps": {
+   "lat": 36.603919,
+   "lon": 30.563444
+  },
+  "place": {
+   "city": "Kemer",
+   "admin1": "Antalya",
+   "cc": "TR",
+   "key": "TR-07"
+  },
+  "camera": {
+   "make": "Samsung",
+   "model": "SM-G991B",
+   "lens": "Samsung Galaxy S21 back camera 5.4mm f/1.8"
+  },
+  "tzOffset": 180
+ },
+ "raw": "{\"id\":\"21\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/2024 Yaz Tatili\",\"name\":\"IMG_2415.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":42734,\"mtime\":1793998143105,\"width\":1067,\"height\":1600,\"duration\":null,\"takenAt\":1720192680000,\"localAt\":1720203480000,\"flags\":0,\"thumbhash\":\"ptYNLRSGaHCH53h3iYaolodweQhH\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/2024 Yaz Tatili/IMG_2415.jpg\",\"exif\":{\"Make\":\"samsung\",\"Model\":\"SM-G991B\",\"LensModel\":\"Samsung Galaxy S21 back camera 5.4mm f/1.8\",\"DateTimeOriginal\":1720203480000,\"latitude\":36.6039,\"longitude\":30.5634},\"gps\":{\"lat\":36.603919,\"lon\":30.563444},\"place\":{\"city\":\"Kemer\",\"admin1\":\"Antalya\",\"cc\":\"TR\",\"key\":\"TR-07\"},\"camera\":{\"make\":\"Samsung\",\"model\":\"SM-G991B\",\"lens\":\"Samsung Galaxy S21 back camera 5.4mm f/1.8\"},\"tzOffset\":180}"
+}

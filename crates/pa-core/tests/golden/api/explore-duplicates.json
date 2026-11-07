@@ -1,0 +1,64 @@
+{
+ "type": "DuplicatesResponse",
+ "method": "GET",
+ "url": "/api/explore/duplicates",
+ "response": {
+  "groups": [
+   {
+    "hash": "929193751ffc475162b0b32db8b53d80f6f5ebec",
+    "size": 27971,
+    "ids": [
+     "27",
+     "88"
+    ]
+   }
+  ],
+  "total": 1,
+  "items": [
+   {
+    "id": "27",
+    "folderId": "1",
+    "dir": "Fotoğraflar/Aile",
+    "name": "aile_1.jpg",
+    "ext": "jpg",
+    "kind": "image",
+    "size": 27971,
+    "mtime": 1793998143106,
+    "width": 900,
+    "height": 1600,
+    "duration": null,
+    "takenAt": 1673683200000,
+    "localAt": 1673694000000,
+    "flags": 0,
+    "thumbhash": "J4gNbAJ3+IdYiIeXh3d4f0f4mA==",
+    "favorite": false,
+    "playback": "direct"
+   },
+   {
+    "id": "88",
+    "folderId": "1",
+    "dir": "Fotoğraflar",
+    "name": "aile_1 kopya.jpg",
+    "ext": "jpg",
+    "kind": "image",
+    "size": 27971,
+    "mtime": 1793998143134,
+    "width": 900,
+    "height": 1600,
+    "duration": null,
+    "takenAt": 1673683200000,
+    "localAt": 1673694000000,
+    "flags": 0,
+    "thumbhash": "J4gNbAJ3+IdYiIeXh3d4f0f4mA==",
+    "favorite": false,
+    "playback": "direct"
+   }
+  ],
+  "pending": 0,
+  "paths": {
+   "27": "lib/Fotoğraflar/Aile",
+   "88": "lib/Fotoğraflar"
+  }
+ },
+ "raw": "{\"groups\":[{\"hash\":\"929193751ffc475162b0b32db8b53d80f6f5ebec\",\"size\":27971,\"ids\":[\"27\",\"88\"]}],\"total\":1,\"items\":[{\"id\":\"27\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/Aile\",\"name\":\"aile_1.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":27971,\"mtime\":1793998143106,\"width\":900,\"height\":1600,\"duration\":null,\"takenAt\":1673683200000,\"localAt\":1673694000000,\"flags\":0,\"thumbhash\":\"J4gNbAJ3+IdYiIeXh3d4f0f4mA==\",\"favorite\":false,\"playback\":\"direct\"},{\"id\":\"88\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar\",\"name\":\"aile_1 kopya.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":27971,\"mtime\":1793998143134,\"width\":900,\"height\":1600,\"duration\":null,\"takenAt\":1673683200000,\"localAt\":1673694000000,\"flags\":0,\"thumbhash\":\"J4gNbAJ3+IdYiIeXh3d4f0f4mA==\",\"favorite\":false,\"playback\":\"direct\"}],\"pending\":0,\"paths\":{\"27\":\"lib/Fotoğraflar/Aile\",\"88\":\"lib/Fotoğraflar\"}}"
+}

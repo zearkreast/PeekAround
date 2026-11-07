@@ -1,0 +1,31 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/87",
+ "response": {
+  "id": "87",
+  "folderId": "1",
+  "dir": "Fotoğraflar/Komik",
+  "name": "sticker.webp",
+  "ext": "webp",
+  "kind": "image",
+  "size": 163400,
+  "mtime": 1793998143111,
+  "width": 320,
+  "height": 320,
+  "duration": null,
+  "takenAt": 1793998143111,
+  "localAt": 1793998143111,
+  "flags": 8,
+  "thumbhash": "pkcONxC7lId5h3dvdXeHeXaXSGQJy2oP",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/Komik/sticker.webp",
+  "exif": null,
+  "gps": null,
+  "place": null,
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"87\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/Komik\",\"name\":\"sticker.webp\",\"ext\":\"webp\",\"kind\":\"image\",\"size\":163400,\"mtime\":1793998143111,\"width\":320,\"height\":320,\"duration\":null,\"takenAt\":1793998143111,\"localAt\":1793998143111,\"flags\":8,\"thumbhash\":\"pkcONxC7lId5h3dvdXeHeXaXSGQJy2oP\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/Komik/sticker.webp\",\"exif\":null,\"gps\":null,\"place\":null,\"camera\":null,\"tzOffset\":null}"
+}

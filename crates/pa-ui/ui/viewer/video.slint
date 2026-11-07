@@ -1,0 +1,325 @@
+// Video / audio player controls (features/viewer/VideoPlayer.tsx): big play button, the control
+// bar with the seek bar (hover preview from the filmstrip sprite), play / mute / volume, time,
+// save frame, speed menu, loop and full screen. Decoding + A/V sync: src/video.rs.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { VIcons } from "icons.slint";
+import { TooltipBubble } from "../components/button.slint";
+import { ViewerState, SlideKind } from "state.slint";
+
+export component BigPlay inherits Rectangle {
+    callback clicked();
+    width: 80px;
+    height: 80px;
+    border-radius: 40px;
+    background: ta.has-hover ? #00000099 : #00000073;
+    property <float> k: 0;
+    init => { self.k = 1; }
+    animate k { duration: Motion.normal; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    opacity: self.k;
+    Image {
+        x: (parent.width - self.width) / 2 + 3px;
+        source: VIcons.play-fill;
+        colorize: #ffffff;
+        width: 36px * (0.7 + 0.3 * root.k);
+        height: self.width;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component BarButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <string> text;
+    in property <bool> active;
+    in property <length> icon-size: 18px;
+    callback clicked();
+    width: root.text != "" ? Math.max(36px, lay.preferred-width + 16px) : 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: ta.has-hover ? #ffffff1a : transparent;
+    lay := HorizontalLayout {
+        alignment: center;
+        spacing: 4px;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: root.active ? Theme.accent-2 : #ffffff;
+                width: root.icon-size;
+                height: root.icon-size;
+            }
+        }
+        if root.text != "": Text {
+            text: root.text;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    property <bool> tip;
+    Timer {
+        interval: 600ms;
+        running: ta.has-hover && !root.tip;
+        triggered => { root.tip = true; }
+    }
+    changed hovered => { if !self.hovered { root.tip = false; } }
+    out property <bool> hovered: ta.has-hover;
+    TooltipBubble {
+        text: root.label;
+        show: root.tip && ta.has-hover && !ta.pressed && root.label != "";
+        x: (root.width - self.width) / 2;
+        y: -self.height - 8px;
+    }
+}
+
+export component VideoBar inherits Rectangle {
+    in property <bool> compact-audio;
+    property <float> dur: Math.max(0.001, ViewerState.duration);
+    property <float> pct: Math.clamp(ViewerState.position / root.dur, 0, 1);
+    property <bool> speed-open;
+    property <bool> shown: ViewerState.controls || !ViewerState.playing || ViewerState.cur.kind == SlideKind.audio || speed-open;
+    height: lay.preferred-height;
+    border-radius: 16px;
+    background: #00000099;
+    opacity: root.shown ? 1 : 0;
+    animate opacity { duration: 250ms; }
+    property <length> lift: root.shown ? 0px : 12px;
+    animate lift { duration: 250ms; }
+    // swallow clicks (no stage gestures through the bar)
+    TouchArea {
+        enabled: root.shown;
+        moved => { ViewerState.video-poke(); }
+    }
+    lay := VerticalLayout {
+        y: root.lift;
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 12px;
+        padding-bottom: 8px;
+        if ViewerState.video-error != "": Text {
+            text: ViewerState.video-error;
+            color: #fda4af;
+            font-size: 11px;
+            wrap: word-wrap;
+        }
+        if ViewerState.no-audio-device: Text {
+            text: I18n.t("native.noAudioDevice", I18n.rev);
+            color: #ffffff99;
+            font-size: 11px;
+        }
+        // scrub bar
+        bar := Rectangle {
+            height: 20px;
+            property <bool> hot: bta.has-hover || bta.pressed;
+            Rectangle {
+                y: (parent.height - self.height) / 2;
+                height: bar.hot ? 6px : 4px;
+                animate height { duration: Motion.fast; }
+                border-radius: self.height / 2;
+                background: #ffffff33;
+                clip: true;
+                Rectangle {
+                    x: 0;
+                    width: parent.width * Math.clamp(ViewerState.buffered / root.dur, 0, 1);
+                    background: #ffffff4d;
+                }
+                Rectangle {
+                    x: 0;
+                    width: parent.width * (bta.pressed ? Math.clamp(bta.mouse-x / bar.width, 0, 1) : root.pct);
+                    background: @linear-gradient(90deg, Theme.accent 0%, Theme.accent-2 100%);
+                }
+            }
+            Rectangle {
+                width: bar.hot ? 14px : 0px;
+                animate width { duration: Motion.fast; }
+                height: self.width;
+                x: bar.width * (bta.pressed ? Math.clamp(bta.mouse-x / bar.width, 0, 1) : root.pct) - self.width / 2;
+                y: (bar.height - self.height) / 2;
+                border-radius: self.width / 2;
+                background: #ffffff;
+                drop-shadow-blur: 4px;
+                drop-shadow-color: #00000066;
+            }
+            bta := TouchArea {
+                mouse-cursor: pointer;
+                pointer-event(e) => {
+                    ViewerState.video-poke();
+                    if e.kind == PointerEventKind.up {
+                        ViewerState.seek(Math.clamp(self.mouse-x / bar.width, 0, 1));
+                    }
+                }
+            }
+            // hover preview: a frame of the filmstrip sprite + the time
+            if bta.has-hover: hpv := Rectangle {
+                property <float> hp: Math.clamp(bta.mouse-x / bar.width, 0, 1);
+                width: 160px;
+                height: (ViewerState.has-sprite ? 90px + 4px : 0px) + 16px;
+                x: Math.clamp(bar.width * self.hp, bar.width * 0.08, bar.width * 0.92) - self.width / 2;
+                y: -self.height - 6px;
+                if ViewerState.has-sprite: Rectangle {
+                    y: 0;
+                    height: 90px;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: #ffffff33;
+                    background: #000000;
+                    clip: true;
+                    Image {
+                        property <int> k: Math.min(ViewerState.sprite-n - 1, Math.floor(hpv.hp * ViewerState.sprite-n));
+                        x: -self.k * 160px;
+                        y: 0;
+                        width: 160px * ViewerState.sprite-n;
+                        height: 90px;
+                        source: ViewerState.sprite;
+                        image-fit: fill;
+                    }
+                }
+                Text {
+                    y: parent.height - 14px;
+                    width: parent.width;
+                    text: ViewerState.format-time(hpv.hp * root.dur);
+                    color: #ffffff;
+                    font-size: 11px;
+                    font-weight: 500;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+        HorizontalLayout {
+            padding-top: 4px;
+            spacing: 4px;
+            BarButton {
+                icon: ViewerState.playing ? VIcons.pause-fill : VIcons.play-fill;
+                label: ViewerState.playing ? I18n.t("viewer.pause", I18n.rev) : I18n.t("viewer.play", I18n.rev);
+                icon-size: 20px;
+                clicked => { ViewerState.play-toggle(); }
+            }
+            BarButton {
+                icon: ViewerState.muted || ViewerState.volume == 0 ? VIcons.volume-x : VIcons.volume-2;
+                label: ViewerState.muted ? I18n.t("viewer.unmute", I18n.rev) : I18n.t("viewer.mute", I18n.rev);
+                icon-size: 20px;
+                clicked => { ViewerState.toggle-mute(); }
+            }
+            // volume (`peek-range w-20`)
+            vol := Rectangle {
+                width: 80px;
+                property <float> v: ViewerState.muted ? 0 : ViewerState.volume;
+                Rectangle {
+                    y: (parent.height - self.height) / 2;
+                    height: 4px;
+                    border-radius: 2px;
+                    background: #ffffff33;
+                    Rectangle {
+                        x: 0;
+                        width: parent.width * vol.v;
+                        border-radius: 2px;
+                        background: Theme.accent;
+                    }
+                }
+                Rectangle {
+                    x: vol.width * vol.v - 6px;
+                    y: (vol.height - 12px) / 2;
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 6px;
+                    background: #ffffff;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    pointer-event(e) => {
+                        if e.kind == PointerEventKind.down {
+                            ViewerState.set-volume(Math.clamp(self.mouse-x / vol.width, 0, 1));
+                        }
+                    }
+                    moved => {
+                        if self.pressed { ViewerState.set-volume(Math.clamp(self.mouse-x / vol.width, 0, 1)); }
+                    }
+                }
+            }
+            Rectangle { width: 8px; }
+            Text {
+                text: ViewerState.time-text + " / " + ViewerState.duration-text;
+                color: #ffffffcc;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if !root.compact-audio && ViewerState.cur.kind == SlideKind.video: BarButton {
+                icon: VIcons.camera;
+                label: I18n.t("viewer.saveFrame", I18n.rev);
+                clicked => { ViewerState.save-frame(); }
+            }
+            speed-btn := BarButton {
+                icon: VIcons.gauge;
+                label: I18n.t("viewer.speed", I18n.rev);
+                text: ViewerState.speed != 1 ? ViewerState.speed + "×" : "";
+                clicked => { root.speed-open = !root.speed-open; ViewerState.menu-open = root.speed-open; }
+            }
+            BarButton {
+                icon: VIcons.repeat;
+                label: I18n.t("viewer.loop", I18n.rev);
+                active: ViewerState.looping;
+                clicked => { ViewerState.toggle-loop(); }
+            }
+            if !root.compact-audio: BarButton {
+                icon: ViewerState.fullscreen ? VIcons.minimize : VIcons.maximize;
+                label: I18n.t("viewer.fullscreen", I18n.rev);
+                clicked => { ViewerState.toggle-fullscreen(); }
+            }
+        }
+    }
+    // speed menu (above the button)
+    if root.speed-open: Rectangle {
+        x: root.width - 128px - 60px;
+        y: -self.height - 8px;
+        width: 128px;
+        height: sl.preferred-height;
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.bg-elev;
+        drop-shadow-blur: 40px;
+        drop-shadow-color: #00000099;
+        TouchArea { }
+        sl := VerticalLayout {
+            padding: 6px;
+            for s in [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]: Rectangle {
+                height: 32px;
+                border-radius: 10px;
+                background: sta.has-hover ? Theme.surface-2 : transparent;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    Text {
+                        text: s + "×";
+                        color: Theme.text;
+                        font-size: 13px;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    if s == ViewerState.speed: VerticalLayout {
+                        alignment: center;
+                        Image { source: VIcons.check; colorize: Theme.accent; width: 16px; height: 16px; }
+                    }
+                }
+                sta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.speed-open = false;
+                        ViewerState.menu-open = false;
+                        ViewerState.set-speed(s);
+                    }
+                }
+            }
+        }
+    }
+}

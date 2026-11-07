@@ -1,0 +1,416 @@
+// Virtualized media grid (features/gallery/MediaGrid.tsx + MediaTile.tsx).
+//
+// Rust lays out every item from the skeleton (src/grid/layout.rs) and keeps a small pool of tile
+// "slots" for the rows in view (+ overscan): `tiles` / `headers` only ever hold what is visible, a
+// slot keeps its row while its item stays on screen, so scrolling only rewrites the few slots that
+// enter the view. The grid itself is a Flickable whose content-y is reported back to Rust.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Button, ButtonVariant, ButtonSize } from "../components/button.slint";
+import { GridInput } from "../grid/input.slint";
+import { GridInteraction } from "../grid/interaction.slint";
+import { FastScroller } from "../grid/fast-scroller.slint";
+import { VIcons } from "../viewer/icons.slint";
+
+// tile decorations (Settings → Gallery: tileNames / tileDuration / tileFavorites; set by app.rs)
+export global TileDeco {
+    in property <bool> names;
+    in property <bool> duration: true;
+    in property <bool> favorites: true;
+}
+
+export enum TileKind { image, video, audio, placeholder }
+
+export struct TileData {
+    index: int,
+    x: length,
+    y: length,
+    w: length,
+    h: length,
+    kind: TileKind,
+    image: image,
+    loaded: bool,
+    placeholder: image,
+    has-placeholder: bool,
+    badge: string,
+    favorite: bool,
+    // file name (caption with Settings → Gallery → file names)
+    name: string,
+    visible: bool,
+    // selection / keyboard focus (src/grid/interact.rs)
+    selected: bool,
+    focused: bool,
+}
+
+export struct HeaderData {
+    y: length,
+    h: length,
+    label: string,
+    place: string,
+    count: string,
+    visible: bool,
+    // group index (day "select all" circle)
+    group: int,
+}
+
+component Tile inherits Rectangle {
+    in property <TileData> data;
+    callback open(int);
+    x: data.x;
+    y: data.y;
+    width: data.w;
+    height: data.h;
+    visible: data.visible;
+    property <bool> hovered: GridInput.hover-index == root.data.index && root.data.visible;
+    // `.tile[data-selected] .tile-inner { transform: scale(.86); border-radius: 12px }`
+    property <float> sel-k: root.data.selected ? 1 : 0;
+    animate sel-k { duration: Motion.normal; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    // focus ring (`outline-offset: 2px`)
+    if root.data.focused: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: root.width + 6px;
+        height: root.height + 6px;
+        border-radius: Theme.tile-radius + 3px;
+        border-width: 2px;
+        border-color: Theme.accent;
+    }
+    inner := Rectangle {
+    x: root.width * 0.07 * root.sel-k;
+    y: root.height * 0.07 * root.sel-k;
+    width: root.width * (1 - 0.14 * root.sel-k);
+    height: root.height * (1 - 0.14 * root.sel-k);
+    border-radius: Theme.tile-radius + 2px * root.sel-k;
+    clip: true;
+    background: Theme.tile-bg;
+
+    if root.data.has-placeholder: Image {
+        width: inner.width;
+        height: inner.height;
+        source: root.data.placeholder;
+        image-fit: fill;
+    }
+    if root.data.kind == TileKind.audio: Rectangle {
+        background: @linear-gradient(135deg, Theme.accent.with-alpha(0.3) 0%, transparent 100%);
+        Image {
+            source: Icons.music;
+            colorize: Theme.text-dim;
+            width: 40px;
+            height: 40px;
+        }
+    }
+    // hover: the photo zooms in 4 % (`.tile:hover .tile-img`)
+    property <float> zoom: root.hovered && root.data.loaded ? 1.04 : 1;
+    animate zoom { duration: Motion.slow; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    if root.data.kind != TileKind.audio: Image {
+        width: inner.width * inner.zoom;
+        height: inner.height * inner.zoom;
+        x: (inner.width - self.width) / 2;
+        y: (inner.height - self.height) / 2;
+        source: root.data.image;
+        image-fit: cover;
+        opacity: root.data.loaded ? 1 : 0;
+        animate opacity { duration: Motion.normal; easing: ease-out; }
+    }
+    // file name caption (MediaTile.tsx `data-tile-name`)
+    if TileDeco.names && root.data.name != "" && inner.width >= 72px: Rectangle {
+        y: inner.height - self.height;
+        height: 34px;
+        background: @linear-gradient(0deg, #000000b3 0%, #00000000 100%);
+        Text {
+            x: 8px;
+            y: parent.height - self.height - 6px;
+            width: parent.width - 16px - (root.data.badge != "" && TileDeco.duration ? 56px : 0px);
+            text: root.data.name;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 500;
+            overflow: elide;
+        }
+    }
+    if root.data.badge != "" && TileDeco.duration: Rectangle {
+        x: inner.width - self.width - 5px;
+        y: inner.height - self.height - 5px;
+        height: 18px;
+        width: badge-row.preferred-width + 14px;
+        border-radius: 9px;
+        background: #0000008c;
+        badge-row := HorizontalLayout {
+            alignment: center;
+            spacing: 3px;
+            if root.data.kind == TileKind.video: VerticalLayout {
+                alignment: center;
+                Image { source: Icons.play-fill; colorize: #ffffff; width: 11px; height: 11px; }
+            }
+            Text {
+                text: root.data.badge;
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: 500;
+                vertical-alignment: center;
+            }
+        }
+    }
+    if root.data.favorite && TileDeco.favorites: Image {
+        // (top right while file names are shown, like the web UI)
+        x: TileDeco.names ? inner.width - 22px : 6px;
+        y: TileDeco.names ? 6px : inner.height - 22px;
+        width: 16px;
+        height: 16px;
+        source: Icons.heart-fill;
+        colorize: Theme.accent-2;
+    }
+    }
+    // `.tile-check`: on hover / while selecting; filled accent when selected
+    property <bool> check-shown: root.data.selected || GridInput.selecting || root.hovered;
+    if root.data.kind != TileKind.placeholder: Rectangle {
+        x: 6px;
+        y: 6px;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        opacity: root.check-shown ? 1 : 0;
+        animate opacity { duration: Motion.fast; }
+        border-width: root.data.selected ? 0px : 2px;
+        border-color: #ffffffeb;
+        background: root.data.selected ? Theme.accent : root.hovered && !GridInput.selecting ? #00000066 : #00000047;
+        drop-shadow-blur: root.data.selected ? 10px : 0px;
+        drop-shadow-offset-y: 2px;
+        drop-shadow-color: root.data.selected ? Theme.accent : transparent;
+        if root.data.selected: Image {
+            source: Icons.check-heavy;
+            colorize: #ffffff;
+            width: 14px;
+            height: 14px;
+        }
+    }
+}
+
+component GroupHeader inherits Rectangle {
+    in property <HeaderData> data;
+    property <bool> sel-hover: GridInput.hover-group == root.data.group;
+    x: 0;
+    y: data.y;
+    height: data.h;
+    visible: data.visible;
+    HorizontalLayout {
+        padding-bottom: 8px;
+        spacing: 8px;
+        alignment: start;
+        VerticalLayout {
+            alignment: end;
+            Text {
+                text: root.data.label;
+                font-family: Theme.font-display;
+                font-size: 18px;
+                font-weight: 600;
+                color: Theme.text;
+            }
+        }
+        if root.data.place != "": VerticalLayout {
+            alignment: end;
+            padding-bottom: 2px;
+            Text { text: root.data.place; font-size: 12px; color: Theme.text-dim; overflow: elide; }
+        }
+        VerticalLayout {
+            alignment: end;
+            padding-bottom: 2px;
+            Text { text: root.data.count; font-size: 12px; color: Theme.text-faint; }
+        }
+    }
+    // `group-select` (mobile.selectDay): right end of the header, on hover / while selecting
+    Rectangle {
+        x: root.width - 36px;
+        y: root.height - 8px - 36px + 4px;
+        width: 36px;
+        height: 36px;
+        border-radius: 18px;
+        background: root.sel-hover ? Theme.surface-2 : transparent;
+        opacity: root.sel-hover || GridInput.selecting ? 1 : 0;
+        animate opacity { duration: Motion.fast; }
+        Image {
+            source: VIcons.circle-check;
+            colorize: root.sel-hover ? Theme.accent : Theme.text-faint;
+            width: 18px;
+            height: 18px;
+        }
+    }
+}
+
+// thin overlay scrollbar (`scrollbar-width: thin; scrollbar-color: var(--surface-3)`), draggable
+component ScrollBar inherits Rectangle {
+    in property <length> content-height;
+    in property <length> visible-height;
+    in property <length> offset;   // = -content-y (>= 0)
+    callback scroll-to(length);
+    property <length> max-offset: Math.max(0px, content-height - visible-height);
+    property <length> thumb-h: Math.max(32px, visible-height * visible-height / Math.max(1px, content-height));
+    width: 12px;
+    visible: max-offset > 0;
+    property <bool> active: ta.has-hover || ta.pressed;
+    Rectangle {
+        x: parent.width - self.width - 3px;
+        width: root.active ? 8px : 5px;
+        animate width { duration: Motion.fast; }
+        height: root.thumb-h;
+        y: root.max-offset > 0 ? (root.height - self.height) * root.offset / root.max-offset : 0;
+        border-radius: self.width / 2;
+        background: root.active ? Theme.border-strong : Theme.surface-3;
+    }
+    ta := TouchArea {
+        property <length> start-offset;
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down { self.start-offset = root.offset; }
+        }
+        moved => {
+            if self.pressed {
+                root.scroll-to(Math.clamp(self.start-offset + (self.mouse-y - self.pressed-y) * root.max-offset / Math.max(1px, root.height - root.thumb-h), 0, root.max-offset));
+            }
+        }
+    }
+}
+
+// The scrolling page: page header (icon + display title, counts, action) above the grid.
+export component MediaGrid inherits Rectangle {
+    in property <image> title-icon;
+    in property <color> title-icon-color;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <string> action-label;
+    in property <image> action-icon;
+    callback action();
+    in property <[TileData]> tiles;
+    in property <[HeaderData]> headers;
+    in property <length> grid-height;
+    in property <length> header-height: 140px;
+    // the page draws its own header (children of MediaGrid, header-height tall); the built-in one hides
+    in property <bool> custom-header;
+    // `max-w-[1800px] px-7` of the gallery page
+    in property <length> side-padding: 28px;
+    in property <length> content-max-width: 1800px;
+    in-out property <length> scroll-y;
+    out property <length> grid-width: Math.min(root.width - 2 * root.side-padding - 12px, root.content-max-width);
+    out property <length> grid-x: (root.width - 12px - self.grid-width) / 2;
+    callback viewport-changed(/* scroll offset inside the grid */ length, /* visible height */ length, /* grid width */ length);
+    callback open(int);
+
+    function report() {
+        root.viewport-changed(-fl.content-y - root.header-height, fl.height, root.grid-width);
+    }
+
+    fl := Flickable {
+        width: root.width;
+        height: root.height;
+        content-width: root.width;
+        content-height: root.header-height + root.grid-height + 112px;
+        content-y <=> root.scroll-y;
+        // mouse drags are lasso / tile drags (src/actions_ui.rs); touch still pans
+        mouse-drag-pan-enabled: false;
+        changed content-y => { root.report(); }
+        changed height => { root.report(); }
+        changed content-height => { root.report(); }
+        init => { root.report(); }
+
+        // pages with their own header (library / folder / album) put it here: custom-header + children
+        Rectangle {
+            x: root.grid-x;
+            y: 0;
+            width: root.grid-width;
+            height: root.header-height;
+            @children
+        }
+        if !root.custom-header: HorizontalLayout {
+            x: root.grid-x;
+            y: 0;
+            width: root.grid-width;
+            height: root.header-height;
+            padding-top: 24px;
+            padding-bottom: 28px;
+            spacing: 24px;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                alignment: start;
+                HorizontalLayout {
+                    spacing: 12px;
+                    alignment: start;
+                    VerticalLayout {
+                        alignment: center;
+                        Image {
+                            source: root.title-icon;
+                            colorize: root.title-icon-color;
+                            width: 28px;
+                            height: 28px;
+                        }
+                    }
+                    Text {
+                        text: root.title;
+                        font-family: Theme.font-display;
+                        font-size: 34px;
+                        font-weight: 700;
+                        letter-spacing: -0.5px;
+                        color: Theme.text;
+                        overflow: elide;
+                    }
+                }
+                Text {
+                    text: root.subtitle;
+                    font-size: 14px;
+                    color: Theme.text-dim;
+                }
+            }
+            if root.action-label != "": VerticalLayout {
+                alignment: end;
+                padding-bottom: 6px;
+                Button {
+                    text: root.action-label;
+                    icon: root.action-icon;
+                    has-icon: true;
+                    size: ButtonSize.sm;
+                    variant: ButtonVariant.secondary;
+                    clicked => { root.action(); }
+                }
+            }
+        }
+        Rectangle {
+            x: root.grid-x;
+            y: root.header-height;
+            width: root.grid-width;
+            height: root.grid-height;
+            for h in root.headers: GroupHeader {
+                data: h;
+                width: parent.width;
+            }
+            for t in root.tiles: Tile {
+                data: t;
+                open(i) => { root.open(i); }
+            }
+            gi := GridInteraction {
+                width: parent.width;
+                height: Math.max(parent.height, 1px);
+            }
+        }
+    }
+    public function focus-grid() { gi.focus-grid(); }
+    changed grid-width => { root.report(); }
+
+    if !fs.enabled: ScrollBar {
+        x: root.width - self.width;
+        height: root.height;
+        content-height: fl.content-height;
+        visible-height: fl.height;
+        offset: -fl.content-y;
+        scroll-to(o) => { fl.content-y = -o; }
+    }
+    fs := FastScroller {
+        x: root.width - self.width;
+        height: root.height;
+        content-height: fl.content-height;
+        visible-height: fl.height;
+        offset: -fl.content-y;
+        grid-top: root.header-height;
+        ticks: GridInput.ticks;
+        scroll-to(o) => { fl.content-y = -o; }
+    }
+}

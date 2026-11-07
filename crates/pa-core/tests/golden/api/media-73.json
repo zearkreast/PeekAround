@@ -1,0 +1,33 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/73",
+ "response": {
+  "id": "73",
+  "folderId": "1",
+  "dir": "Fotoğraflar/Doğa",
+  "name": "İstanbul Boğazı 3.jpg",
+  "ext": "jpg",
+  "kind": "image",
+  "size": 50227,
+  "mtime": 1793998143109,
+  "width": 1600,
+  "height": 1200,
+  "duration": null,
+  "takenAt": 1685433600000,
+  "localAt": 1685433600000,
+  "flags": 0,
+  "thumbhash": "p9YNNZZ2eYdwh3ecaIiId3dweQdX",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/Doğa/İstanbul Boğazı 3.jpg",
+  "exif": {
+   "DateTimeOriginal": 1685433600000
+  },
+  "gps": null,
+  "place": null,
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"73\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/Doğa\",\"name\":\"İstanbul Boğazı 3.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":50227,\"mtime\":1793998143109,\"width\":1600,\"height\":1200,\"duration\":null,\"takenAt\":1685433600000,\"localAt\":1685433600000,\"flags\":0,\"thumbhash\":\"p9YNNZZ2eYdwh3ecaIiId3dweQdX\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/Doğa/İstanbul Boğazı 3.jpg\",\"exif\":{\"DateTimeOriginal\":1685433600000},\"gps\":null,\"place\":null,\"camera\":null,\"tzOffset\":null}"
+}

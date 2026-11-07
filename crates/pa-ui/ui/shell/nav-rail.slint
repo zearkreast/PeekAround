@@ -1,0 +1,263 @@
+// Desktop navigation rail (features/nav/NavRail.tsx): logo, the main places, Settings at the bottom.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Shell, Page, Conn } from "../globals.slint";
+import { ProgressRing } from "../components/feedback.slint";
+import { TooltipBubble } from "../components/button.slint";
+import { DragState } from "../grid/input.slint";
+import { DropTarget } from "../grid/dnd.slint";
+import { HubState } from "../pages/state.slint";
+import { PIcons } from "../pages/icons.slint";
+
+component RailItem inherits Rectangle {
+    in property <image> icon;
+    in property <image> icon-active;
+    in property <string> label;
+    in property <bool> active;
+    callback clicked();
+    height: 62px;
+    // the active pill is drawn by the rail (it slides between items); this is the hover one
+    Rectangle {
+        y: 6px;
+        width: 56px;
+        height: 32px;
+        border-radius: 16px;
+        background: ta.has-hover && !root.active ? Theme.surface-2 : transparent;
+        animate background { duration: Motion.fast; }
+    }
+    Image {
+        y: 12px;
+        source: root.active ? root.icon-active : root.icon;
+        colorize: root.active ? Theme.accent : ta.has-hover ? Theme.text : Theme.text-dim;
+        width: 20px;
+        height: 20px;
+        animate colorize { duration: Motion.fast; }
+    }
+    Text {
+        y: 42px;
+        width: parent.width - 8px;
+        text: root.label;
+        font-size: 11.5px;
+        font-weight: 500;
+        color: root.active || ta.has-hover ? Theme.text : Theme.text-dim;
+        horizontal-alignment: center;
+        overflow: elide;
+        animate color { duration: Motion.fast; }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component NavRail inherits Rectangle {
+    width: Theme.rail-w;
+    background: Theme.dark ? #11111866 : #ffffff66;
+    // border-r border-line
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        background: Theme.border;
+    }
+
+    property <int> active-index: Shell.page == Page.photos || Shell.page == Page.search ? 0
+        : Shell.page == Page.explore || Shell.page == Page.explore-result || Shell.page == Page.explore-places
+            || Shell.page == Page.explore-dups || Shell.page == Page.explore-map ? 1 : Shell.page == Page.favorites ? 2
+        : Shell.page == Page.albums || Shell.page == Page.album ? 3
+        : Shell.page == Page.library || Shell.page == Page.lib || Shell.page == Page.folder ? 4 : -1;
+
+    // logo (h-[var(--topbar-h)])
+    Image {
+        y: (Theme.topbar-h - self.height) / 2;
+        source: Icons.logo;
+        width: 30px;
+        height: 30px;
+    }
+
+    // sliding active pill (layoutId="rail-active")
+    Rectangle {
+        visible: root.active-index >= 0;
+        y: Theme.topbar-h + 8px + Math.max(0, root.active-index) * 68px + 6px;
+        animate y { duration: Motion.slow; easing: cubic-bezier(0.34, 1.3, 0.64, 1); }
+        width: 56px;
+        height: 32px;
+        border-radius: 16px;
+        background: Theme.accent-soft;
+    }
+
+    VerticalLayout {
+        y: Theme.topbar-h + 8px;
+        height: 5 * 68px;
+        padding-left: 6px;
+        padding-right: 6px;
+        spacing: 6px;
+        alignment: start;
+        RailItem {
+            icon: Icons.images-thin;
+            icon-active: Icons.images-bold;
+            label: I18n.t("nav2.photos", I18n.rev);
+            active: root.active-index == 0;
+            clicked => { Shell.navigate(Page.photos); }
+        }
+        RailItem {
+            icon: Icons.compass-thin;
+            icon-active: Icons.compass-bold;
+            label: I18n.t("mobile.nav.explore", I18n.rev);
+            active: root.active-index == 1;
+            clicked => { Shell.navigate(Page.explore); }
+        }
+        RailItem {
+            icon: Icons.heart-thin;
+            icon-active: Icons.heart-bold;
+            label: I18n.t("nav.favorites", I18n.rev);
+            active: root.active-index == 2;
+            clicked => { Shell.navigate(Page.favorites); }
+        }
+        RailItem {
+            icon: Icons.book-image-thin;
+            icon-active: Icons.book-image-bold;
+            label: I18n.t("nav2.albums", I18n.rev);
+            active: root.active-index == 3;
+            clicked => { Shell.navigate(Page.albums); }
+        }
+        RailItem {
+            icon: Icons.library-thin;
+            icon-active: Icons.library-bold;
+            label: I18n.t("nav2.library", I18n.rev);
+            active: root.active-index == 4;
+            clicked => { Shell.navigate(Page.library); }
+        }
+    }
+
+    VerticalLayout {
+        y: parent.height - self.preferred-height;
+        height: self.preferred-height;
+        padding-left: 6px;
+        padding-right: 6px;
+        padding-bottom: 12px;
+        spacing: 6px;
+        if Shell.conn == Conn.offline: HorizontalLayout {
+            alignment: center;
+            off := Rectangle {
+                width: 36px;
+                height: 36px;
+                border-radius: 18px;
+                background: Theme.danger.with-alpha(0.1);
+                Image { source: Icons.wifi-off; colorize: Theme.danger; width: 16px; height: 16px; }
+                ota := TouchArea { }
+                TooltipBubble {
+                    x: parent.width + 8px;
+                    text: I18n.t("nav.offline", I18n.rev);
+                    show: ota.has-hover;
+                }
+            }
+        }
+        if Shell.scanning: HorizontalLayout {
+            alignment: center;
+            padding-top: 4px;
+            padding-bottom: 4px;
+            Rectangle {
+                width: 22px;
+                height: 22px;
+                ProgressRing { value: Shell.scan-progress; size: 22px; stroke: 2.5px; }
+                sta := TouchArea { }
+                TooltipBubble {
+                    x: parent.width + 8px;
+                    text: Shell.scan-text;
+                    show: sta.has-hover;
+                }
+            }
+        }
+        Rectangle {
+            height: 62px;
+            // own active pill for Settings (the sliding one covers the top group)
+            Rectangle {
+                y: 6px;
+                width: 56px;
+                height: 32px;
+                border-radius: 16px;
+                background: Shell.page == Page.settings ? Theme.accent-soft : transparent;
+                animate background { duration: Motion.normal; }
+            }
+            RailItem {
+                width: parent.width;
+                icon: Icons.settings-thin;
+                icon-active: Icons.settings-bold;
+                label: I18n.t("nav.settings", I18n.rev);
+                active: Shell.page == Page.settings;
+                clicked => { Shell.navigate(Page.settings); }
+            }
+        }
+    }
+
+    // dragging tiles over "Albums": a flyout of the albums as drop targets (NavRail.tsx drop flyout)
+    property <length> albums-y: Theme.topbar-h + 8px + 3 * 68px;
+    property <bool> over-albums: DragState.active && DragState.x < root.width
+        && DragState.y >= root.albums-y && DragState.y < root.albums-y + 62px;
+    property <length> fly-h: Math.min(360px, 40px + Math.max(1, Math.min(14, HubState.albums.length)) * 46px);
+    property <bool> over-fly: DragState.active && DragState.x >= root.width && DragState.x < root.width + 270px
+        && DragState.y >= root.albums-y - 6px && DragState.y < root.albums-y - 6px + root.fly-h;
+    property <bool> fly: root.over-albums || (root.fly-open && root.over-fly);
+    property <bool> fly-open;
+    changed fly => { self.fly-open = self.fly; }
+    if root.fly: Rectangle {
+        x: root.width + 6px;
+        y: root.albums-y - 6px;
+        width: 256px;
+        height: root.fly-h;
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.bg-elev;
+        drop-shadow-blur: 40px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        VerticalLayout {
+            padding: 6px;
+            spacing: 2px;
+            Text {
+                height: 28px;
+                x: 8px;
+                text: I18n.t("nav2.dropAlbums", I18n.rev).to-uppercase();
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.6px;
+                color: Theme.text-faint;
+                vertical-alignment: center;
+            }
+            if HubState.albums.length == 0: Text {
+                x: 8px;
+                text: I18n.t("lib2.hub.noAlbums", I18n.rev);
+                font-size: 13px;
+                color: Theme.text-dim;
+            }
+            for a[i] in HubState.albums: dt := DropTarget {
+                key: "album:" + a.id;
+                height: 44px;
+                visible: i < 14;
+                border-radius: 12px;
+                background: self.hovered ? Theme.accent-soft : transparent;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 12px;
+                    VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 32px;
+                            height: 32px;
+                            border-radius: 8px;
+                            background: Theme.surface-2;
+                            clip: true;
+                            if a.has-cover: Image { source: a.cover; image-fit: cover; width: parent.width; height: parent.height; }
+                            if !a.has-cover: Image { source: PIcons.book-image; colorize: Theme.text-faint; width: 18px; height: 18px; }
+                        }
+                    }
+                    Text { text: a.name; font-size: 13.5px; font-weight: 500; color: dt.hovered ? Theme.text : Theme.text-dim; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                    Text { text: a.count > 0 ? a.count : ""; font-size: 11px; color: Theme.text-faint; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}

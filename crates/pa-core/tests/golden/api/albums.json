@@ -1,0 +1,40 @@
+{
+ "type": "AlbumsResponse",
+ "method": "GET",
+ "url": "/api/albums",
+ "response": {
+  "albums": [
+   {
+    "id": "2",
+    "name": "Boş",
+    "coverId": null,
+    "coverPicked": false,
+    "count": 0,
+    "photos": 0,
+    "videos": 0,
+    "from": null,
+    "to": null,
+    "order": "desc",
+    "created": 1793998163310,
+    "updated": 1793998163310,
+    "sort": 0
+   },
+   {
+    "id": "1",
+    "name": "Tatil ✈",
+    "coverId": "4",
+    "coverPicked": true,
+    "count": 6,
+    "photos": 4,
+    "videos": 1,
+    "from": 1793998143112,
+    "to": 1793998143132,
+    "order": "custom",
+    "created": 1793998163306,
+    "updated": 1793998163314,
+    "sort": 1
+   }
+  ]
+ },
+ "raw": "{\"albums\":[{\"id\":\"2\",\"name\":\"Boş\",\"coverId\":null,\"coverPicked\":false,\"count\":0,\"photos\":0,\"videos\":0,\"from\":null,\"to\":null,\"order\":\"desc\",\"created\":1793998163310,\"updated\":1793998163310,\"sort\":0},{\"id\":\"1\",\"name\":\"Tatil ✈\",\"coverId\":\"4\",\"coverPicked\":true,\"count\":6,\"photos\":4,\"videos\":1,\"from\":1793998143112,\"to\":1793998143132,\"order\":\"custom\",\"created\":1793998163306,\"updated\":1793998163314,\"sort\":1}]}"
+}

@@ -1,0 +1,209 @@
+// Jobs panel (gallery/JobsPanel.tsx) and the upload panel (upload/UploadPanel.tsx). Rust: src/pages/jobs.rs.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "../pages/icons.slint";
+import { Button, ButtonVariant, ButtonSize } from "../components/button.slint";
+import { ProgressBar, ProgressRing, Spinner } from "../components/feedback.slint";
+import { MenuLabel } from "../components/overlays.slint";
+
+export struct JobRowData {
+    id: string,
+    // "video-edit" | "slideshow" | "transfer"
+    kind: string,
+    title: string,
+    // "queued" | "running" | "done" | "error" | "canceled"
+    status: string,
+    progress: float,
+    line: string,
+    error: string,
+    result: string,
+}
+
+export struct UploadRowData {
+    name: string,
+    // "queued" | "uploading" | "processing" | "done" | "error" | "canceled"
+    status: string,
+    progress: float,
+    size: string,
+    error: string,
+}
+
+export global JobsState {
+    in property <[JobRowData]> jobs;
+    in property <int> active;
+    in property <bool> running;
+    in property <float> running-progress;
+    in property <bool> any-finished;
+    // uploads
+    in property <[UploadRowData]> uploads;
+    in-out property <bool> uploads-open;
+    in property <float> uploads-progress;
+    in property <string> uploads-sub;
+    in property <bool> uploads-active;
+    callback cancel(string);
+    callback clear();
+    callback open-result(string);
+    callback cancel-uploads();
+    callback refresh();
+}
+
+export component JobsPanel inherits VerticalLayout {
+    spacing: 4px;
+    HorizontalLayout {
+        MenuLabel { horizontal-stretch: 1; text: I18n.t("jobs.title", I18n.rev).to-uppercase(); }
+        if JobsState.any-finished: Text {
+            text: I18n.t("jobs.clear", I18n.rev);
+            font-size: 12px;
+            color: ca.has-hover ? Theme.text : Theme.text-faint;
+            vertical-alignment: center;
+            ca := TouchArea { mouse-cursor: pointer; clicked => { JobsState.clear(); } }
+        }
+    }
+    for j in JobsState.jobs: Rectangle {
+        border-radius: 12px;
+        background: Theme.surface;
+        height: jl.preferred-height;
+        jl := VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+            HorizontalLayout {
+                spacing: 10px;
+                VerticalLayout {
+                    alignment: center;
+                    Image {
+                        source: j.kind == "slideshow" ? PIcons.presentation : j.kind == "transfer" ? PIcons.arrow-up-down : PIcons.film;
+                        colorize: Theme.accent;
+                        width: 16px;
+                        height: 16px;
+                    }
+                }
+                Text { text: j.title; font-size: 13px; font-weight: 500; color: Theme.text; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
+                if j.status == "done": VerticalLayout { alignment: center; Image { source: PIcons.circle-check; colorize: Theme.ok; width: 16px; height: 16px; } }
+                if j.status == "error": VerticalLayout { alignment: center; Image { source: PIcons.circle-alert; colorize: Theme.danger; width: 16px; height: 16px; } }
+                if j.status == "canceled": VerticalLayout { alignment: center; Image { source: PIcons.ban; colorize: Theme.text-faint; width: 16px; height: 16px; } }
+                if j.status == "running" || j.status == "queued": VerticalLayout {
+                    alignment: center;
+                    Image {
+                        source: Icons.x;
+                        colorize: xa.has-hover ? Theme.text : Theme.text-faint;
+                        width: 16px;
+                        height: 16px;
+                        xa := TouchArea { mouse-cursor: pointer; clicked => { JobsState.cancel(j.id); } }
+                    }
+                }
+            }
+            if j.status == "running" || j.status == "queued": HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout { alignment: center; horizontal-stretch: 1; ProgressBar { value: j.progress; } }
+                Text {
+                    width: 36px;
+                    text: j.status == "queued" ? "…" : Math.round(j.progress * 100) + "%";
+                    font-size: 11px;
+                    color: Theme.text-faint;
+                    horizontal-alignment: right;
+                }
+            }
+            if j.line != "": Text { text: j.line; font-size: 11px; color: Theme.text-faint; overflow: elide; }
+            if j.status == "error" && j.error != "": Text { text: j.error; font-size: 12px; color: Theme.danger; wrap: word-wrap; }
+            if j.status == "done" && j.result != "": HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: I18n.t("jobs.open", I18n.rev) + " · " + j.result;
+                    variant: ButtonVariant.ghost;
+                    size: ButtonSize.sm;
+                    clicked => { JobsState.open-result(j.id); }
+                }
+            }
+        }
+    }
+}
+
+export component UploadPanel inherits Rectangle {
+    property <bool> expanded: true;
+    visible: JobsState.uploads-open && JobsState.uploads.length > 0;
+    width: 340px;
+    height: col.preferred-height;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.glass;
+    clip: true;
+    drop-shadow-blur: 40px;
+    drop-shadow-offset-y: 10px;
+    drop-shadow-color: Theme.shadow;
+    col := VerticalLayout {
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 12px;
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 12px;
+            VerticalLayout { alignment: center; ProgressRing { value: JobsState.uploads-progress; size: 26px; } }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text { text: I18n.t("upload.title", I18n.rev); font-size: 14px; font-weight: 600; color: Theme.text; }
+                Text { text: JobsState.uploads-sub; font-size: 12px; color: Theme.text-dim; overflow: elide; }
+            }
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 8px;
+                    background: ea.has-hover ? Theme.surface-2 : transparent;
+                    Image { source: Icons.chevron-down; colorize: Theme.text-faint; width: 16px; height: 16px; transform-rotation: root.expanded ? 0deg : 180deg; }
+                    ea := TouchArea { mouse-cursor: pointer; clicked => { root.expanded = !root.expanded; } }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 8px;
+                    background: xa.has-hover ? Theme.surface-2 : transparent;
+                    Image { source: Icons.x; colorize: Theme.text-faint; width: 16px; height: 16px; }
+                    xa := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            if JobsState.uploads-active { JobsState.cancel-uploads(); } else { JobsState.uploads-open = false; }
+                        }
+                    }
+                }
+            }
+        }
+        if root.expanded: Rectangle { height: 1px; background: Theme.border; }
+        if root.expanded: Flickable {
+            height: Math.min(256px, JobsState.uploads.length * 44px + 16px);
+            content-height: JobsState.uploads.length * 44px + 16px;
+            VerticalLayout {
+                padding: 8px;
+                for u in JobsState.uploads: HorizontalLayout {
+                    height: 44px;
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 10px;
+                    VerticalLayout {
+                        alignment: center;
+                        if u.status == "done": Image { source: PIcons.circle-check; colorize: Theme.ok; width: 16px; height: 16px; }
+                        if u.status == "error": Image { source: PIcons.circle-alert; colorize: Theme.danger; width: 16px; height: 16px; }
+                        if u.status == "processing": Spinner { size: 16px; fg: Theme.accent; }
+                        if u.status != "done" && u.status != "error" && u.status != "processing": Image { source: PIcons.file-up; colorize: Theme.text-faint; width: 16px; height: 16px; }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        spacing: 3px;
+                        Text { text: u.name; font-size: 13px; color: Theme.text; overflow: elide; }
+                        if u.status == "uploading" || u.status == "queued": ProgressBar { value: u.progress; height: 4px; }
+                        if u.status == "processing": Text { text: I18n.t("upload.extracting", I18n.rev); font-size: 11px; color: Theme.accent; }
+                        if u.status == "error": Text { text: u.error; font-size: 11px; color: Theme.danger; overflow: elide; }
+                    }
+                    Text { text: u.size; font-size: 11px; color: Theme.text-faint; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}

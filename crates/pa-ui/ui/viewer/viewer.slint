@@ -1,0 +1,740 @@
+// The viewer overlay (features/viewer/Viewer.tsx + Slide.tsx + InfoPanel.tsx, desktop layout):
+// background (blur / black / dark / tint), the pager with prev / current / next slides, zoom &
+// pan of the current picture, top bar actions, prev / next buttons, filmstrip, details panel,
+// video / audio player. Every gesture and animation is driven from src/viewer.rs.
+
+import { MiniMap } from "../map/mini.slint";
+import { MiniMapState } from "../map/state.slint";
+import { Theme, Motion, I18n } from "../theme.slint";
+import { VIcons } from "icons.slint";
+import { TooltipBubble } from "../components/button.slint";
+import { Spinner } from "../components/feedback.slint";
+import { ViewerState, SlideData, SlideKind, ActionItem, StripItem, InfoRow } from "state.slint";
+import { VideoBar, BigPlay } from "video.slint";
+
+// `IconButton tone="glass"` of the viewer: always light-on-dark
+export component GlassButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> active;
+    in property <bool> filled;
+    in property <color> icon-color: root.active ? Theme.accent-2 : #ffffff;
+    in property <length> size: 40px;
+    in property <length> icon-size: 20px;
+    in property <bool> tip-above;
+    callback clicked();
+    width: root.size;
+    height: root.size;
+    border-radius: root.size / 2;
+    // `.glass` (rgb(20 20 28 / .62)) + border-line, hover:bg-surface-3
+    background: ta.pressed ? #ffffff33 : ta.has-hover || root.filled ? #2a2a33d9 : #14141c9e;
+    border-width: 1px;
+    border-color: #ffffff14;
+    animate background { duration: Motion.fast; }
+    Image {
+        source: root.icon;
+        colorize: root.icon-color;
+        width: root.icon-size;
+        height: root.icon-size;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    property <bool> tip;
+    Timer {
+        interval: 600ms;
+        running: ta.has-hover && !root.tip;
+        triggered => { root.tip = true; }
+    }
+    changed hovered => { if !self.hovered { root.tip = false; } }
+    out property <bool> hovered: ta.has-hover;
+    TooltipBubble {
+        text: root.label;
+        show: root.tip && ta.has-hover && !ta.pressed && root.label != "";
+        x: (root.width - self.width) / 2;
+        y: root.tip-above ? -self.height - 6px : root.height + 6px;
+    }
+}
+
+// fit (contain) of an aspect into a box
+component Picture inherits Rectangle {
+    in property <SlideData> d;
+    in property <length> box-w;
+    in property <length> box-h;
+    in property <float> scale: 1;
+    in property <length> zx;
+    in property <length> zy;
+    in property <length> extra-y;
+    in property <float> extra-scale: 1;
+    // a decoded video frame covers the picture: the stills below it are not drawn (overdraw)
+    in property <bool> covered;
+    out property <length> fit-w: root.box-w / root.box-h > root.d.aspect ? root.box-h * root.d.aspect : root.box-w;
+    out property <length> fit-h: root.box-w / root.box-h > root.d.aspect ? root.box-h : root.box-w / root.d.aspect;
+    property <float> k: root.scale * root.extra-scale;
+    x: (root.box-w - root.fit-w * root.k) / 2 + root.zx;
+    y: (root.box-h - root.fit-h * root.k) / 2 + root.zy + root.extra-y;
+    width: root.fit-w * root.k;
+    height: root.fit-h * root.k;
+    if root.d.has-hash && !root.covered: Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.d.hash;
+        image-fit: fill;
+    }
+    if root.d.has-low && !root.covered: Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.d.low;
+        image-fit: fill;
+    }
+    if root.d.has-mid && !root.covered: Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.d.mid;
+        image-fit: fill;
+        opacity: 0;
+        init => { self.opacity = 1; }
+        animate opacity { duration: Motion.fast; }
+    }
+    if root.d.has-hi && !root.covered: Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.d.hi;
+        image-fit: fill;
+        opacity: 0;
+        init => { self.opacity = 1; }
+        animate opacity { duration: Motion.normal; }
+    }
+    @children
+}
+
+// audio has no picture: a cover card with the name / duration (the player bar sits below)
+component AudioCard inherits Rectangle {
+    in property <SlideData> d;
+    in property <length> avail-w;
+    width: Math.min(384px, root.avail-w - 48px);
+    height: lay.preferred-height;
+    border-radius: 24px;
+    border-width: 1px;
+    border-color: #ffffff1a;
+    background: #ffffff0f;
+    lay := VerticalLayout {
+        padding: 24px;
+        padding-bottom: 116px;
+        spacing: 20px;
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 160px;
+                height: 160px;
+                border-radius: 16px;
+                background: @linear-gradient(135deg, Theme.accent.with-alpha(0.55) 0%, Theme.accent-2.with-alpha(0.25) 100%);
+                Image { source: VIcons.music; colorize: #ffffffd9; width: 64px; height: 64px; }
+            }
+        }
+        VerticalLayout {
+            spacing: 2px;
+            Text {
+                text: root.d.name;
+                font-size: 16px;
+                font-weight: 600;
+                color: #ffffff;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+            if root.d.duration != "": Text {
+                text: root.d.duration;
+                font-size: 14px;
+                color: #ffffff99;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}
+
+component Slide inherits Rectangle {
+    in property <SlideData> d;
+    in property <bool> active;
+    in property <float> scale: 1;
+    in property <length> zx;
+    in property <length> zy;
+    in property <length> extra-y;
+    in property <float> extra-scale: 1;
+    in property <bool> hide-picture;
+    out property <length> pic-x: pic.x;
+    out property <length> pic-y: pic.y;
+    out property <length> pic-w: pic.width;
+    out property <length> pic-h: pic.height;
+    clip: false;
+    if root.d.kind == SlideKind.audio: AudioCard {
+        d: root.d;
+        avail-w: root.width;
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2 + root.extra-y;
+    }
+    pic := Picture {
+        visible: root.d.kind != SlideKind.audio && root.d.kind != SlideKind.loading && !root.hide-picture;
+        d: root.d;
+        box-w: root.width;
+        box-h: root.height;
+        scale: root.scale;
+        zx: root.zx;
+        zy: root.zy;
+        extra-y: root.extra-y;
+        extra-scale: root.extra-scale;
+        // (no rounded clip on videos: femtovg renders a rounded clip into an offscreen layer, i.e.
+        // one extra full-size pass per video frame)
+        covered: root.active && root.d.kind == SlideKind.video && ViewerState.video-active && ViewerState.has-frame;
+        // decoded video frames on the active slide
+        if root.active && root.d.kind == SlideKind.video && ViewerState.video-active && ViewerState.has-frame: Image {
+            width: parent.width;
+            height: parent.height;
+            source: ViewerState.frame;
+            image-fit: fill;
+        }
+        // not active yet / paused before the first frame: the play badge of Slide.tsx
+        if root.d.kind == SlideKind.video && !root.active: Rectangle {
+            width: 64px;
+            height: 64px;
+            border-radius: 32px;
+            background: #00000073;
+            Image { x: 18px; source: VIcons.play-fill; colorize: #ffffff; width: 32px; height: 32px; }
+        }
+    }
+    if root.d.kind == SlideKind.loading: Text {
+        text: I18n.t("mobile.viewer.loading", I18n.rev);
+        color: #ffffff99;
+        font-size: 14px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component StripThumb inherits Rectangle {
+    in property <StripItem> d;
+    callback clicked(int);
+    x: root.d.x - self.width / 2;
+    y: 6px;
+    width: root.d.current ? 80px : 40px;
+    height: 56px;
+    animate width { duration: Motion.page; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    border-radius: 8px;
+    clip: true;
+    opacity: root.d.current ? 1 : ta.has-hover ? 0.9 : 0.5;
+    animate opacity { duration: Motion.fast; }
+    background: #ffffff1a;
+    if root.d.audio: Image { source: VIcons.music; colorize: #ffffffb3; width: 20px; height: 20px; }
+    if root.d.has-image: Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.d.image;
+        image-fit: cover;
+    }
+    if root.d.current: Rectangle {
+        border-radius: 8px;
+        border-width: 2px;
+        border-color: #ffffff;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(root.d.index); }
+    }
+}
+
+component InfoRowView inherits HorizontalLayout {
+    in property <InfoRow> d;
+    callback link(string);
+    padding-top: 10px;
+    padding-bottom: 10px;
+    spacing: 12px;
+    VerticalLayout {
+        alignment: start;
+        padding-top: 2px;
+        Image {
+            width: 18px;
+            height: 18px;
+            colorize: Theme.text-faint;
+            source: root.d.icon == "calendar" ? VIcons.calendar
+                : root.d.icon == "maximize" ? VIcons.maximize
+                : root.d.icon == "hard-drive" ? VIcons.hard-drive
+                : root.d.icon == "clock" ? VIcons.clock
+                : root.d.icon == "film" ? VIcons.film
+                : root.d.icon == "camera" ? VIcons.camera
+                : root.d.icon == "aperture" ? VIcons.aperture
+                : root.d.icon == "map-pin" ? VIcons.map-pin
+                : root.d.icon == "map-pin-off" ? VIcons.map-pin-off
+                : root.d.icon == "folder-open" ? VIcons.folder-open
+                : VIcons.file-image;
+        }
+    }
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: 2px;
+        Text {
+            // uppercase labels (tracking-wide)
+            text: root.d.label;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            color: Theme.text-faint;
+        }
+        Text {
+            text: root.d.value;
+            font-size: root.d.mono ? 12px : 14px;
+            font-family: root.d.mono ? "DejaVu Sans Mono" : Theme.font-sans;
+            color: root.d.dim ? Theme.text-dim : Theme.text;
+            wrap: word-wrap;
+        }
+        if root.d.sub != "": Text {
+            text: root.d.sub;
+            font-size: 12px;
+            color: Theme.text-dim;
+            wrap: word-wrap;
+        }
+        // mini map of the location row
+        if root.d.link == "open-map" && MiniMapState.on: MiniMap {
+            clicked => { root.link(root.d.link); }
+        }
+        if root.d.link != "": Text {
+            text: root.d.link-label;
+            font-size: 13px;
+            font-weight: 500;
+            color: Theme.accent;
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.link(root.d.link); }
+            }
+        }
+    }
+}
+
+component InfoPanel inherits Rectangle {
+    callback close();
+    width: 340px;
+    background: Theme.bg-elev.with-alpha(0.95);
+    // swallow clicks (no stage gestures through the panel)
+    TouchArea { }
+    Rectangle {
+        x: 0;
+        width: 1px;
+        background: #ffffff1a;
+    }
+    VerticalLayout {
+        HorizontalLayout {
+            height: 64px;
+            padding-left: 20px;
+            padding-right: 12px;
+            Text {
+                text: I18n.t("viewer.details", I18n.rev);
+                font-family: Theme.font-display;
+                font-size: 18px;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 8px;
+                    background: cta.has-hover ? Theme.surface-2 : transparent;
+                    Image { source: VIcons.x; colorize: Theme.text-dim; width: 18px; height: 18px; }
+                    cta := TouchArea { mouse-cursor: pointer; clicked => { root.close(); } }
+                }
+            }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            VerticalLayout {
+                alignment: start;
+                padding-left: 20px;
+                padding-right: 20px;
+                padding-bottom: 24px;
+                Text {
+                    text: ViewerState.info-name;
+                    font-size: 15px;
+                    font-weight: 500;
+                    color: Theme.text;
+                    wrap: word-wrap;
+                }
+                Rectangle { height: 8px; }
+                for r[i] in ViewerState.info-rows: VerticalLayout {
+                    if i > 0: Rectangle { height: 1px; background: Theme.border; }
+                    InfoRowView {
+                        d: r;
+                        link(l) => { ViewerState.info-link(l); }
+                    }
+                }
+                if ViewerState.info-loading: HorizontalLayout {
+                    alignment: center;
+                    padding: 12px;
+                    Spinner { }
+                }
+            }
+        }
+    }
+}
+
+component MenuRow inherits Rectangle {
+    in property <ActionItem> d;
+    callback clicked();
+    height: 36px;
+    border-radius: 12px;
+    background: ta.has-hover ? (root.d.danger ? Theme.danger.with-alpha(0.1) : Theme.surface-2) : transparent;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.d.icon;
+                colorize: root.d.danger ? Theme.danger : root.d.active ? Theme.accent-2 : Theme.text;
+                width: 16px;
+                height: 16px;
+            }
+        }
+        Text {
+            text: root.d.label;
+            color: root.d.danger ? Theme.danger : Theme.text;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component ViewerOverlay inherits Rectangle {
+    // the stage (`top-16 bottom-20 left-16 right-16 | right-[356px]`)
+    property <length> stage-x: 64px;
+    property <length> stage-y: 64px;
+    property <length> info-w: ViewerState.info-open ? 340px : 0px;
+    animate info-w { duration: 300ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    property <length> stage-w: Math.max(100px, root.width - 64px - 64px - (ViewerState.info-open ? 292px : 0px));
+    property <length> stage-h: Math.max(100px, root.height - 64px - 80px);
+    animate stage-w { duration: 300ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    property <float> chrome-k: ViewerState.chrome && !ViewerState.closing && ViewerState.appear > 0.5 ? 1 : 0;
+    animate chrome-k { duration: Motion.normal; easing: ease-out; }
+    property <float> dismiss-k: 1 - Math.min(1, ViewerState.dismiss-y / Math.max(1px, root.stage-h * 0.55));
+    property <bool> more-open;
+    property <length> more-x;
+    changed stage-w => { root.report(); }
+    changed stage-h => { root.report(); }
+    init => { root.report(); fs.focus(); }
+    function report() {
+        ViewerState.stage-changed(root.stage-x, root.stage-y, root.stage-w, root.stage-h);
+    }
+    public function focus-viewer() { fs.focus(); }
+
+    // ── background ──
+    Rectangle {
+        opacity: ViewerState.appear * root.dismiss-k;
+        background: ViewerState.bg == "black" ? #000000 : ViewerState.bg == "tint" ? Theme.accent.mix(#060609, 0.16) : #060609;
+        if ViewerState.bg == "blur" && ViewerState.has-backdrop: Image {
+            width: parent.width;
+            height: parent.height;
+            source: ViewerState.backdrop;
+            image-fit: cover;
+            opacity: 0.28;
+        }
+    }
+
+    fs := FocusScope {
+        key-pressed(e) => {
+            if ViewerState.key(e.text, e.modifiers.control || e.modifiers.meta, e.modifiers.shift, e.modifiers.alt) {
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // ── stage ──
+    stage := Rectangle {
+        clip: true;
+        x: root.stage-x;
+        y: root.stage-y;
+        width: root.stage-w;
+        height: root.stage-h;
+        // pointer input of the whole stage (pager, pan, zoom, dismiss, double-click)
+        TouchArea {
+            mouse-cursor: ViewerState.grabbing ? grabbing : ViewerState.zoomed ? grab : default;
+            pointer-event(e) => {
+                ViewerState.poke();
+                if e.kind == PointerEventKind.down {
+                    fs.focus();
+                    ViewerState.pointer(0, e.button == PointerEventButton.left ? 0 : e.button == PointerEventButton.right ? 1 : 2, self.mouse-x, self.mouse-y);
+                } else if e.kind == PointerEventKind.up {
+                    ViewerState.pointer(1, e.button == PointerEventButton.left ? 0 : e.button == PointerEventButton.right ? 1 : 2, self.mouse-x, self.mouse-y);
+                } else if e.kind == PointerEventKind.move {
+                    ViewerState.pointer(2, self.pressed ? 0 : -1, self.mouse-x, self.mouse-y);
+                } else {
+                    ViewerState.pointer(3, 0, self.mouse-x, self.mouse-y);
+                }
+            }
+            scroll-event(e) => {
+                ViewerState.wheel(self.mouse-x, self.mouse-y, e.delta-y, e.modifiers.control || e.modifiers.meta);
+                accept
+            }
+        }
+        Rectangle {
+            x: ViewerState.track-x;
+            if ViewerState.has-prev: Slide {
+                x: -(stage.width + 24px);
+                width: stage.width;
+                height: stage.height;
+                d: ViewerState.prev;
+            }
+            cur := Slide {
+                x: 0;
+                width: stage.width;
+                height: stage.height;
+                d: ViewerState.cur;
+                active: true;
+                scale: ViewerState.scale;
+                zx: ViewerState.zx;
+                zy: ViewerState.zy;
+                extra-y: ViewerState.dismiss-y + ViewerState.lift-y;
+                extra-scale: 1 - Math.min(0.3, ViewerState.dismiss-y / Math.max(1px, stage.height) / 1.4);
+                hide-picture: ViewerState.hero-on;
+            }
+            if ViewerState.has-next: Slide {
+                x: stage.width + 24px;
+                width: stage.width;
+                height: stage.height;
+                d: ViewerState.next;
+            }
+        }
+        // video / audio player of the current slide
+        if ViewerState.video-active && ViewerState.track-x == 0 && !ViewerState.hero-on: Rectangle {
+            if !ViewerState.playing && ViewerState.cur.kind == SlideKind.video: BigPlay {
+                clicked => { ViewerState.play-toggle(); }
+            }
+            if ViewerState.buffering && ViewerState.playing: Spinner {
+                size: 32px;
+                fg: #ffffffcc;
+            }
+            VideoBar {
+                x: ViewerState.cur.kind == SlideKind.audio ? (parent.width - self.width) / 2 : 16px;
+                width: ViewerState.cur.kind == SlideKind.audio ? Math.min(352px, parent.width - 32px) : parent.width - 32px;
+                y: ViewerState.cur.kind == SlideKind.audio ? parent.height / 2 + 72px : parent.height - self.height - 16px;
+                compact-audio: ViewerState.cur.kind == SlideKind.audio;
+            }
+        }
+    }
+
+    // ── shared element (open / close) ──
+    if ViewerState.hero-on: Rectangle {
+        x: ViewerState.hero-x;
+        y: ViewerState.hero-y;
+        width: ViewerState.hero-w;
+        height: ViewerState.hero-h;
+        clip: true;
+        border-radius: Theme.tile-radius * (1 - ViewerState.appear);
+        Image {
+            width: parent.width;
+            height: parent.height;
+            source: ViewerState.hero-image;
+            image-fit: cover;
+        }
+    }
+
+    // ── prev / next ──
+    if ViewerState.has-prev: GlassButton {
+        x: 12px;
+        y: (root.height - self.height) / 2;
+        size: 48px;
+        icon-size: 24px;
+        icon: VIcons.chevron-left;
+        label: I18n.t("viewer.prev", I18n.rev);
+        opacity: root.chrome-k * (ViewerState.zoomed ? 0 : 1);
+        visible: self.opacity > 0.01;
+        clicked => { ViewerState.page(-1); }
+    }
+    if ViewerState.has-next: GlassButton {
+        x: root.width - self.width - 12px - root.info-w;
+        y: (root.height - self.height) / 2;
+        size: 48px;
+        icon-size: 24px;
+        icon: VIcons.chevron-right;
+        label: I18n.t("viewer.next", I18n.rev);
+        opacity: root.chrome-k * (ViewerState.zoomed ? 0 : 1);
+        visible: self.opacity > 0.01;
+        clicked => { ViewerState.page(1); }
+    }
+
+    // ── filmstrip ──
+    if ViewerState.filmstrip && ViewerState.strip.length > 1: Rectangle {
+        x: 0;
+        y: root.height - 80px + (1 - root.chrome-k) * 20px;
+        width: root.width - root.info-w;
+        height: 68px;
+        opacity: root.chrome-k;
+        visible: self.opacity > 0.01;
+        clip: true;
+        TouchArea { }
+        property <length> shift: self.width / 2 - ViewerState.strip-center;
+        Rectangle {
+            x: parent.shift;
+            animate x { duration: Motion.page; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+            for s in ViewerState.strip: StripThumb {
+                d: s;
+                clicked(i) => { ViewerState.strip-click(i); }
+            }
+        }
+    }
+
+    // ── details panel ──
+    if ViewerState.info-open: InfoPanel {
+        x: root.width - root.info-w;
+        y: 0;
+        height: root.height;
+        close => { ViewerState.toggle-info(); }
+    }
+
+    // ── top bar ──
+    bar := HorizontalLayout {
+        x: 0;
+        y: (root.chrome-k - 1) * 20px;
+        width: root.width - root.info-w;
+        height: 64px;
+        opacity: root.chrome-k;
+        visible: self.opacity > 0.01;
+        padding-left: 20px;
+        padding-right: 12px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            GlassButton {
+                icon: VIcons.x;
+                label: I18n.t("common.close", I18n.rev);
+                clicked => { ViewerState.close(); }
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            padding-left: 8px;
+            Text {
+                text: ViewerState.title;
+                font-size: 14px;
+                font-weight: 600;
+                color: #ffffff;
+                overflow: elide;
+            }
+            Text {
+                text: ViewerState.subtitle;
+                font-size: 12px;
+                color: #ffffff99;
+                overflow: elide;
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: end;
+            if ViewerState.is-image: VerticalLayout {
+                alignment: center;
+                GlassButton {
+                    icon: VIcons.zoom-out;
+                    label: I18n.t("viewer.zoomOut", I18n.rev);
+                    clicked => { ViewerState.zoom-by(-1); }
+                }
+            }
+            if ViewerState.is-image: VerticalLayout {
+                alignment: center;
+                GlassButton {
+                    icon: VIcons.zoom-in;
+                    label: I18n.t("viewer.zoomIn", I18n.rev);
+                    clicked => { ViewerState.zoom-by(1); }
+                }
+            }
+            for a in ViewerState.top-actions: VerticalLayout {
+                alignment: center;
+                GlassButton {
+                    icon: a.icon;
+                    label: a.label;
+                    active: a.active;
+                    clicked => { ViewerState.action(a.id); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                GlassButton {
+                    icon: VIcons.presentation;
+                    label: I18n.t("viewer.slideshow", I18n.rev);
+                    clicked => { ViewerState.action("slideshow-from-here"); }
+                }
+            }
+            if ViewerState.more-actions.length > 0: VerticalLayout {
+                alignment: center;
+                more-btn := GlassButton {
+                    icon: VIcons.ellipsis-vertical;
+                    label: I18n.t("mobile.viewer.more", I18n.rev);
+                    filled: root.more-open;
+                    clicked => {
+                        root.more-x = self.absolute-position.x + self.width;
+                        root.more-open = !root.more-open;
+                        ViewerState.menu-open = root.more-open;
+                    }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                GlassButton {
+                    icon: VIcons.info;
+                    label: I18n.t("viewer.info", I18n.rev);
+                    filled: ViewerState.info-open;
+                    clicked => { ViewerState.toggle-info(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                GlassButton {
+                    icon: ViewerState.fullscreen ? VIcons.minimize : VIcons.maximize;
+                    label: I18n.t("viewer.fullscreen", I18n.rev);
+                    clicked => { ViewerState.toggle-fullscreen(); }
+                }
+            }
+        }
+    }
+
+    // ── "more" menu ──
+    if root.more-open: Rectangle {
+        TouchArea {
+            clicked => { root.more-open = false; ViewerState.menu-open = false; }
+        }
+        Rectangle {
+            x: Math.max(8px, root.more-x - self.width);
+            y: 60px;
+            width: 240px;
+            height: ml.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            drop-shadow-blur: 40px;
+            drop-shadow-offset-y: 10px;
+            drop-shadow-color: #00000099;
+            TouchArea { }
+            ml := VerticalLayout {
+                padding: 6px;
+                for a in ViewerState.more-actions: MenuRow {
+                    d: a;
+                    clicked => {
+                        root.more-open = false;
+                        ViewerState.menu-open = false;
+                        ViewerState.action(a.id);
+                    }
+                }
+            }
+        }
+    }
+}

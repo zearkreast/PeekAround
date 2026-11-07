@@ -1,0 +1,31 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/90",
+ "response": {
+  "id": "90",
+  "folderId": "1",
+  "dir": "Fotoğraflar",
+  "name": "ekran_1.webp",
+  "ext": "webp",
+  "kind": "image",
+  "size": 13550,
+  "mtime": 1793998143109,
+  "width": 1600,
+  "height": 1200,
+  "duration": null,
+  "takenAt": 1793998143109,
+  "localAt": 1793998143109,
+  "flags": 0,
+  "thumbhash": "J4gNbYR5d3ePeHd0iHh3iXd/x/h4",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/ekran_1.webp",
+  "exif": null,
+  "gps": null,
+  "place": null,
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"90\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar\",\"name\":\"ekran_1.webp\",\"ext\":\"webp\",\"kind\":\"image\",\"size\":13550,\"mtime\":1793998143109,\"width\":1600,\"height\":1200,\"duration\":null,\"takenAt\":1793998143109,\"localAt\":1793998143109,\"flags\":0,\"thumbhash\":\"J4gNbYR5d3ePeHd0iHh3iXd/x/h4\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/ekran_1.webp\",\"exif\":null,\"gps\":null,\"place\":null,\"camera\":null,\"tzOffset\":null}"
+}

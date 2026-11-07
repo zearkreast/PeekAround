@@ -1,0 +1,24 @@
+{
+ "type": "Settings",
+ "method": "PATCH",
+ "url": "/api/settings",
+ "body": {
+  "homeTimeZone": "Europe/Istanbul",
+  "mapTiles": "topo"
+ },
+ "response": {
+  "zipAction": "ask",
+  "homeTimeZone": "Europe/Istanbul",
+  "mapTiles": "topo",
+  "tileCacheMb": 512,
+  "editSuffix": "_edit",
+  "showHidden": false,
+  "tempSessionHours": 24,
+  "hostBrowseRoots": [],
+  "remoteCacheMb": 2048,
+  "thumbQuality": "normal",
+  "indexIntensity": "normal",
+  "hwAccel": false
+ },
+ "raw": "{\"zipAction\":\"ask\",\"homeTimeZone\":\"Europe/Istanbul\",\"mapTiles\":\"topo\",\"tileCacheMb\":512,\"editSuffix\":\"_edit\",\"showHidden\":false,\"tempSessionHours\":24,\"hostBrowseRoots\":[],\"remoteCacheMb\":2048,\"thumbQuality\":\"normal\",\"indexIntensity\":\"normal\",\"hwAccel\":false}"
+}

@@ -1,0 +1,9 @@
+{
+ "type": "FontsResponse",
+ "method": "GET",
+ "url": "/api/fonts",
+ "response": {
+  "fonts": []
+ },
+ "raw": "{\"fonts\":[]}"
+}

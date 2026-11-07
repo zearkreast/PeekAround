@@ -1,0 +1,56 @@
+{
+ "type": "LibrariesResponse",
+ "method": "GET",
+ "url": "/api/libraries",
+ "response": {
+  "libraries": [
+   {
+    "id": "1",
+    "name": "Test",
+    "color": "#8b5cf6",
+    "icon": "images",
+    "sort": 0,
+    "folders": [
+     {
+      "id": "1",
+      "path": "/tmp/claude-0/-home-user/0be13da1-d5a1-51d7-96bc-92ae259ef06d/scratchpad/r1/lib",
+      "name": "lib",
+      "libraryId": "1",
+      "temp": false,
+      "expiresAt": null,
+      "sourceName": null,
+      "mediaCount": 98,
+      "device": null,
+      "remote": null
+     }
+    ],
+    "mediaCount": 98,
+    "coverId": null,
+    "options": {
+     "exclude": [
+      "Thumbnails",
+      "*.tmp"
+     ],
+     "minBytes": 10,
+     "showHidden": null
+    }
+   }
+  ],
+  "temp": [
+   {
+    "id": "2",
+    "path": "/tmp/claude-0/-home-user/0be13da1-d5a1-51d7-96bc-92ae259ef06d/scratchpad/r1/data/temp/20e575e6-ad0d-4719-a6a7-3b3fe4757e8c/content",
+    "name": "düğün_albümü",
+    "libraryId": null,
+    "temp": true,
+    "expiresAt": 1794084564367,
+    "sourceName": "düğün_albümü.zip",
+    "mediaCount": 5,
+    "device": null,
+    "remote": null
+   }
+  ],
+  "devices": []
+ },
+ "raw": "{\"libraries\":[{\"id\":\"1\",\"name\":\"Test\",\"color\":\"#8b5cf6\",\"icon\":\"images\",\"sort\":0,\"folders\":[{\"id\":\"1\",\"path\":\"/tmp/claude-0/-home-user/0be13da1-d5a1-51d7-96bc-92ae259ef06d/scratchpad/r1/lib\",\"name\":\"lib\",\"libraryId\":\"1\",\"temp\":false,\"expiresAt\":null,\"sourceName\":null,\"mediaCount\":98,\"device\":null,\"remote\":null}],\"mediaCount\":98,\"coverId\":null,\"options\":{\"exclude\":[\"Thumbnails\",\"*.tmp\"],\"minBytes\":10,\"showHidden\":null}}],\"temp\":[{\"id\":\"2\",\"path\":\"/tmp/claude-0/-home-user/0be13da1-d5a1-51d7-96bc-92ae259ef06d/scratchpad/r1/data/temp/20e575e6-ad0d-4719-a6a7-3b3fe4757e8c/content\",\"name\":\"düğün_albümü\",\"libraryId\":null,\"temp\":true,\"expiresAt\":1794084564367,\"sourceName\":\"düğün_albümü.zip\",\"mediaCount\":5,\"device\":null,\"remote\":null}],\"devices\":[]}"
+}

@@ -1,0 +1,1 @@
+[{"args":[-30],"out":"night"},{"args":[-8],"out":"twilight"},{"args":[-8.0001],"out":"night"},{"args":[-6],"out":"twilight"},{"args":[-4],"out":"golden"},{"args":[-4.0001],"out":"twilight"},{"args":[0],"out":"golden"},{"args":[3],"out":"golden"},{"args":[6],"out":"golden"},{"args":[6.0001],"out":"day"},{"args":[30],"out":"day"},{"args":[90],"out":"day"}]

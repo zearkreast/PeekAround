@@ -1,0 +1,31 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/3",
+ "response": {
+  "id": "3",
+  "folderId": "1",
+  "dir": "Ekran Görüntüleri",
+  "name": "IMG_7781.png",
+  "ext": "png",
+  "kind": "image",
+  "size": 80126,
+  "mtime": 1793998143112,
+  "width": 1170,
+  "height": 2532,
+  "duration": null,
+  "takenAt": 1793998143112,
+  "localAt": 1793998143112,
+  "flags": 1,
+  "thumbhash": "9pYGEwRKcQiHgXATOn9N3fg=",
+  "favorite": true,
+  "playback": "direct",
+  "path": "lib/Ekran Görüntüleri/IMG_7781.png",
+  "exif": null,
+  "gps": null,
+  "place": null,
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"3\",\"folderId\":\"1\",\"dir\":\"Ekran Görüntüleri\",\"name\":\"IMG_7781.png\",\"ext\":\"png\",\"kind\":\"image\",\"size\":80126,\"mtime\":1793998143112,\"width\":1170,\"height\":2532,\"duration\":null,\"takenAt\":1793998143112,\"localAt\":1793998143112,\"flags\":1,\"thumbhash\":\"9pYGEwRKcQiHgXATOn9N3fg=\",\"favorite\":true,\"playback\":\"direct\",\"path\":\"lib/Ekran Görüntüleri/IMG_7781.png\",\"exif\":null,\"gps\":null,\"place\":null,\"camera\":null,\"tzOffset\":null}"
+}

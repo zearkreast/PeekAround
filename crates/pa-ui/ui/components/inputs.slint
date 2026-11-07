@@ -1,0 +1,332 @@
+// Input, Switch, Checkbox, Slider, Segmented, ColorSwatches (components/ui/index.tsx)
+
+import { Theme, Motion } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Icon } from "icon.slint";
+
+export component TextField inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder;
+    in property <image> icon;
+    in property <bool> has-icon;
+    in property <bool> enabled: true;
+    out property <bool> focused: input.has-focus;
+    callback accepted(string);
+    callback edited(string);
+    public function focus-input() { input.focus(); }
+    public function blur-input() { input.clear-focus(); }
+
+    height: 40px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.accent.with-alpha(0.6) : Theme.border;
+    background: input.has-focus ? Theme.surface-2 : Theme.surface;
+    animate border-color, background { duration: Motion.fast; }
+
+    if root.has-icon: Image {
+        x: 12px;
+        source: root.icon;
+        colorize: Theme.text-faint;
+        width: 16px;
+        height: 16px;
+    }
+    TouchArea {
+        mouse-cursor: MouseCursor.text;
+        clicked => { input.focus(); }
+    }
+    input := TextInput {
+        x: root.has-icon ? 36px : 12px;
+        width: parent.width - self.x - 12px;
+        height: parent.height;
+        text <=> root.text;
+        enabled: root.enabled;
+        color: Theme.text;
+        font-size: 14px;
+        vertical-alignment: center;
+        single-line: true;
+        selection-background-color: Theme.accent.with-alpha(0.45);
+        selection-foreground-color: Theme.text;
+        accepted => { root.accepted(self.text); }
+        edited => { root.edited(self.text); }
+    }
+    if root.text == "": Text {
+        x: input.x;
+        width: input.width;
+        text: root.placeholder;
+        color: Theme.text-faint;
+        font-size: 14px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+export component Switch inherits Rectangle {
+    in-out property <bool> checked;
+    in property <bool> enabled: true;
+    callback toggled(bool);
+    width: 44px;
+    height: 24px;
+    border-radius: 12px;
+    opacity: enabled ? 1 : 0.5;
+    background: checked ? Theme.accent : Theme.surface-3;
+    animate background { duration: Motion.normal; }
+    knob := Rectangle {
+        x: root.checked ? 22px : 2px;
+        y: 2px;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: #ffffff;
+        drop-shadow-blur: 3px;
+        drop-shadow-color: #00000040;
+        drop-shadow-offset-y: 1px;
+        // spring-ish overshoot like motion's spring(600, 35)
+        animate x { duration: Motion.normal; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    }
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+export component Checkbox inherits HorizontalLayout {
+    in-out property <bool> checked;
+    in property <string> label;
+    in property <string> hint;
+    callback toggled(bool);
+    spacing: 12px;
+    VerticalLayout {
+        alignment: start;
+        padding-top: 2px;
+        box := Rectangle {
+            width: 20px;
+            height: 20px;
+            border-radius: 6px;
+            border-width: root.checked ? 0px : 1px;
+            border-color: Theme.border-strong;
+            background: root.checked ? Theme.accent : Theme.surface;
+            animate background { duration: Motion.fast; }
+            Image {
+                source: Icons.check-heavy;
+                colorize: #ffffff;
+                width: root.checked ? 14px : 0px;
+                height: self.width;
+                animate width { duration: Motion.normal; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: start;
+        Text { text: root.label; font-size: 14px; color: Theme.text; }
+        if root.hint != "": Text { text: root.hint; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+// range input (`.peek-range`): 4px track filled with the accent, 16px white thumb
+export component Slider inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value-text;
+    in-out property <float> value;
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    in property <float> step: 1;
+    callback changed-value(float);
+    callback committed(float);
+    spacing: 4px;
+    if root.label != "" || root.value-text != "": HorizontalLayout {
+        Text { text: root.label; font-size: 13px; color: Theme.text-dim; horizontal-stretch: 1; }
+        Text { text: root.value-text; font-size: 13px; color: Theme.text-faint; }
+    }
+    track := Rectangle {
+        height: 22px;
+        property <float> f: (root.value - root.minimum) / Math.max(0.0001, root.maximum - root.minimum);
+        Rectangle {
+            y: (parent.height - self.height) / 2;
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.surface-3;
+        }
+        Rectangle {
+            x: 0;
+            y: (parent.height - self.height) / 2;
+            width: parent.width * parent.f;
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.accent;
+        }
+        thumb := Rectangle {
+            property <length> s: ta.pressed ? 20px : 16px;
+            animate s { duration: Motion.fast; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            width: s;
+            height: s;
+            x: (parent.width - 16px) * parent.f - (s - 16px) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: s / 2;
+            background: #ffffff;
+            drop-shadow-blur: 6px;
+            drop-shadow-color: #00000059;
+            drop-shadow-offset-y: 1px;
+        }
+        ta := TouchArea {
+            mouse-cursor: pointer;
+            function set-from(px: length) {
+                let f = Math.clamp((px - 8px) / Math.max(1px, self.width - 16px), 0, 1);
+                let raw = root.minimum + f * (root.maximum - root.minimum);
+                let v = Math.clamp(Math.round(raw / root.step) * root.step, root.minimum, root.maximum);
+                if v != root.value {
+                    root.value = v;
+                    root.changed-value(v);
+                }
+            }
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down {
+                    self.set-from(self.mouse-x);
+                }
+                if e.kind == PointerEventKind.up {
+                    root.committed(root.value);
+                }
+            }
+            moved => { self.set-from(self.mouse-x); }
+        }
+    }
+}
+
+export struct SegOption {
+    value: string,
+    label: string,
+    icon: image,
+    has-icon: bool,
+    tooltip: string,
+}
+
+// segmented control with a sliding pill (motion layoutId)
+export component Segmented inherits Rectangle {
+    in property <[SegOption]> options;
+    in-out property <string> value;
+    in property <bool> small;
+    // stretch the segments to the full width (`[&>button]:flex-1`)
+    in property <bool> fill;
+    callback changed-value(string);
+    property <length> pill-x;
+    property <length> pill-w;
+    property <bool> placed;
+
+    height: small ? 32px : 36px;
+    horizontal-stretch: fill ? 1 : 0;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface;
+
+    Rectangle {
+        x: root.pill-x;
+        y: 2px;
+        width: root.pill-w;
+        height: parent.height - 4px;
+        visible: root.placed;
+        border-radius: root.small ? 9px : 10px;
+        background: Theme.surface-3;
+        drop-shadow-blur: 2px;
+        drop-shadow-color: #00000020;
+        drop-shadow-offset-y: 1px;
+        animate x, width { duration: Motion.normal; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    }
+    lay := HorizontalLayout {
+        padding: 2px;
+        for opt in root.options: seg := Rectangle {
+            property <bool> selected: opt.value == root.value;
+            horizontal-stretch: root.fill ? 1 : 0;
+            min-width: row.preferred-width + (root.small ? 20px : 24px);
+            function place() {
+                if self.selected {
+                    root.pill-x = self.x;
+                    root.pill-w = self.width;
+                    root.placed = true;
+                }
+            }
+            init => { self.place(); }
+            changed selected => { self.place(); }
+            changed x => { self.place(); }
+            changed width => { self.place(); }
+            row := HorizontalLayout {
+                alignment: center;
+                spacing: 6px;
+                if opt.has-icon: Icon {
+                    source: opt.icon;
+                    tint: seg.selected ? Theme.text : sta.has-hover ? Theme.text-dim : Theme.text-faint;
+                    size: 16px;
+                }
+                if opt.label != "": Text {
+                    text: opt.label;
+                    font-size: root.small ? 12px : 13px;
+                    font-weight: 500;
+                    color: seg.selected ? Theme.text : sta.has-hover ? Theme.text-dim : Theme.text-faint;
+                    vertical-alignment: center;
+                    animate color { duration: Motion.fast; }
+                }
+            }
+            sta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    if root.value != opt.value {
+                        root.value = opt.value;
+                        root.changed-value(opt.value);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// accent colour swatches (ColorSwatches); no custom colour picker yet
+export component ColorSwatches inherits HorizontalLayout {
+    in property <[color]> colors;
+    in property <color> value;
+    callback picked(color);
+    spacing: 8px;
+    for c in root.colors: Rectangle {
+        property <bool> on: c == root.value;
+        width: 28px;
+        height: 28px;
+        // ring-accent: 2px accent ring + soft halo
+        Rectangle {
+            width: parent.on ? 36px : 28px;
+            height: self.width;
+            border-radius: self.width / 2;
+            background: parent.on ? c.with-alpha(0.25) : transparent;
+            animate width { duration: Motion.fast; }
+        }
+        Rectangle {
+            width: parent.on ? 32px : 28px;
+            height: self.width;
+            border-radius: self.width / 2;
+            background: parent.on ? c : transparent;
+            animate width { duration: Motion.fast; }
+        }
+        Rectangle {
+            property <length> s: sw.has-hover && !parent.on ? 31px : 28px;
+            animate s { duration: Motion.fast; }
+            width: s;
+            height: s;
+            border-radius: s / 2;
+            background: c;
+            border-width: parent.on ? 2px : 0px;
+            border-color: Theme.bg-elev;
+        }
+        sw := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.picked(c); }
+        }
+    }
+}

@@ -1,0 +1,15 @@
+{
+ "type": "MegaAccountStatus",
+ "method": "GET",
+ "url": "/api/remote/account",
+ "response": {
+  "loggedIn": false,
+  "email": null,
+  "type": null,
+  "plan": null,
+  "transfer": null,
+  "expired": false,
+  "since": null
+ },
+ "raw": "{\"loggedIn\":false,\"email\":null,\"type\":null,\"plan\":null,\"transfer\":null,\"expired\":false,\"since\":null}"
+}

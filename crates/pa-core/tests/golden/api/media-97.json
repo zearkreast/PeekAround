@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/97",
+ "response": {
+  "id": "97",
+  "folderId": "1",
+  "dir": "Videolar",
+  "name": "gün batımı.mp4",
+  "ext": "mp4",
+  "kind": "video",
+  "size": 4638276,
+  "mtime": 1793998143115,
+  "width": 1280,
+  "height": 720,
+  "duration": 12,
+  "takenAt": 1720029600000,
+  "localAt": 1720029600000,
+  "flags": 0,
+  "thumbhash": "H/gJtIxwhI14eId3d4iPh/iIhw==",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Videolar/gün batımı.mp4",
+  "exif": null,
+  "video": {
+   "codec": "h264",
+   "fps": 30,
+   "bitrate": 3092184,
+   "audioCodec": "aac",
+   "rotation": 0
+  },
+  "gps": {
+   "lat": 36.8841,
+   "lon": 30.7056
+  },
+  "place": {
+   "city": "Muratpaşa",
+   "admin1": "Antalya",
+   "cc": "TR",
+   "key": "TR-07"
+  },
+  "camera": {
+   "make": "Samsung",
+   "model": "SM-G991B",
+   "lens": null
+  },
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"97\",\"folderId\":\"1\",\"dir\":\"Videolar\",\"name\":\"gün batımı.mp4\",\"ext\":\"mp4\",\"kind\":\"video\",\"size\":4638276,\"mtime\":1793998143115,\"width\":1280,\"height\":720,\"duration\":12,\"takenAt\":1720029600000,\"localAt\":1720029600000,\"flags\":0,\"thumbhash\":\"H/gJtIxwhI14eId3d4iPh/iIhw==\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Videolar/gün batımı.mp4\",\"exif\":null,\"video\":{\"codec\":\"h264\",\"fps\":30,\"bitrate\":3092184,\"audioCodec\":\"aac\",\"rotation\":0},\"gps\":{\"lat\":36.8841,\"lon\":30.7056},\"place\":{\"city\":\"Muratpaşa\",\"admin1\":\"Antalya\",\"cc\":\"TR\",\"key\":\"TR-07\"},\"camera\":{\"make\":\"Samsung\",\"model\":\"SM-G991B\",\"lens\":null},\"tzOffset\":null}"
+}

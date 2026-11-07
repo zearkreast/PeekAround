@@ -1,0 +1,160 @@
+// Viewer + video player state (src/viewer.rs / src/video.rs own the logic).
+
+export enum SlideKind { image, video, audio, loading }
+
+export struct SlideData {
+    id: string,
+    kind: SlideKind,
+    // width / height of the picture
+    aspect: float,
+    // image pipeline: thumbhash → 640 (grid cache) → 1600 → zoom (≤4096) when zoomed in
+    hash: image,
+    has-hash: bool,
+    low: image,
+    has-low: bool,
+    mid: image,
+    has-mid: bool,
+    hi: image,
+    has-hi: bool,
+    name: string,
+    duration: string,
+}
+
+// a registry action rendered as a button / menu row (src/actions.rs)
+export struct ActionItem {
+    id: string,
+    icon: image,
+    label: string,
+    active: bool,
+    danger: bool,
+    // first of its group (separator before it in menus)
+    sep: bool,
+}
+
+export struct StripItem {
+    index: int,
+    x: length,
+    image: image,
+    has-image: bool,
+    current: bool,
+    audio: bool,
+}
+
+export struct InfoRow {
+    // calendar | maximize | hard-drive | clock | film | camera | aperture | map-pin | map-pin-off | folder-open | file-image
+    icon: string,
+    label: string,
+    value: string,
+    sub: string,
+    // "reveal-location" | "open-map" | "" — a link-style action under the value
+    link: string,
+    link-label: string,
+    mono: bool,
+    dim: bool,
+}
+
+export global ViewerState {
+    // ── overlay ──
+    in property <bool> open;
+    // 0 → 1 while opening (background, chrome), back to 0 while closing
+    in property <float> appear;
+    in property <bool> closing;
+    // shared-element hero (window coordinates) while opening / closing
+    in property <bool> hero-on;
+    in property <length> hero-x;
+    in property <length> hero-y;
+    in property <length> hero-w;
+    in property <length> hero-h;
+    in property <image> hero-image;
+    // background: blur | black | dark | tint (+ the thumbhash backdrop for blur)
+    in property <string> bg: "blur";
+    in property <image> backdrop;
+    in property <bool> has-backdrop;
+
+    // ── slides (prev / current / next) ──
+    in property <SlideData> prev;
+    in property <SlideData> cur;
+    in property <SlideData> next;
+    in property <bool> has-prev;
+    in property <bool> has-next;
+    in property <length> track-x;
+    // pull-down dismiss / pull-up info
+    in property <length> dismiss-y;
+    in property <length> lift-y;
+    // zoom of the current slide: scale around the stage centre + pan offset
+    in property <float> scale: 1;
+    in property <length> zx;
+    in property <length> zy;
+    in property <bool> zoomed;
+    // dragging (grabbing cursor)
+    in property <bool> grabbing;
+
+    // ── chrome ──
+    in property <bool> chrome: true;
+    in property <bool> info-open;
+    in property <bool> filmstrip: true;
+    in property <bool> fullscreen;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool> is-image;
+    in property <[ActionItem]> top-actions;
+    in property <[ActionItem]> more-actions;
+    in property <[StripItem]> strip;
+    // x of the current strip item's centre (the strip is scrolled to keep it in the middle)
+    in property <length> strip-center;
+    // info panel
+    in property <string> info-name;
+    in property <[InfoRow]> info-rows;
+    in property <bool> info-loading;
+    // a confirm dialog / menu of the viewer is open (keys go there)
+    in-out property <bool> menu-open;
+
+    // ── video / audio player ──
+    in property <bool> video-active;
+    in property <image> frame;
+    in property <bool> has-frame;
+    in property <bool> playing;
+    in property <bool> buffering;
+    in property <float> position;
+    in property <float> duration;
+    in property <float> buffered;
+    in property <float> volume: 1;
+    in property <bool> muted;
+    in property <float> speed: 1;
+    in property <bool> looping;
+    in property <bool> controls: true;
+    in property <string> time-text;
+    in property <string> duration-text;
+    in property <string> video-error;
+    in property <bool> no-audio-device;
+    // seek bar hover preview (filmstrip sprite of 20 frames)
+    in property <image> sprite;
+    in property <bool> has-sprite;
+    in property <int> sprite-n: 20;
+    pure callback format-time(float) -> string;
+
+    // ── input → Rust ──
+    callback close();
+    callback page(int);
+    // kind: 0 down, 1 up, 2 move, 3 cancel · stage coordinates (centre-relative is done in Rust)
+    callback pointer(int, int, length, length);
+    callback wheel(length, length, length, bool);
+    callback key(string, bool, bool, bool) -> bool;
+    callback action(string);
+    callback toggle-info();
+    callback toggle-fullscreen();
+    callback zoom-by(int);
+    callback strip-click(int);
+    callback stage-changed(length, length, length, length);
+    callback poke();
+    callback info-link(string);
+    // video
+    callback play-toggle();
+    callback seek(float);
+    callback set-volume(float);
+    callback toggle-mute();
+    callback set-speed(float);
+    callback toggle-loop();
+    callback save-frame();
+    callback video-poke();
+}

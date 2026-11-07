@@ -1,0 +1,74 @@
+// Photos timeline / Favorites / search results (GalleryPage.tsx, timeline mode)
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Shell, GridState, Page } from "../globals.slint";
+import { MediaGrid } from "grid.slint";
+import { Button, ButtonVariant, ButtonSize } from "../components/button.slint";
+import { Skeleton, EmptyState, Spinner } from "../components/feedback.slint";
+
+export component PhotosPage inherits Rectangle {
+    in property <image> title-icon: Icons.images;
+    in property <color> title-icon-color: Theme.accent;
+    callback slideshow();
+
+    grid := MediaGrid {
+        width: root.width;
+        height: root.height;
+        tiles: GridState.tiles;
+        headers: GridState.headers;
+        grid-height: GridState.grid-height;
+        header-height: 128px;
+        scroll-y <=> GridState.scroll-y;
+        viewport-changed(y, h, w) => {
+            GridState.viewport-changed(y, h, w);
+            Shell.title-revealed = y + self.header-height > 96px;
+        }
+        open(i) => { GridState.open(i); }
+
+        title-icon: root.title-icon;
+        title-icon-color: root.title-icon-color;
+        title: GridState.title;
+        subtitle: GridState.loading ? I18n.t("common.loading", I18n.rev) : GridState.subtitle;
+        action-label: GridState.total > 0 ? I18n.t("nav.slideshow", I18n.rev) : "";
+        action-icon: Icons.play;
+        action => { root.slideshow(); }
+    }
+
+    // first load: shimmer rows where the grid will be
+    if GridState.loading: Rectangle {
+        x: grid.grid-x;
+        y: 128px;
+        width: grid.grid-width;
+        height: root.height - 128px;
+        clip: true;
+        for i in 18: Skeleton {
+            property <int> ci: Math.mod(i, 6);
+            property <int> ri: Math.floor(i / 6);
+            x: (parent.width + 6px) / 6 * ci;
+            y: 62px + ri * 226px;
+            width: (parent.width + 6px) / 6 - 6px;
+            height: 220px;
+        }
+    }
+
+    if !GridState.loading && GridState.total == 0: VerticalLayout {
+        y: 128px;
+        height: root.height - 128px;
+        alignment: start;
+        EmptyState {
+            icon: GridState.error != "" ? Icons.triangle-alert : Icons.images;
+            title: GridState.error != "" ? I18n.t("common.error", I18n.rev) : Shell.page == Page.search ? I18n.t("gallery.noResults", I18n.rev) : I18n.t("gallery.empty", I18n.rev);
+            body: GridState.error;
+        }
+        if GridState.error != "": HorizontalLayout {
+            alignment: center;
+            Button {
+                text: I18n.t("common.retry", I18n.rev);
+                icon: Icons.refresh-cw;
+                has-icon: true;
+                clicked => { GridState.retry(); }
+            }
+        }
+    }
+}

@@ -1,0 +1,67 @@
+// Static mini map for the viewer's info panel (MiniMap.tsx): 3×3 tiles, the point centred with a pin.
+
+import { Theme, Motion } from "../theme.slint";
+import { EIcons } from "../pages/explore/icons.slint";
+import { MiniMapState } from "state.slint";
+
+export component MiniMap inherits Rectangle {
+    callback clicked();
+    height: 144px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev-2;
+    clip: true;
+    opacity: ta.has-hover ? 0.9 : 1;
+    animate opacity { duration: Motion.fast; }
+    Rectangle {
+        x: root.width / 2 - MiniMapState.ox;
+        y: root.height / 2 - MiniMapState.oy;
+        width: 768px;
+        height: 768px;
+        for t in MiniMapState.tiles: Image {
+            x: t.x;
+            y: t.y;
+            width: 256px;
+            height: 256px;
+            source: t.image;
+            opacity: t.image.width > 0 ? 1 : 0;
+            animate opacity { duration: Motion.normal; }
+        }
+    }
+    if MiniMapState.failed: Rectangle { background: Theme.bg-elev-2; }
+    // pin: tip on the point (`-translate-y-full`)
+    Image {
+        x: (root.width - 32px) / 2;
+        y: root.height / 2 - 32px;
+        width: 32px;
+        height: 32px;
+        source: EIcons.pin-solid;
+        colorize: Theme.accent;
+    }
+    Image {
+        x: (root.width - 32px) / 2;
+        y: root.height / 2 - 32px;
+        width: 32px;
+        height: 32px;
+        source: EIcons.pin-outline;
+        colorize: #ffffff;
+    }
+    Rectangle {
+        x: root.width - self.width - 4px;
+        y: root.height - self.height - 2px;
+        width: Math.min(at.preferred-width + 8px, root.width * 0.95);
+        height: 14px;
+        border-radius: 3px;
+        background: #00000066;
+        at := Text {
+            width: parent.width - 8px;
+            text: MiniMapState.attribution;
+            font-size: 9px;
+            color: #ffffffcc;
+            overflow: elide;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}

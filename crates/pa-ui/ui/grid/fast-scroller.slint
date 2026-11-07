@@ -1,0 +1,138 @@
+// Google-Photos-style fast scroller (features/gallery/grid/FastScroller.tsx): shows while
+// scrolling, draggable thumb, date bubble + year ticks while dragging. Below two screens of
+// content it falls back to the thin scrollbar.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { VIcons } from "../viewer/icons.slint";
+import { GridInput, YearTick } from "input.slint";
+
+export component FastScroller inherits Rectangle {
+    in property <length> content-height;
+    in property <length> visible-height;
+    // = -content-y (>= 0)
+    in property <length> offset;
+    // grid y = page offset - grid-top (the page header above the grid)
+    in property <length> grid-top;
+    in property <[YearTick]> ticks;
+    callback scroll-to(length);
+    out property <bool> dragging: ta.pressed;
+
+    property <length> max-offset: Math.max(0px, content-height - visible-height);
+    property <length> thumb-h: 46px;
+    property <length> track-h: Math.max(0px, root.height - 16px);
+    out property <bool> enabled: max-offset >= visible-height * 2;
+    property <bool> shown;
+    width: 220px;
+
+    changed offset => {
+        if root.enabled {
+            root.shown = true;
+            hide.restart();
+        }
+    }
+    hide := Timer {
+        interval: 1600ms;
+        running: false;
+        triggered => {
+            if !ta.pressed { root.shown = false; self.stop(); }
+        }
+    }
+
+    property <length> thumb-y: root.max-offset > 0 ? (root.track-h - root.thumb-h) * root.offset / root.max-offset : 0;
+    property <float> show-k: (root.shown || ta.pressed) && root.enabled ? 1 : 0;
+    animate show-k { duration: 250ms; }
+    property <float> drag-k: ta.pressed ? 1 : 0;
+    animate drag-k { duration: 150ms; }
+
+    // year ticks (while dragging), skipping ones closer than 22 px
+    for t[i] in root.ticks: Rectangle {
+        property <length> ty: 8px + Math.min(1, (t.y + root.grid-top) / Math.max(1px, root.max-offset)) * (root.track-h - root.thumb-h) + root.thumb-h / 2;
+        property <length> prev-ty: i == 0 ? -100px : 8px + Math.min(1, (root.ticks[i - 1].y + root.grid-top) / Math.max(1px, root.max-offset)) * (root.track-h - root.thumb-h) + root.thumb-h / 2;
+        visible: self.ty - self.prev-ty >= 22px;
+        x: root.width - 44px - self.width;
+        y: self.ty - self.height / 2;
+        height: 16px;
+        width: tl.preferred-width + 10px;
+        border-radius: 6px;
+        background: Theme.bg.with-alpha(0.85);
+        opacity: root.drag-k;
+        tl := Text {
+            text: t.label;
+            font-size: 11px;
+            font-weight: 600;
+            color: Theme.text-dim;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    thumb := Rectangle {
+        x: root.width - 4px - self.width;
+        y: 8px + root.thumb-y;
+        width: 34px;
+        height: root.thumb-h;
+        opacity: root.show-k;
+        visible: root.enabled;
+        border-top-left-radius: 23px;
+        border-bottom-left-radius: 23px;
+        border-top-right-radius: 4px;
+        border-bottom-right-radius: 4px;
+        background: ta.pressed ? Theme.accent : Theme.bg-elev-2;
+        border-width: 1px;
+        border-color: Theme.border-strong;
+        drop-shadow-blur: 30px;
+        drop-shadow-offset-y: 8px;
+        drop-shadow-color: Theme.shadow;
+        Image {
+            source: VIcons.chevrons-up-down;
+            colorize: ta.pressed ? #ffffff : Theme.text-dim;
+            width: 16px;
+            height: 16px;
+        }
+        ta := TouchArea {
+            enabled: root.show-k > 0.5;
+            mouse-cursor: self.pressed ? grabbing : grab;
+            property <length> off;
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down {
+                    self.off = self.mouse-y;
+                }
+            }
+            moved => {
+                if self.pressed {
+                    root.drag-to(thumb.y + self.mouse-y - self.off - 8px);
+                }
+            }
+        }
+        // date bubble
+        bubble := Rectangle {
+            x: -self.width - 14px + (1 - root.drag-k) * 8px;
+            y: 6px;
+            height: 34px;
+            width: bt.preferred-width + 28px;
+            opacity: root.drag-k;
+            visible: bt.text != "";
+            border-radius: 17px;
+            background: Theme.bg-elev-2;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            drop-shadow-blur: 30px;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-color: Theme.shadow;
+            bt := Text {
+                text: ta.pressed ? GridInput.label-at(root.offset + root.visible-height * 0.15 - root.grid-top) : "";
+                font-size: 14px;
+                font-weight: 600;
+                color: Theme.text;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+    changed dragging => { GridInput.fast-dragging = self.dragging; if !self.dragging { hide.restart(); } }
+
+    function drag-to(ty: length) {
+        let t = Math.clamp(ty, 0px, root.track-h - root.thumb-h);
+        root.scroll-to(t / Math.max(1px, root.track-h - root.thumb-h) * root.max-offset);
+    }
+}

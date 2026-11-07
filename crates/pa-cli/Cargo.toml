@@ -1,0 +1,17 @@
+[package]
+name = "pa-cli"
+description = "peekaround: the PeekAround media gallery server (Docker / headless)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "peekaround"
+path = "src/main.rs"
+
+[dependencies]
+pa-server = { path = "../pa-server" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }

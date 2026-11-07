@@ -1,0 +1,540 @@
+// The photo map (MapPage.tsx): custom slippy map (tiles / markers from src/map.rs), header card,
+// "N without location" chip, controls (fit, style, zoom, list, fullscreen), tile problem banner,
+// attribution, side panel "photos in this area".
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { EIcons } from "../pages/explore/icons.slint";
+import { MapState, MapTile, MapMarker, MapPanelTile } from "state.slint";
+import { IconButton } from "../components/button.slint";
+import { Spinner } from "../components/feedback.slint";
+import { ScrollBar } from "../pages/scroll.slint";
+
+component Marker inherits Rectangle {
+    in property <MapMarker> d;
+    property <length> size: root.d.count > 1 ? 62px : 54px;
+    x: root.d.x - self.size / 2;
+    y: root.d.y - self.size - 7px;
+    width: self.size;
+    height: self.size;
+    visible: root.d.visible;
+    // `.pm-stack`: a white card behind clusters
+    if root.d.count > 1: Rectangle {
+        x: 3px;
+        y: -2px;
+        width: root.size;
+        height: root.size;
+        border-radius: 14px;
+        background: #ffffff;
+        opacity: 0.55;
+        transform-rotation: 6deg;
+        drop-shadow-blur: 10px;
+        drop-shadow-offset-y: 3px;
+        drop-shadow-color: #00000080;
+    }
+    // `.pm-tail`
+    Rectangle {
+        x: (root.size - 12px) / 2;
+        y: root.size - 5px;
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        background: #ffffff;
+        transform-rotation: 45deg;
+        drop-shadow-blur: 4px;
+        drop-shadow-offset-x: 2px;
+        drop-shadow-offset-y: 2px;
+        drop-shadow-color: #00000059;
+    }
+    property <float> k: root.d.hovered ? 1.08 : 1;
+    animate k { duration: 180ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    photo := Rectangle {
+        width: root.size;
+        height: root.size;
+        transform-scale-x: root.k * 100%;
+        transform-scale-y: root.k * 100%;
+        border-radius: 14px;
+        background: Theme.tile-bg;
+        drop-shadow-blur: 18px;
+        drop-shadow-offset-y: 6px;
+        drop-shadow-color: #0000008c;
+        Rectangle {
+            border-radius: 14px;
+            clip: true;
+            Image {
+                width: parent.width;
+                height: parent.height;
+                source: root.d.cover;
+                image-fit: cover;
+                opacity: root.d.cover.width > 0 ? 1 : 0;
+                animate opacity { duration: Motion.normal; }
+            }
+        }
+        Rectangle {
+            border-radius: 14px;
+            border-width: 2.5px;
+            border-color: #ffffff;
+        }
+    }
+    if root.d.count > 1: Rectangle {
+        x: root.size - self.width + 8px;
+        y: -8px;
+        height: 24px;
+        width: Math.max(24px, ct.preferred-width + 14px);
+        border-radius: 12px;
+        background: Theme.accent;
+        drop-shadow-blur: 8px;
+        drop-shadow-offset-y: 2px;
+        drop-shadow-color: #00000080;
+        ct := Text { text: root.d.label; color: #ffffff; font-size: 12px; font-weight: 600; }
+    }
+}
+
+// a floating control (`IconButton` with border + bg-elev + shadow-soft)
+component MapButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    callback clicked();
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev;
+    drop-shadow-blur: 24px;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-color: Theme.shadow;
+    // the tooltip stays above the buttons below this one
+    z: ib.hovered ? 1 : 0;
+    ib := IconButton {
+        icon: root.icon;
+        label: root.label;
+        clicked => { root.clicked(); }
+    }
+}
+
+// the map surface: tiles, focus ring, markers, gestures
+export component MapView inherits Rectangle {
+    background: Theme.bg-elev-2;
+    clip: true;
+    changed width => { MapState.viewport(self.width, self.height); }
+    changed height => { MapState.viewport(self.width, self.height); }
+    init => { MapState.viewport(self.width, self.height); }
+
+    // tiles off: the faint 48 px grid of `.peek-map[data-tiles='off']`
+    if !MapState.tiles-on: Rectangle {
+        for i in Math.ceil(root.width / 48px) + 1: Rectangle {
+            x: i * 48px;
+            width: 1px;
+            height: root.height;
+            background: Theme.surface;
+        }
+        for i in Math.ceil(root.height / 48px) + 1: Rectangle {
+            y: i * 48px;
+            height: 1px;
+            width: root.width;
+            background: Theme.surface;
+        }
+    }
+    for t in MapState.back-tiles: Image {
+        x: t.x;
+        y: t.y;
+        width: t.size;
+        height: t.size;
+        visible: t.visible;
+        source: t.image;
+        source-clip-x: t.clip-x;
+        source-clip-y: t.clip-y;
+        source-clip-width: t.clip-w;
+        source-clip-height: t.clip-h;
+        image-fit: fill;
+    }
+    for t in MapState.tiles: Image {
+        x: t.x;
+        y: t.y;
+        width: t.size;
+        height: t.size;
+        visible: t.visible;
+        source: t.image;
+        source-clip-x: t.clip-x;
+        source-clip-y: t.clip-y;
+        source-clip-width: t.clip-w;
+        source-clip-height: t.clip-h;
+        image-fit: fill;
+        opacity: t.loaded ? 1 : 0;
+        animate opacity { duration: Motion.normal; easing: ease-out; }
+    }
+    if MapState.focus-on: Rectangle {
+        property <float> ph: Motion.level == 2 ? Math.mod(animation-tick() / 1.8s, 1) : 0.6;
+        property <float> s: 0.55 + 0.7 * (1 - Math.pow(1 - self.ph, 3));
+        x: MapState.focus-x - 30px * self.s;
+        y: MapState.focus-y - 30px * self.s;
+        width: 60px * self.s;
+        height: self.width;
+        border-radius: self.width / 2;
+        border-width: 3px;
+        border-color: Theme.accent;
+        background: Theme.accent.with-alpha(0.16);
+        opacity: Motion.level == 2 ? 1 - 0.85 * self.ph : 0.9;
+    }
+    for m in MapState.markers: Marker { d: m; }
+
+    ta := TouchArea {
+        mouse-cursor: MapState.grabbing ? MouseCursor.grabbing : MouseCursor.grab;
+        pointer-event(e) => {
+            if e.button == PointerEventButton.left && e.kind == PointerEventKind.down {
+                MapState.press(self.mouse-x, self.mouse-y);
+            } else if e.button == PointerEventButton.left && e.kind == PointerEventKind.up {
+                MapState.release(self.mouse-x, self.mouse-y);
+            }
+        }
+        moved => {
+            if self.pressed { MapState.drag(self.mouse-x, self.mouse-y); }
+        }
+        changed mouse-x => { if !self.pressed { MapState.hover(self.mouse-x, self.mouse-y); } }
+        changed mouse-y => { if !self.pressed { MapState.hover(self.mouse-x, self.mouse-y); } }
+        changed has-hover => { if !self.has-hover { MapState.leave(); } }
+        double-clicked => { MapState.dbl(self.mouse-x, self.mouse-y); }
+        scroll-event(e) => {
+            MapState.wheel(self.mouse-x, self.mouse-y, e.delta-x, e.delta-y);
+            accept
+        }
+    }
+    ScaleRotateGestureHandler {
+        started => { MapState.pinch-start(); }
+        updated => { MapState.pinch(self.scale, self.center.x, self.center.y); }
+        ended => { MapState.pinch-end(); }
+        cancelled => { MapState.pinch-end(); }
+    }
+}
+
+export component MapPage inherits Rectangle {
+    in property <length> window-width;
+    property <length> panel-w: root.window-width >= 1280px ? 440px : 380px;
+    property <bool> panel: MapState.panel-open && MapState.has-points;
+    background: Theme.bg;
+
+    fs := FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == "+" || e.text == "=" { MapState.zoom-by(1); return accept; }
+            if e.text == "-" { MapState.zoom-by(-1); return accept; }
+            if e.text == Key.LeftArrow { MapState.key("left"); return accept; }
+            if e.text == Key.RightArrow { MapState.key("right"); return accept; }
+            if e.text == Key.UpArrow { MapState.key("up"); return accept; }
+            if e.text == Key.DownArrow { MapState.key("down"); return accept; }
+            if e.text == Key.Escape && MapState.fullscreen { MapState.toggle-fullscreen(); return accept; }
+            reject
+        }
+    }
+
+    map := MapView {
+        x: 0;
+        y: 0;
+        width: root.width - (root.panel ? root.panel-w : 0px);
+        height: root.height;
+    }
+
+    // header card
+    HorizontalLayout {
+        x: 12px;
+        y: 12px;
+        width: map.width - 24px;
+        height: 52px;
+        spacing: 8px;
+        alignment: start;
+        Rectangle {
+            width: Math.min(hl.preferred-width, map.width - 24px - 56px);
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            drop-shadow-blur: 24px;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-color: Theme.shadow;
+            TouchArea { }
+            hl := HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                spacing: 8px;
+                VerticalLayout { alignment: center; Image { source: EIcons.map-pin; colorize: Theme.accent; width: 16px; height: 16px; } }
+                VerticalLayout {
+                    alignment: center;
+                    Text { text: MapState.title; font-size: 14px; font-weight: 600; color: Theme.text; overflow: elide; }
+                    Text {
+                        text: MapState.loading ? I18n.t("explore.map.loading", I18n.rev) : MapState.in-view;
+                        font-size: 11px;
+                        color: Theme.text-dim;
+                    }
+                }
+            }
+        }
+        if !MapState.place-mode && MapState.no-location != "": VerticalLayout {
+            alignment: start;
+            Rectangle {
+                height: 40px;
+                width: nl.preferred-width;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.bg-elev;
+                drop-shadow-blur: 24px;
+                drop-shadow-offset-y: 8px;
+                drop-shadow-color: Theme.shadow;
+                nl := HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 6px;
+                    VerticalLayout { alignment: center; Image { source: EIcons.map-pin-off; colorize: Theme.text-faint; width: 16px; height: 16px; } }
+                    Text {
+                        text: MapState.no-location;
+                        font-size: 12px;
+                        font-weight: 500;
+                        color: nta.has-hover ? Theme.text : Theme.text-dim;
+                        vertical-alignment: center;
+                    }
+                }
+                nta := TouchArea { mouse-cursor: pointer; clicked => { MapState.nogps(); } }
+            }
+        }
+    }
+
+    // controls (right column)
+    VerticalLayout {
+        x: map.width - 12px - 40px;
+        y: 12px;
+        width: 40px;
+        spacing: 8px;
+        alignment: start;
+        MapButton { icon: EIcons.maximize-2; label: I18n.t("explore.map.fit", I18n.rev); clicked => { MapState.fit(); } }
+        if MapState.tiles-on: MapButton {
+            icon: EIcons.layers;
+            label: MapState.style-label;
+            clicked => { MapState.cycle-style(); }
+        }
+        MapButton { icon: EIcons.plus; label: I18n.t("explore.map.zoomIn", I18n.rev); clicked => { MapState.zoom-by(1); } }
+        MapButton { icon: EIcons.minus; label: I18n.t("explore.map.zoomOut", I18n.rev); clicked => { MapState.zoom-by(-1); } }
+        if MapState.has-points: MapButton {
+            icon: MapState.panel-open ? EIcons.panel-right-close : EIcons.panel-right-open;
+            label: MapState.panel-open ? I18n.t("explore.map.hideList", I18n.rev) : I18n.t("explore.map.list", I18n.rev);
+            clicked => { MapState.panel-open = !MapState.panel-open; }
+        }
+        MapButton {
+            icon: MapState.fullscreen ? EIcons.shrink : EIcons.expand;
+            label: I18n.t("viewer.fullscreen", I18n.rev);
+            clicked => { MapState.toggle-fullscreen(); }
+        }
+    }
+
+    // tiles off / offline / refused
+    if MapState.problem != "": HorizontalLayout {
+        x: 12px;
+        y: 76px;
+        width: map.width - 24px - 52px;
+        height: self.preferred-height;
+        alignment: center;
+        Rectangle {
+            width: Math.min(448px, parent.width);
+            height: bl.preferred-height;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            drop-shadow-blur: 24px;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-color: Theme.shadow;
+            TouchArea { }
+            bl := HorizontalLayout {
+                padding: 8px;
+                padding-left: 12px;
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    Image {
+                        source: MapState.problem == "refused" ? EIcons.shield-alert : EIcons.wifi-off;
+                        colorize: Theme.warn;
+                        width: 16px;
+                        height: 16px;
+                    }
+                }
+                Text {
+                    text: MapState.problem-text;
+                    font-size: 12px;
+                    color: Theme.text-dim;
+                    wrap: word-wrap;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                if MapState.problem != "off": VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 28px;
+                        width: rl.preferred-width;
+                        border-radius: 8px;
+                        background: rta.has-hover ? Theme.surface-2 : transparent;
+                        rl := HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            spacing: 4px;
+                            VerticalLayout { alignment: center; Image { source: EIcons.rotate-cw; colorize: Theme.accent; width: 14px; height: 14px; } }
+                            Text { text: I18n.t("map.retry", I18n.rev); font-size: 12px; font-weight: 500; color: Theme.accent; vertical-alignment: center; }
+                        }
+                        rta := TouchArea { mouse-cursor: pointer; clicked => { MapState.retry(); } }
+                    }
+                }
+            }
+        }
+    }
+
+    if MapState.loading: Rectangle {
+        x: 0;
+        width: map.width;
+        Spinner { size: 28px; }
+    }
+    if MapState.empty: Rectangle {
+        x: 0;
+        width: map.width;
+        Rectangle {
+            width: Math.min(384px, parent.width - 48px);
+            height: el.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            el := VerticalLayout {
+                padding: 20px;
+                spacing: 8px;
+                HorizontalLayout { alignment: center; Image { source: EIcons.map-pin; colorize: Theme.text-faint; width: 24px; height: 24px; } }
+                Text { text: I18n.t("explore.map.empty", I18n.rev); font-size: 14px; color: Theme.text-dim; horizontal-alignment: center; wrap: word-wrap; }
+                if !MapState.place-mode && MapState.no-location != "": Text {
+                    text: I18n.t("map.noLocationHint", I18n.rev);
+                    font-size: 12px;
+                    color: Theme.text-faint;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if !MapState.place-mode && MapState.no-location != "": HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 36px;
+                        width: el2.preferred-width;
+                        border-radius: 8px;
+                        background: eta.has-hover ? Theme.surface-2 : transparent;
+                        el2 := HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 6px;
+                            VerticalLayout { alignment: center; Image { source: EIcons.map-pin-off; colorize: Theme.accent; width: 16px; height: 16px; } }
+                            Text { text: MapState.no-location; font-size: 13px; font-weight: 500; color: Theme.accent; vertical-alignment: center; }
+                        }
+                        eta := TouchArea { mouse-cursor: pointer; clicked => { MapState.nogps(); } }
+                    }
+                }
+            }
+        }
+    }
+
+    // attribution (`.leaflet-control-attribution`)
+    if MapState.tiles-on && MapState.attribution != "": Rectangle {
+        x: map.width - self.width;
+        y: root.height - self.height;
+        width: Math.min(at.preferred-width + 12px, map.width);
+        height: 16px;
+        border-radius: 0;
+        background: Theme.bg-elev.with-alpha(0.82);
+        Rectangle {
+            x: 0;
+            width: 8px;
+            height: 8px;
+            y: 0;
+        }
+        at := Text {
+            width: parent.width - 12px;
+            text: MapState.attribution;
+            font-size: 10px;
+            color: Theme.text-dim;
+            overflow: elide;
+        }
+    }
+
+    // side panel
+    if root.panel: Rectangle {
+        x: root.width - root.panel-w;
+        width: root.panel-w;
+        height: root.height;
+        background: Theme.bg-elev;
+        Rectangle { x: 0; width: 1px; background: Theme.border; }
+        HorizontalLayout {
+            y: 0;
+            height: 48px;
+            padding-left: 16px;
+            padding-right: 16px;
+            spacing: 8px;
+            alignment: start;
+            Text { text: I18n.t("explore.map.list", I18n.rev); font-size: 14px; font-weight: 600; color: Theme.text; vertical-alignment: center; }
+            Text { text: MapState.panel-count; font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+        }
+        if MapState.panel-loading: Rectangle {
+            y: 48px;
+            height: 128px;
+            Spinner { }
+        }
+        pfl := Flickable {
+            x: 8px;
+            y: 48px;
+            width: parent.width - 16px;
+            height: parent.height - 48px;
+            content-height: MapState.panel-height + 16px;
+            content-y <=> MapState.panel-scroll;
+            changed content-y => { MapState.panel-viewport(-self.content-y, self.height, self.width); }
+            changed width => { MapState.panel-viewport(-self.content-y, self.height, self.width); }
+            changed height => { MapState.panel-viewport(-self.content-y, self.height, self.width); }
+            init => { MapState.panel-viewport(-self.content-y, self.height, self.width); }
+            for t in MapState.panel-tiles: Rectangle {
+                x: t.x;
+                y: t.y;
+                width: t.w;
+                height: t.h;
+                visible: t.visible;
+                border-radius: 10px;
+                clip: true;
+                background: Theme.tile-bg;
+                property <float> zk: pta.has-hover ? 1.04 : 1;
+                animate zk { duration: Motion.slow; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+                Image {
+                    width: parent.width * parent.zk;
+                    height: parent.height * parent.zk;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    source: t.image;
+                    image-fit: cover;
+                    opacity: t.image.width > 0 ? 1 : 0;
+                    animate opacity { duration: Motion.normal; }
+                }
+                if t.badge != "": Rectangle {
+                    x: parent.width - self.width - 5px;
+                    y: parent.height - self.height - 5px;
+                    height: 18px;
+                    width: vb.preferred-width + 14px;
+                    border-radius: 9px;
+                    background: #0000008c;
+                    vb := HorizontalLayout {
+                        alignment: center;
+                        spacing: 3px;
+                        VerticalLayout { alignment: center; Image { source: EIcons.play-fill; colorize: #ffffff; width: 11px; height: 11px; } }
+                        Text { text: t.badge; color: #ffffff; font-size: 11px; font-weight: 500; vertical-alignment: center; }
+                    }
+                }
+                pta := TouchArea { mouse-cursor: pointer; clicked => { MapState.panel-open-item(t.index); } }
+            }
+        }
+        ScrollBar {
+            x: parent.width - self.width;
+            y: 48px;
+            height: parent.height - 48px;
+            content-height: pfl.content-height;
+            visible-height: pfl.height;
+            offset: -pfl.content-y;
+            scroll-to(o) => { pfl.content-y = -o; }
+        }
+    }
+}

@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+exclude = ["third_party"]
+
+[workspace.package]
+version = "2.0.0-alpha.1"
+edition = "2021"
+license = "GPL-3.0-only"
+repository = "https://github.com/zearkreast/PeekAround"
+rust-version = "1.85"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = "symbols"
+
+# Slint's winit backend with one fix: a monitor reporting 0 Hz made the frame throttle divide by
+# zero (Windows displays with a "default" rate, wine, some VMs) — third_party/README.md
+[patch.crates-io]
+i-slint-backend-winit = { path = "third_party/i-slint-backend-winit" }

@@ -1,0 +1,569 @@
+// /explore (features/explore/Home.tsx): stats, surprise, memories, year in review, places + map card,
+// countries, calendar heatmap, time of day, colours, shapes, types, recent, largest, duplicates,
+// cameras, years, location & metadata.
+
+import { Theme, Motion, I18n } from "../../theme.slint";
+import { Shell } from "../../globals.slint";
+import { EIcons } from "icons.slint";
+import { ExploreState, ECard, EChip } from "state.slint";
+import { EIcon, Thumb, Flag, Carousel, Section, SectionTitle, SectionLink, MemoryCard, PhotoCard, MapCard,
+    CollageCard, YearReviewCard, ColorChip, LabelTile, RankedCard, DuplicatesCard, CameraChip, YearCard, StatChip,
+    SkeletonBox, SkeletonRow } from "cards.slint";
+import { Button, ButtonVariant, ButtonSize } from "../../components/button.slint";
+import { EmptyState, ProgressRing } from "../../components/feedback.slint";
+import { Cols, GridPos } from "../parts.slint";
+import { ScrollBar } from "../scroll.slint";
+
+// the calendar heatmap (CalendarHeatmap): year buttons, month labels on their week column, 7 × 53 cells
+component CalendarCard inherits Rectangle {
+    in property <length> cell: 14px;
+    property <length> step: root.cell + 3px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface;
+    height: lay.preferred-height;
+    lay := VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 4px;
+            height: 32px;
+            for y in ExploreState.cal-years: Rectangle {
+                width: yt.preferred-width + 20px;
+                border-radius: 8px;
+                background: y.active ? Theme.accent : yta.has-hover ? Theme.surface-2 : transparent;
+                yt := Text {
+                    text: y.year;
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: y.active ? #ffffff : yta.has-hover ? Theme.text : Theme.text-dim;
+                }
+                yta := TouchArea { mouse-cursor: pointer; clicked => { ExploreState.cal-pick(y.year); } }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: ExploreState.cal-total;
+                font-size: 12px;
+                color: Theme.text-faint;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            height: 16px + 4px + 7 * root.step - 3px;
+            clip: false;
+            // month labels: left = column × (cell + gap)
+            for m in ExploreState.cal-months: Text {
+                x: m.col * root.step;
+                y: 0;
+                text: m.text;
+                font-size: 10.5px;
+                color: Theme.text-faint;
+            }
+            Rectangle {
+                x: 0;
+                y: 20px;
+                width: ExploreState.cal-cols * root.step - 3px;
+                height: 7 * root.step - 3px;
+                opacity: ExploreState.cal-loading ? 0.6 : 1;
+                for c[i] in ExploreState.cal-cells: Rectangle {
+                    property <bool> hot: cta.has-hover && c.level > 0;
+                    x: c.col * root.step - (self.hot ? root.cell * 0.175 : 0px);
+                    y: c.row * root.step - (self.hot ? root.cell * 0.175 : 0px);
+                    width: root.cell * (self.hot ? 1.35 : 1);
+                    height: self.width;
+                    animate x, y, width { duration: Motion.fast; }
+                    border-radius: 3px;
+                    background: c.level == 0 ? Theme.surface-2
+                        : c.level == 1 ? Theme.accent.mix(Theme.surface-2, 0.28)
+                        : c.level == 2 ? Theme.accent.mix(Theme.surface-2, 0.5)
+                        : c.level == 3 ? Theme.accent.mix(Theme.surface-2, 0.74)
+                        : Theme.accent;
+                    border-width: self.hot ? 2px : 0px;
+                    border-color: Theme.bg-elev;
+                    z: self.hot ? 2 : 0;
+                    cta := TouchArea {
+                        mouse-cursor: c.level > 0 ? pointer : default;
+                        changed has-hover => {
+                            if self.has-hover { ExploreState.cal-hover = i; } else if ExploreState.cal-hover == i { ExploreState.cal-hover = -1; }
+                        }
+                        clicked => { if c.level > 0 { ExploreState.open("day:" + c.key); } }
+                    }
+                }
+                // tooltip (title=…)
+                if ExploreState.cal-hover >= 0: Rectangle {
+                    property <int> hcol: ExploreState.cal-cells[ExploreState.cal-hover].col;
+                    property <int> hrow: ExploreState.cal-cells[ExploreState.cal-hover].row;
+                    x: Math.clamp(self.hcol * root.step + root.cell / 2 - self.width / 2, 0px, parent.width - self.width);
+                    y: self.hrow * root.step - self.height - 6px;
+                    z: 5;
+                    width: tt.preferred-width + 16px;
+                    height: 24px;
+                    border-radius: 6px;
+                    background: Theme.bg-elev-2;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    drop-shadow-blur: 10px;
+                    drop-shadow-color: Theme.shadow;
+                    tt := Text {
+                        text: ExploreState.cal-cells[ExploreState.cal-hover].label;
+                        font-size: 11.5px;
+                        color: Theme.text;
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: 6px;
+            height: 14px;
+            Text { text: I18n.t("insights.calendar.less", I18n.rev); font-size: 10.5px; color: Theme.text-faint; vertical-alignment: center; }
+            for l in [0, 1, 2, 3, 4]: VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 11px;
+                    height: 11px;
+                    border-radius: 3px;
+                    background: l == 0 ? Theme.surface-2
+                        : l == 1 ? Theme.accent.mix(Theme.surface-2, 0.28)
+                        : l == 2 ? Theme.accent.mix(Theme.surface-2, 0.5)
+                        : l == 3 ? Theme.accent.mix(Theme.surface-2, 0.74)
+                        : Theme.accent;
+                }
+            }
+            Text { text: I18n.t("insights.calendar.more", I18n.rev); font-size: 10.5px; color: Theme.text-faint; vertical-alignment: center; }
+        }
+    }
+}
+
+// "Location & metadata" (MetaDiagnostics lives in Settings → Explore): a link card with the share
+component MetaCard inherits Rectangle {
+    callback clicked();
+    height: 76px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: ta.has-hover ? Theme.surface-2 : Theme.surface;
+    HorizontalLayout {
+        padding: 14px;
+        padding-right: 20px;
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                border-radius: 12px;
+                background: Theme.surface-2;
+                Image { source: EIcons.map-pinned; colorize: Theme.accent; width: 20px; height: 20px; }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 6px;
+            horizontal-stretch: 1;
+            Text { text: I18n.t("meta.title", I18n.rev); font-size: 15px; font-weight: 600; color: Theme.text; }
+            Rectangle {
+                height: 8px;
+                border-radius: 4px;
+                background: Theme.surface-2;
+                clip: true;
+                Rectangle {
+                    x: 0;
+                    width: parent.width * ExploreState.meta-share;
+                    background: Theme.accent;
+                    border-radius: 4px;
+                }
+            }
+            Text { text: ExploreState.meta-line; font-size: 12px; color: Theme.text-dim; overflow: elide; }
+        }
+        VerticalLayout {
+            alignment: center;
+            Image { source: EIcons.chevron-right; colorize: Theme.text-faint; width: 18px; height: 18px; }
+        }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+export component ExplorePage inherits Rectangle {
+    in property <length> window-width;
+    property <length> pad: root.window-width >= 640px ? 28px : 12px;
+    property <length> cw: Math.min(root.width - 2 * pad - 12px, 1800px);
+    property <length> cx: (root.width - 12px - cw) / 2;
+    property <int> tcols: Cols.of(root.window-width, 3, 4, 4, 6, 6, 6);
+    property <length> tw: GridPos.cell(root.cw, tcols, 12px);
+    property <int> scols: Cols.of(root.window-width, 2, 4, 4, 6, 6, 6);
+    property <length> sw: GridPos.cell(root.cw, scols, 12px);
+    property <bool> ready: !ExploreState.loading && !ExploreState.empty;
+
+    fl := Flickable {
+        width: root.width;
+        height: root.height;
+        content-height: col.preferred-height + 24px + 112px;
+        changed content-y => { Shell.title-revealed = -self.content-y > 80px; }
+        col := VerticalLayout {
+            x: root.cx;
+            y: 28px;
+            width: root.cw;
+            alignment: start;
+
+            // header: title + subtitle, surprise me
+            HorizontalLayout {
+                padding-bottom: 20px;
+                spacing: 12px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 8px;
+                    HorizontalLayout {
+                        spacing: 10px;
+                        alignment: start;
+                        VerticalLayout {
+                            alignment: center;
+                            Image { source: EIcons.compass; colorize: Theme.accent; width: 28px; height: 28px; }
+                        }
+                        Text {
+                            text: I18n.t("explore.title", I18n.rev);
+                            font-family: Theme.font-display;
+                            font-size: 34px;
+                            font-weight: 700;
+                            letter-spacing: -0.5px;
+                            color: Theme.text;
+                        }
+                    }
+                    Text { text: I18n.t("explore.subtitle", I18n.rev); font-size: 14px; color: Theme.text-dim; }
+                }
+                if root.ready && ExploreState.can-surprise: VerticalLayout {
+                    alignment: end;
+                    padding-bottom: 4px;
+                    Button {
+                        text: I18n.t("insights.surprise", I18n.rev);
+                        icon: EIcons.dices;
+                        has-icon: true;
+                        size: ButtonSize.sm;
+                        variant: ButtonVariant.secondary;
+                        loading: ExploreState.surprise-busy;
+                        clicked => { ExploreState.surprise(); }
+                    }
+                }
+            }
+
+            // metadata indexing progress
+            if ExploreState.indexing >= 0: Rectangle {
+                height: 56px + 24px;
+                Rectangle {
+                    height: 56px;
+                    y: 0;
+                    border-radius: 16px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface;
+                    HorizontalLayout {
+                        padding-left: 16px;
+                        padding-right: 16px;
+                        spacing: 12px;
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 32px;
+                                height: 32px;
+                                ProgressRing { value: ExploreState.indexing / 100; size: 32px; }
+                                Image { source: EIcons.map; colorize: Theme.accent; width: 14px; height: 14px; }
+                            }
+                        }
+                        Text {
+                            text: I18n.t1("explore.indexing", "p", ExploreState.indexing, I18n.rev);
+                            font-size: 14px;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                }
+            }
+
+            // loading skeleton
+            if ExploreState.loading: VerticalLayout {
+                spacing: 0px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    padding-bottom: 28px;
+                    for w in [88px, 70px, 64px, 72px, 90px, 60px]: SkeletonBox { width: w; height: 36px; radius: 18px; }
+                }
+                for k in 3: VerticalLayout {
+                    spacing: 12px;
+                    padding-bottom: 36px;
+                    HorizontalLayout { alignment: start; SkeletonBox { width: 160px; height: 24px; radius: 8px; } }
+                    SkeletonRow { card-w: 180px; card-h: k == 1 ? 180px : 225px; }
+                }
+            }
+
+            if ExploreState.empty: EmptyState {
+                icon: EIcons.compass;
+                title: ExploreState.error != "" ? I18n.t("common.error", I18n.rev) : I18n.t("explore.empty.title", I18n.rev);
+                body: ExploreState.error != "" ? ExploreState.error : I18n.t("explore.empty.body", I18n.rev);
+            }
+
+            // stats chips
+            if root.ready && ExploreState.stats.length > 0: HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                padding-bottom: 28px;
+                for c in ExploreState.stats: StatChip { d: c; clicked => { ExploreState.open(c.key); } }
+                if ExploreState.has-size && !ExploreState.has-cloud: StatChip {
+                    d: { icon: "hard-drive", text: ExploreState.size-local, key: "" };
+                }
+                if ExploreState.has-cloud: Rectangle {
+                    height: 36px;
+                    width: sl.preferred-width;
+                    border-radius: 18px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface;
+                    sl := HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 6px;
+                        VerticalLayout { alignment: center; Image { source: EIcons.hard-drive; colorize: Theme.accent; width: 16px; height: 16px; } }
+                        Text { text: ExploreState.size-local; font-size: 13px; font-weight: 500; color: Theme.text; vertical-alignment: center; }
+                        VerticalLayout { alignment: center; padding-left: 4px; padding-right: 4px; Rectangle { width: 1px; height: 16px; background: Theme.border; } }
+                        VerticalLayout { alignment: center; Image { source: EIcons.cloud; colorize: #e5484d; width: 16px; height: 16px; } }
+                        Text { text: ExploreState.size-cloud; font-size: 13px; font-weight: 500; color: Theme.text; vertical-alignment: center; }
+                    }
+                }
+            }
+
+            if root.ready: Section {
+                order: 0;
+                SectionTitle {
+                    text: I18n.t("explore.memories", I18n.rev);
+                    count: ExploreState.memories.length > 0 ? "" + ExploreState.memories.length : "";
+                }
+                if ExploreState.memories.length > 0: Carousel {
+                    pad: root.pad;
+                    row-height: 200px * 4 / 3;
+                    for m in ExploreState.memories: MemoryCard { d: m; clicked => { ExploreState.open(m.key); } }
+                }
+                if ExploreState.memories.length == 0: Rectangle {
+                    height: ne.preferred-height + 40px;
+                    border-radius: 16px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    ne := Text {
+                        x: 16px;
+                        width: parent.width - 32px;
+                        text: I18n.t("explore.noMemories", I18n.rev);
+                        font-size: 14px;
+                        color: Theme.text-dim;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            if root.ready && ExploreState.year-reviews.length > 0: Section {
+                order: 1;
+                SectionTitle { text: I18n.t("insights.yearReview", I18n.rev); count: ExploreState.year-reviews.length; }
+                Carousel {
+                    pad: root.pad;
+                    row-height: 280px;
+                    for m in ExploreState.year-reviews: YearReviewCard { d: m; clicked => { ExploreState.open(m.key); } }
+                }
+            }
+
+            if root.ready: Section {
+                order: 2;
+                SectionTitle {
+                    text: I18n.t("explore.places", I18n.rev);
+                    count: ExploreState.places-total > 0 ? "" + ExploreState.places-total : "";
+                    if ExploreState.no-location != "": SectionLink {
+                        text: ExploreState.no-location;
+                        icon: EIcons.map-pin-off;
+                        has-icon: true;
+                        clicked => { ExploreState.open("nogps"); }
+                    }
+                    if ExploreState.places-total > 0: SectionLink {
+                        text: I18n.t("explore.showOnMap", I18n.rev);
+                        icon: EIcons.map;
+                        has-icon: true;
+                        clicked => { ExploreState.open("map"); }
+                    }
+                    if ExploreState.places-total > 0: SectionLink {
+                        text: I18n.t("explore.seeAll", I18n.rev);
+                        clicked => { ExploreState.open("places"); }
+                    }
+                }
+                if ExploreState.places-total > 0: Carousel {
+                    pad: root.pad;
+                    row-height: 168px + 48px;
+                    MapCard { dots: ExploreState.map-dots; sub: ExploreState.map-sub; clicked => { ExploreState.open("map"); } }
+                    for p in ExploreState.places: PhotoCard { d: p; clicked => { ExploreState.open(p.key); } }
+                }
+                if ExploreState.places-total == 0: Rectangle {
+                    height: np.preferred-height + 40px;
+                    border-radius: 16px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    Image { x: 16px; y: 20px; source: EIcons.map-pin; colorize: Theme.text-faint; width: 20px; height: 20px; }
+                    np := Text {
+                        x: 48px;
+                        width: parent.width - 64px;
+                        text: ExploreState.no-places-text;
+                        font-size: 14px;
+                        color: Theme.text-dim;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            if root.ready && ExploreState.countries.length > 0: Section {
+                order: 3;
+                SectionTitle { text: I18n.t("insights.countries", I18n.rev); count: ExploreState.countries.length; }
+                Carousel {
+                    pad: root.pad;
+                    row-height: 168px + 48px;
+                    for c in ExploreState.countries: PhotoCard { d: c; clicked => { ExploreState.open(c.key); } }
+                }
+            }
+
+            if root.ready && ExploreState.has-calendar: Section {
+                order: 4;
+                SectionTitle { text: I18n.t("insights.calendar", I18n.rev); }
+                CalendarCard { cell: root.window-width >= 1100px ? 14px : 12px; }
+            }
+
+            if root.ready && ExploreState.daytimes.length > 0: Section {
+                order: 5;
+                SectionTitle { text: I18n.t("insights.timeOfDay", I18n.rev); }
+                Carousel {
+                    pad: root.pad;
+                    row-height: 208px;
+                    for g in ExploreState.daytimes: CollageCard { width: 260px; height: 208px; d: g; clicked => { ExploreState.open(g.key); } }
+                }
+            }
+
+            if root.ready && ExploreState.colors.length > 0: Section {
+                order: 6;
+                SectionTitle { text: I18n.t("insights.colors", I18n.rev); }
+                Carousel {
+                    pad: root.pad;
+                    row-height: 104px;
+                    for g in ExploreState.colors: ColorChip { d: g; clicked => { ExploreState.open(g.key); } }
+                }
+            }
+
+            if root.ready && ExploreState.shapes.length > 0: Section {
+                order: 7;
+                SectionTitle { text: I18n.t("insights.shapes", I18n.rev); }
+                Rectangle {
+                    height: GridPos.rows(ExploreState.shapes.length, root.scols) * (root.sw + 12px) - 12px;
+                    for g[i] in ExploreState.shapes: LabelTile {
+                        x: GridPos.x(i, root.scols, root.sw, 12px);
+                        y: GridPos.y(i, root.scols, root.sw, 12px);
+                        width: root.sw;
+                        height: root.sw;
+                        d: g;
+                        clicked => { ExploreState.open(g.key); }
+                    }
+                }
+            }
+
+            if root.ready: Section {
+                order: 8;
+                SectionTitle { text: I18n.t("explore.types", I18n.rev); }
+                Rectangle {
+                    height: GridPos.rows(ExploreState.types.length, root.tcols) * (root.tw + 12px) - 12px;
+                    for g[i] in ExploreState.types: LabelTile {
+                        x: GridPos.x(i, root.tcols, root.tw, 12px);
+                        y: GridPos.y(i, root.tcols, root.tw, 12px);
+                        width: root.tw;
+                        height: root.tw;
+                        d: g;
+                        gradient: g.key == "favorites";
+                        clicked => { ExploreState.open(g.key); }
+                    }
+                }
+            }
+
+            if root.ready && ExploreState.recent.length > 0: Section {
+                order: 9;
+                SectionTitle {
+                    text: I18n.t("insights.recent", I18n.rev);
+                    SectionLink { text: I18n.t("explore.seeAll", I18n.rev); clicked => { ExploreState.open("recent"); } }
+                }
+                Carousel {
+                    pad: root.pad;
+                    row-height: 144px;
+                    for g in ExploreState.recent: RankedCard { d: g; clicked => { ExploreState.open(g.key); } }
+                }
+            }
+
+            if root.ready && ExploreState.largest.length > 0: Section {
+                order: 10;
+                SectionTitle {
+                    text: I18n.t("insights.largest", I18n.rev);
+                    SectionLink { text: I18n.t("explore.seeAll", I18n.rev); clicked => { ExploreState.open("largest"); } }
+                }
+                Carousel {
+                    pad: root.pad;
+                    row-height: 144px;
+                    for g in ExploreState.largest: RankedCard { d: g; clicked => { ExploreState.open(g.key); } }
+                }
+            }
+
+            if root.ready && ExploreState.has-dups: Section {
+                order: 11;
+                SectionTitle { text: I18n.t("insights.duplicates", I18n.rev); }
+                HorizontalLayout {
+                    alignment: start;
+                    DuplicatesCard {
+                        width: Math.min(576px, root.cw);
+                        d: ExploreState.dups;
+                        clicked => { ExploreState.open("duplicates"); }
+                    }
+                }
+            }
+
+            if root.ready && ExploreState.cameras.length > 0: Section {
+                order: 12;
+                SectionTitle { text: I18n.t("explore.cameras", I18n.rev); count: ExploreState.cameras.length; }
+                // flex-wrap: Rust lays the pills out (approximate text widths)
+                Rectangle {
+                    height: ExploreState.cam-height;
+                    for c in ExploreState.cameras: CameraChip {
+                        x: c.months[0] * 1px;
+                        y: c.months[1] * 1px;
+                        d: c;
+                        clicked => { ExploreState.open(c.key); }
+                    }
+                }
+            }
+
+            if root.ready && ExploreState.years.length > 0: Section {
+                order: 13;
+                SectionTitle { text: I18n.t("explore.years", I18n.rev); }
+                Carousel {
+                    pad: root.pad;
+                    row-height: 200px;
+                    for y in ExploreState.years: YearCard { d: y; clicked => { ExploreState.open(y.key); } }
+                }
+            }
+
+            if root.ready && ExploreState.meta-line != "": Section {
+                order: 14;
+                HorizontalLayout {
+                    alignment: start;
+                    MetaCard { width: Math.min(576px, root.cw); clicked => { ExploreState.open("meta"); } }
+                }
+            }
+        }
+    }
+
+    ScrollBar {
+        x: root.width - self.width;
+        height: root.height;
+        content-height: fl.content-height;
+        visible-height: fl.height;
+        offset: -fl.content-y;
+        scroll-to(o) => { fl.content-y = -o; }
+    }
+}

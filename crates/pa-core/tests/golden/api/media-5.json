@@ -1,0 +1,31 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/5",
+ "response": {
+  "id": "5",
+  "folderId": "1",
+  "dir": "Ekran Görüntüleri",
+  "name": "Screenshot_20240812-101500.png",
+  "ext": "png",
+  "kind": "image",
+  "size": 70798,
+  "mtime": 1793998143112,
+  "width": 1080,
+  "height": 2340,
+  "duration": null,
+  "takenAt": 1793998143112,
+  "localAt": 1793998143112,
+  "flags": 1,
+  "thumbhash": "lucJAwAMhiiXaWRIG4OwMgg=",
+  "favorite": true,
+  "playback": "direct",
+  "path": "lib/Ekran Görüntüleri/Screenshot_20240812-101500.png",
+  "exif": null,
+  "gps": null,
+  "place": null,
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"5\",\"folderId\":\"1\",\"dir\":\"Ekran Görüntüleri\",\"name\":\"Screenshot_20240812-101500.png\",\"ext\":\"png\",\"kind\":\"image\",\"size\":70798,\"mtime\":1793998143112,\"width\":1080,\"height\":2340,\"duration\":null,\"takenAt\":1793998143112,\"localAt\":1793998143112,\"flags\":1,\"thumbhash\":\"lucJAwAMhiiXaWRIG4OwMgg=\",\"favorite\":true,\"playback\":\"direct\",\"path\":\"lib/Ekran Görüntüleri/Screenshot_20240812-101500.png\",\"exif\":null,\"gps\":null,\"place\":null,\"camera\":null,\"tzOffset\":null}"
+}

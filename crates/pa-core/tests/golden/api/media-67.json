@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/67",
+ "response": {
+  "id": "67",
+  "folderId": "1",
+  "dir": "Fotoğraflar/Bugün Geçmişte",
+  "name": "2025_2.jpg",
+  "ext": "jpg",
+  "kind": "image",
+  "size": 31697,
+  "mtime": 1793998143110,
+  "width": 1600,
+  "height": 900,
+  "duration": null,
+  "takenAt": 1762333200000,
+  "localAt": 1762344000000,
+  "flags": 0,
+  "thumbhash": "qfgVJIR3iId/h3h0h3eIj4zY+A==",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/Bugün Geçmişte/2025_2.jpg",
+  "exif": {
+   "Make": "Apple",
+   "Model": "iPhone 13",
+   "LensModel": "iPhone 13 back dual wide camera 5.1mm f/1.6",
+   "DateTimeOriginal": 1762344000000,
+   "latitude": 40.9943,
+   "longitude": 28.9661
+  },
+  "gps": {
+   "lat": 40.994272,
+   "lon": 28.966133
+  },
+  "place": {
+   "city": "Fatih",
+   "admin1": "İstanbul",
+   "cc": "TR",
+   "key": "TR-34"
+  },
+  "camera": {
+   "make": "Apple",
+   "model": "iPhone 13",
+   "lens": "iPhone 13 back dual wide camera 5.1mm f/1.6"
+  },
+  "tzOffset": 180
+ },
+ "raw": "{\"id\":\"67\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/Bugün Geçmişte\",\"name\":\"2025_2.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":31697,\"mtime\":1793998143110,\"width\":1600,\"height\":900,\"duration\":null,\"takenAt\":1762333200000,\"localAt\":1762344000000,\"flags\":0,\"thumbhash\":\"qfgVJIR3iId/h3h0h3eIj4zY+A==\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/Bugün Geçmişte/2025_2.jpg\",\"exif\":{\"Make\":\"Apple\",\"Model\":\"iPhone 13\",\"LensModel\":\"iPhone 13 back dual wide camera 5.1mm f/1.6\",\"DateTimeOriginal\":1762344000000,\"latitude\":40.9943,\"longitude\":28.9661},\"gps\":{\"lat\":40.994272,\"lon\":28.966133},\"place\":{\"city\":\"Fatih\",\"admin1\":\"İstanbul\",\"cc\":\"TR\",\"key\":\"TR-34\"},\"camera\":{\"make\":\"Apple\",\"model\":\"iPhone 13\",\"lens\":\"iPhone 13 back dual wide camera 5.1mm f/1.6\"},\"tzOffset\":180}"
+}

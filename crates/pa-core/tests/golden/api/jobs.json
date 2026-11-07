@@ -1,0 +1,24 @@
+{
+ "type": "JobsResponse",
+ "method": "GET",
+ "url": "/api/jobs",
+ "response": {
+  "jobs": [
+   {
+    "id": "0542531f-ddd9-4a40-8d54-025e6b345502",
+    "type": "video-edit",
+    "title": "eski_kayit.mkv",
+    "status": "done",
+    "progress": 1,
+    "error": null,
+    "result": {
+     "folderId": "1",
+     "dir": "Videolar",
+     "name": "eski_kayit_edit.mp4"
+    },
+    "createdAt": 1793998163818
+   }
+  ]
+ },
+ "raw": "{\"jobs\":[{\"id\":\"0542531f-ddd9-4a40-8d54-025e6b345502\",\"type\":\"video-edit\",\"title\":\"eski_kayit.mkv\",\"status\":\"done\",\"progress\":1,\"error\":null,\"result\":{\"folderId\":\"1\",\"dir\":\"Videolar\",\"name\":\"eski_kayit_edit.mp4\"},\"createdAt\":1793998163818}]}"
+}

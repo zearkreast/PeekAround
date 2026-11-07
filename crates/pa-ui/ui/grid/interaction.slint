@@ -1,0 +1,64 @@
+// The grid's single input surface (event delegation like MediaGrid.tsx): every pointer / key /
+// Ctrl+wheel event over the grid goes to Rust (src/actions_ui.rs), which hit-tests the exact
+// layout: click / Ctrl+click / Shift+click, lasso on empty space, tile drags onto drop targets,
+// right-click menu, day "select all" circles, keyboard focus. Tiles only draw.
+
+import { Theme } from "../theme.slint";
+import { GridInput } from "input.slint";
+
+export component GridInteraction inherits Rectangle {
+    function down-button(b: PointerEventButton) -> int {
+        b == PointerEventButton.left ? 0 : b == PointerEventButton.right ? 1 : b == PointerEventButton.middle ? 2 : 3
+    }
+    public function focus-grid() { fs.focus(); }
+    property <int> focus-request: GridInput.focus-request;
+    changed focus-request => { fs.focus(); }
+
+    fs := FocusScope {
+        key-pressed(e) => {
+            if GridInput.key(e.text, e.modifiers.control || e.modifiers.meta, e.modifiers.shift, e.modifiers.alt) {
+                return accept;
+            }
+            reject
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: GridInput.hover-index >= 0 || GridInput.hover-group >= 0 ? pointer : default;
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down {
+                fs.focus();
+                GridInput.pointer(0, root.down-button(e.button), self.mouse-x, self.mouse-y, root.absolute-position.x, root.absolute-position.y, e.modifiers.control || e.modifiers.meta, e.modifiers.shift);
+            } else if e.kind == PointerEventKind.up {
+                GridInput.pointer(1, root.down-button(e.button), self.mouse-x, self.mouse-y, root.absolute-position.x, root.absolute-position.y, e.modifiers.control || e.modifiers.meta, e.modifiers.shift);
+            } else if e.kind == PointerEventKind.cancel {
+                GridInput.pointer(3, 0, self.mouse-x, self.mouse-y, root.absolute-position.x, root.absolute-position.y, false, false);
+            } else if e.kind == PointerEventKind.move {
+                GridInput.pointer(2, self.pressed ? 0 : -1, self.mouse-x, self.mouse-y, root.absolute-position.x, root.absolute-position.y, e.modifiers.control || e.modifiers.meta, e.modifiers.shift);
+            }
+        }
+        changed has-hover => {
+            if !self.has-hover && !self.pressed {
+                GridInput.pointer(4, -1, self.mouse-x, self.mouse-y, root.absolute-position.x, root.absolute-position.y, false, false);
+            }
+        }
+        scroll-event(e) => {
+            if (e.modifiers.control || e.modifiers.meta) && GridInput.wheel(self.mouse-x, self.mouse-y, e.delta-y, true) {
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // lasso (`border-[var(--accent)] bg-[color-mix(accent 14%)] rounded-md`)
+    if GridInput.lasso: Rectangle {
+        x: GridInput.lasso-x;
+        y: GridInput.lasso-y;
+        width: GridInput.lasso-w;
+        height: GridInput.lasso-h;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Theme.accent;
+        background: Theme.accent.with-alpha(0.14);
+    }
+}

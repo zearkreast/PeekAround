@@ -1,0 +1,36 @@
+[package]
+name = "pa-remote"
+description = "PeekAround MEGA streaming folders: listing / refresh, metadata, thumbnails, ranged reads, LRU cache, quota, import jobs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pa-core = { path = "../pa-core" }
+pa-jobs = { path = "../pa-jobs" }
+pa-media = { path = "../pa-media", default-features = false, features = ["svg"] }
+pa-mega = { path = "../pa-mega" }
+pa-meta = { path = "../pa-meta" }
+async-trait = "0.1"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+hex = "0.4"
+image = { version = "0.25", default-features = false }
+rand = "0.8"
+tokio = { version = "1", features = ["sync", "time", "rt", "macros", "fs", "io-util"] }
+tokio-util = { version = "0.7", features = ["io", "rt"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "fs", "io-util"] }
+axum = "0.8"
+num-bigint = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["stream"] }
+sha2 = "0.10"
+base64 = "0.22"

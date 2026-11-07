@@ -1,0 +1,532 @@
+// Explore result pages (ResultPage.tsx: header + drill-down above the shared MediaGrid),
+// /explore/places (PlacesPage.tsx) and /explore/duplicates (DuplicatesPage.tsx).
+
+import { Theme, Motion, I18n } from "../../theme.slint";
+import { Shell, GridState } from "../../globals.slint";
+import { EIcons } from "icons.slint";
+import { EResultState, EPlacesState, EDupState, ExploreState, ECard } from "state.slint";
+import { EIcon, Thumb, Flag, Carousel, PhotoCard, MapCard } from "cards.slint";
+import { MediaGrid } from "../grid.slint";
+import { Button, ButtonVariant, ButtonSize } from "../../components/button.slint";
+import { EmptyState, Spinner, Skeleton } from "../../components/feedback.slint";
+import { Cols, GridPos } from "../parts.slint";
+import { ScrollBar } from "../scroll.slint";
+
+// "← Keşfet"
+export component BackLink inherits Rectangle {
+    callback clicked();
+    height: 36px;
+    width: lay.preferred-width;
+    border-radius: 8px;
+    lay := HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 6px;
+        spacing: 4px;
+        VerticalLayout {
+            alignment: center;
+            Image { source: EIcons.arrow-left; colorize: ta.has-hover ? Theme.text : Theme.text-dim; width: 16px; height: 16px; }
+        }
+        Text {
+            text: I18n.t("explore.back", I18n.rev);
+            font-size: 13px;
+            font-weight: 500;
+            color: ta.has-hover ? Theme.text : Theme.text-dim;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+// big page title with an icon (or a flag)
+component ResultTitle inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> icon;
+    in property <bool> has-flag;
+    in property <int> fx;
+    in property <int> fy;
+    spacing: 10px;
+    alignment: start;
+    if root.has-flag: VerticalLayout {
+        alignment: center;
+        Flag { width: 32px; height: 24px; fx: root.fx; fy: root.fy; }
+    }
+    if !root.has-flag && root.icon != "": VerticalLayout {
+        alignment: center;
+        Image { source: EIcon.of(root.icon); colorize: Theme.accent; width: 28px; height: 28px; }
+    }
+    Text {
+        text: root.text;
+        font-family: Theme.font-display;
+        font-size: 34px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        color: Theme.text;
+        overflow: elide;
+    }
+}
+
+// a small heading of the drill-down rows
+component DrillHead inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> count;
+    height: 26px;
+    spacing: 6px;
+    alignment: start;
+    Text { text: root.text; font-family: Theme.font-display; font-size: 16px; font-weight: 600; color: Theme.text; }
+    Text { text: root.count; font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+}
+
+export component ResultPage inherits Rectangle {
+    in property <length> window-width;
+    callback back();
+    callback play();
+    callback slideshow();
+    callback show-map();
+    property <length> pad: root.window-width >= 640px ? 28px : 12px;
+    property <bool> has-regions: EResultState.regions.length > 0;
+    property <bool> has-cities: EResultState.cities.length > 0;
+    property <length> header-h: 20px + 40px + 76px + 24px
+        + (root.has-regions ? 26px + 10px + 216px + 20px : 0px)
+        + (root.has-cities ? 26px + 10px + 196px + 20px : 0px)
+        + (EResultState.hint != "" ? 96px : 0px);
+
+    if !EResultState.missing: MediaGrid {
+        width: root.width;
+        height: root.height;
+        tiles: GridState.tiles;
+        headers: GridState.headers;
+        grid-height: GridState.grid-height;
+        header-height: root.header-h;
+        custom-header: true;
+        side-padding: root.pad;
+        scroll-y <=> GridState.scroll-y;
+        viewport-changed(y, h, w) => {
+            GridState.viewport-changed(y, h, w);
+            Shell.title-revealed = y + self.header-height > 110px;
+        }
+        open(i) => { GridState.open(i); }
+
+        VerticalLayout {
+            padding-top: 20px;
+            alignment: start;
+            HorizontalLayout { alignment: start; height: 40px; BackLink { clicked => { root.back(); } } }
+            HorizontalLayout {
+                height: 76px + 24px;
+                padding-bottom: 24px;
+                spacing: 24px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 6px;
+                    alignment: start;
+                    ResultTitle {
+                        text: EResultState.title;
+                        icon: EResultState.icon;
+                        has-flag: EResultState.has-flag;
+                        fx: EResultState.flag-x;
+                        fy: EResultState.flag-y;
+                    }
+                    Text {
+                        text: (EResultState.subtitle != "" ? EResultState.subtitle + " · " : "")
+                            + (GridState.loading ? I18n.t("common.loading", I18n.rev) : GridState.subtitle);
+                        font-size: 14px;
+                        color: Theme.text-dim;
+                        overflow: elide;
+                    }
+                }
+                if GridState.total > 0: HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    padding-bottom: 6px;
+                    if EResultState.can-play: VerticalLayout {
+                        alignment: end;
+                        Button {
+                            text: I18n.t("explore.play", I18n.rev);
+                            icon: EIcons.play;
+                            has-icon: true;
+                            size: ButtonSize.sm;
+                            variant: ButtonVariant.primary;
+                            clicked => { root.play(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: end;
+                        Button {
+                            text: I18n.t("explore.slideshow", I18n.rev);
+                            icon: EIcons.presentation;
+                            has-icon: true;
+                            size: ButtonSize.sm;
+                            variant: ButtonVariant.secondary;
+                            clicked => { root.slideshow(); }
+                        }
+                    }
+                    if EResultState.can-map: VerticalLayout {
+                        alignment: end;
+                        Button {
+                            text: I18n.t("explore.showOnMap", I18n.rev);
+                            icon: EIcons.map;
+                            has-icon: true;
+                            size: ButtonSize.sm;
+                            variant: ButtonVariant.ghost;
+                            clicked => { root.show-map(); }
+                        }
+                    }
+                }
+            }
+            if root.has-regions: VerticalLayout {
+                spacing: 10px;
+                padding-bottom: 20px;
+                DrillHead { text: I18n.t("insights.regions", I18n.rev); count: EResultState.regions.length; }
+                Carousel {
+                    pad: root.pad;
+                    row-height: 216px;
+                    for p in EResultState.regions: PhotoCard { d: p; clicked => { ExploreState.open(p.key); } }
+                }
+            }
+            if root.has-cities: VerticalLayout {
+                spacing: 10px;
+                padding-bottom: 20px;
+                DrillHead { text: I18n.t("insights.cities", I18n.rev); count: EResultState.cities.length; }
+                Carousel {
+                    pad: root.pad;
+                    row-height: 196px;
+                    for c in EResultState.cities: PhotoCard { w: 148px; d: c; clicked => { ExploreState.open(c.key); } }
+                }
+            }
+            if EResultState.hint != "": Rectangle {
+                height: 76px;
+                width: Math.min(parent.width, 768px);
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.surface;
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    padding-top: 12px;
+                    padding-bottom: 12px;
+                    spacing: 10px;
+                    VerticalLayout { alignment: start; padding-top: 2px; Image { source: EIcons.map-pin-off; colorize: Theme.text-faint; width: 16px; height: 16px; } }
+                    Text { text: EResultState.hint; font-size: 13px; color: Theme.text-dim; wrap: word-wrap; vertical-alignment: center; horizontal-stretch: 1; }
+                }
+            }
+        }
+    }
+
+    if !EResultState.missing && GridState.loading: HorizontalLayout {
+        y: root.header-h + 40px;
+        height: 200px;
+        alignment: center;
+        VerticalLayout { alignment: center; Spinner { size: 28px; } }
+    }
+    if !EResultState.missing && !GridState.loading && GridState.total == 0: VerticalLayout {
+        y: root.header-h;
+        height: root.height - root.header-h;
+        alignment: start;
+        EmptyState {
+            icon: GridState.error != "" ? EIcons.triangle-alert : EIcon.of(EResultState.icon);
+            title: GridState.error != "" ? I18n.t("common.error", I18n.rev) : I18n.t("gallery.noResults", I18n.rev);
+            body: GridState.error;
+        }
+    }
+
+    if EResultState.missing: VerticalLayout {
+        x: root.pad;
+        width: root.width - 2 * root.pad;
+        padding-top: 20px;
+        alignment: start;
+        HorizontalLayout { alignment: start; height: 40px; BackLink { clicked => { root.back(); } } }
+        EmptyState {
+            icon: EIcons.sparkles;
+            title: I18n.t("explore.notFound", I18n.rev);
+            body: I18n.t("explore.notFoundBody", I18n.rev);
+        }
+        HorizontalLayout {
+            alignment: center;
+            Button { text: I18n.t("explore.back", I18n.rev); clicked => { root.back(); } }
+        }
+    }
+}
+
+// /explore/places: map card, then every place by country (biggest first)
+export component PlacesPage inherits Rectangle {
+    in property <length> window-width;
+    callback back();
+    property <length> pad: root.window-width >= 640px ? 28px : 12px;
+    property <length> cw: Math.min(root.width - 2 * pad - 12px, 1800px);
+    property <length> cx: (root.width - 12px - cw) / 2;
+    property <int> cols: Cols.of(root.window-width, 2, 4, 4, 6, 6, 8);
+    property <length> w: GridPos.cell(root.cw, cols, 12px);
+    property <length> ch: root.w + 48px;
+
+    fl := Flickable {
+        width: root.width;
+        height: root.height;
+        content-height: col.preferred-height + 20px + 112px;
+        changed content-y => { Shell.title-revealed = -self.content-y > 100px; }
+        col := VerticalLayout {
+            x: root.cx;
+            y: 20px;
+            width: root.cw;
+            alignment: start;
+            HorizontalLayout { alignment: start; height: 40px; BackLink { clicked => { root.back(); } } }
+            HorizontalLayout {
+                padding-bottom: 20px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 4px;
+                    ResultTitle { text: I18n.t("explore.allPlaces", I18n.rev); icon: "map-pin"; }
+                    Text { text: EPlacesState.sub; font-size: 14px; color: Theme.text-dim; }
+                }
+                if EPlacesState.groups.length > 0: VerticalLayout {
+                    alignment: end;
+                    padding-bottom: 4px;
+                    Rectangle {
+                        height: 36px;
+                        width: ml.preferred-width;
+                        border-radius: 8px;
+                        background: mta.has-hover ? Theme.surface-2 : transparent;
+                        ml := HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 6px;
+                            VerticalLayout { alignment: center; Image { source: EIcons.map; colorize: Theme.accent; width: 16px; height: 16px; } }
+                            Text { text: I18n.t("explore.showOnMap", I18n.rev); font-size: 13px; font-weight: 500; color: Theme.accent; vertical-alignment: center; }
+                        }
+                        mta := TouchArea { mouse-cursor: pointer; clicked => { ExploreState.open("map"); } }
+                    }
+                }
+            }
+            if EPlacesState.loading: HorizontalLayout {
+                height: 240px;
+                alignment: center;
+                VerticalLayout { alignment: center; Spinner { size: 28px; } }
+            }
+            if !EPlacesState.loading && EPlacesState.groups.length == 0: EmptyState {
+                icon: EIcons.map-pin;
+                title: I18n.t("explore.places", I18n.rev);
+                body: EPlacesState.empty-text;
+            }
+            if EPlacesState.groups.length > 0: Rectangle {
+                height: root.ch + 32px;
+                MapCard {
+                    x: 0;
+                    y: 0;
+                    w: root.w;
+                    dots: EPlacesState.dots;
+                    sub: EPlacesState.sub;
+                    clicked => { ExploreState.open("map"); }
+                }
+            }
+            for g in EPlacesState.groups: VerticalLayout {
+                padding-bottom: 32px;
+                spacing: 12px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    height: 28px;
+                    if g.has-flag: VerticalLayout { alignment: center; Flag { width: 24px; height: 18px; fx: g.flag-x; fy: g.flag-y; } }
+                    Text { text: g.name; font-family: Theme.font-display; font-size: 18px; font-weight: 600; color: Theme.text; vertical-alignment: center; }
+                    Text { text: g.count; font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+                }
+                Rectangle {
+                    height: GridPos.rows(g.cards.length, root.cols) * (root.ch + 20px) - 20px;
+                    for p[i] in g.cards: PhotoCard {
+                        x: GridPos.x(i, root.cols, root.w, 12px);
+                        y: GridPos.y(i, root.cols, root.ch, 20px);
+                        w: root.w;
+                        d: p;
+                        clicked => { ExploreState.open(p.key); }
+                    }
+                }
+            }
+        }
+    }
+    ScrollBar {
+        x: root.width - self.width;
+        height: root.height;
+        content-height: fl.content-height;
+        visible-height: fl.height;
+        offset: -fl.content-y;
+        scroll-to(o) => { fl.content-y = -o; }
+    }
+}
+
+// one copy in a duplicates group
+component DupTile inherits Rectangle {
+    in property <image> cover;
+    in property <string> name;
+    in property <string> path;
+    in property <bool> selected;
+    in property <bool> original;
+    callback open();
+    callback toggle();
+    width: 184px;
+    height: 138px + 44px;
+    Rectangle {
+        y: 0;
+        height: 138px;
+        border-radius: 12px;
+        clip: true;
+        Thumb { source: root.cover; zoomed: ta.has-hover; }
+        ta := TouchArea { mouse-cursor: pointer; clicked => { root.open(); } }
+        Rectangle {
+            x: 6px;
+            y: 6px;
+            width: 28px;
+            height: 28px;
+            border-radius: 14px;
+            border-width: 2px;
+            border-color: root.selected ? Theme.accent : #ffffffcc;
+            background: root.selected ? Theme.accent : #0000004d;
+            Image {
+                source: EIcons.check;
+                colorize: #ffffff;
+                opacity: root.selected ? 1 : sta.has-hover ? 0.8 : 0;
+                width: 16px;
+                height: 16px;
+            }
+            sta := TouchArea { mouse-cursor: pointer; clicked => { root.toggle(); } }
+        }
+        if root.original: Rectangle {
+            x: parent.width - self.width - 6px;
+            y: 6px;
+            height: 20px;
+            width: ol.preferred-width + 16px;
+            border-radius: 10px;
+            background: #0000008c;
+            ol := HorizontalLayout {
+                spacing: 4px;
+                alignment: center;
+                VerticalLayout { alignment: center; Image { source: EIcons.crown; colorize: #ffffff; width: 12px; height: 12px; } }
+                Text { text: I18n.t("insights.dup.original", I18n.rev); font-size: 10.5px; font-weight: 500; color: #ffffff; vertical-alignment: center; }
+            }
+        }
+    }
+    // selection ring
+    if root.selected: Rectangle {
+        y: -2px;
+        x: -2px;
+        width: root.width + 4px;
+        height: 138px + 4px;
+        border-radius: 14px;
+        border-width: 2px;
+        border-color: Theme.accent;
+    }
+    VerticalLayout {
+        y: 144px;
+        height: 38px;
+        Text { text: root.name; font-size: 12.5px; font-weight: 500; color: Theme.text; overflow: elide; }
+        Text { text: root.path; font-size: 11.5px; color: Theme.text-faint; overflow: elide; }
+    }
+}
+
+export component DuplicatesPage inherits Rectangle {
+    in property <length> window-width;
+    callback back();
+    property <length> pad: root.window-width >= 640px ? 28px : 12px;
+    property <length> cw: Math.min(root.width - 2 * pad - 12px, 1800px);
+    property <length> cx: (root.width - 12px - cw) / 2;
+
+    fl := Flickable {
+        width: root.width;
+        height: root.height;
+        content-height: col.preferred-height + 20px + 112px;
+        changed content-y => { Shell.title-revealed = -self.content-y > 100px; }
+        col := VerticalLayout {
+            x: root.cx;
+            y: 20px;
+            width: root.cw;
+            alignment: start;
+            HorizontalLayout { alignment: start; height: 40px; BackLink { clicked => { root.back(); } } }
+            HorizontalLayout {
+                padding-bottom: 28px;
+                spacing: 24px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 4px;
+                    ResultTitle { text: I18n.t("insights.dup.title", I18n.rev); icon: "copy"; }
+                    Text { text: EDupState.summary; font-size: 14px; color: Theme.text-dim; overflow: elide; }
+                }
+                if EDupState.groups.length > 0: VerticalLayout {
+                    alignment: end;
+                    padding-bottom: 4px;
+                    Button {
+                        text: I18n.t("insights.dup.selectExtra", I18n.rev);
+                        icon: EIcons.check-check;
+                        has-icon: true;
+                        size: ButtonSize.sm;
+                        variant: ButtonVariant.secondary;
+                        clicked => { EDupState.select-extra(); }
+                    }
+                }
+            }
+            if EDupState.loading && EDupState.groups.length == 0: HorizontalLayout {
+                height: 240px;
+                alignment: center;
+                VerticalLayout { alignment: center; Spinner { size: 28px; } }
+            }
+            if !EDupState.loading && EDupState.groups.length == 0: EmptyState {
+                icon: EIcons.copy;
+                title: EDupState.empty-text;
+            }
+            for g[gi] in EDupState.groups: VerticalLayout {
+                padding-bottom: 12px;
+                Rectangle {
+                    height: 16px + 10px + 182px + 24px + 8px;
+                    border-radius: 16px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface;
+                    HorizontalLayout {
+                        x: 16px;
+                        y: 14px;
+                        width: parent.width - 32px;
+                        height: 20px;
+                        spacing: 8px;
+                        alignment: start;
+                        Text { text: g.title; font-size: 13px; font-weight: 600; color: Theme.text; vertical-alignment: center; }
+                        Text { text: g.name; font-size: 13px; color: Theme.text-faint; overflow: elide; vertical-alignment: center; }
+                    }
+                    Flickable {
+                        x: 12px;
+                        y: 44px;
+                        width: parent.width - 24px;
+                        height: 186px;
+                        content-width: row.preferred-width;
+                        row := HorizontalLayout {
+                            padding: 4px;
+                            spacing: 10px;
+                            alignment: start;
+                            for it[ii] in g.items: DupTile {
+                                cover: it.cover[0];
+                                name: it.name;
+                                path: it.path;
+                                selected: it.selected;
+                                original: it.original;
+                                open => { EDupState.open-item(gi, ii); }
+                                toggle => { EDupState.toggle(gi, ii); }
+                            }
+                        }
+                    }
+                }
+            }
+            if EDupState.can-more: HorizontalLayout {
+                alignment: center;
+                padding-top: 8px;
+                Button {
+                    text: I18n.t("insights.dup.more", I18n.rev);
+                    loading: EDupState.more-busy;
+                    clicked => { EDupState.more(); }
+                }
+            }
+        }
+    }
+    ScrollBar {
+        x: root.width - self.width;
+        height: root.height;
+        content-height: fl.content-height;
+        visible-height: fl.height;
+        offset: -fl.content-y;
+        scroll-to(o) => { fl.content-y = -o; }
+    }
+}

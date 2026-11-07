@@ -1,0 +1,31 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/86",
+ "response": {
+  "id": "86",
+  "folderId": "1",
+  "dir": "Fotoğraflar/Komik",
+  "name": "dans eden kedi.gif",
+  "ext": "gif",
+  "kind": "image",
+  "size": 82096,
+  "mtime": 1793998143111,
+  "width": 320,
+  "height": 240,
+  "duration": null,
+  "takenAt": 1793998143111,
+  "localAt": 1793998143111,
+  "flags": 8,
+  "thumbhash": "3+cNLYZ1cXB3d3dIaIiId4AouK+Y",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/Komik/dans eden kedi.gif",
+  "exif": null,
+  "gps": null,
+  "place": null,
+  "camera": null,
+  "tzOffset": null
+ },
+ "raw": "{\"id\":\"86\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/Komik\",\"name\":\"dans eden kedi.gif\",\"ext\":\"gif\",\"kind\":\"image\",\"size\":82096,\"mtime\":1793998143111,\"width\":320,\"height\":240,\"duration\":null,\"takenAt\":1793998143111,\"localAt\":1793998143111,\"flags\":8,\"thumbhash\":\"3+cNLYZ1cXB3d3dIaIiId4AouK+Y\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/Komik/dans eden kedi.gif\",\"exif\":null,\"gps\":null,\"place\":null,\"camera\":null,\"tzOffset\":null}"
+}

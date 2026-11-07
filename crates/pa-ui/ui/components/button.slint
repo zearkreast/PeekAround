@@ -1,0 +1,172 @@
+// Button / IconButton (components/ui/index.tsx)
+
+import { Theme, Motion } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Icon } from "icon.slint";
+import { Spinner } from "feedback.slint";
+
+export enum ButtonVariant { primary, secondary, ghost, danger, glass }
+export enum ButtonSize { sm, md, lg }
+
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <ButtonVariant> variant: ButtonVariant.secondary;
+    in property <ButtonSize> size: ButtonSize.md;
+    in property <bool> enabled: true;
+    in property <bool> loading: false;
+    callback clicked();
+
+    property <bool> hover: ta.has-hover && root.enabled;
+    property <length> h: size == ButtonSize.sm ? 32px : size == ButtonSize.md ? 40px : 48px;
+    property <length> px: size == ButtonSize.sm ? 12px : size == ButtonSize.md ? 16px : 24px;
+    property <length> fs: size == ButtonSize.sm ? 13px : size == ButtonSize.md ? 14px : 15px;
+    property <color> fg: variant == ButtonVariant.primary || variant == ButtonVariant.danger ? #ffffff
+        : variant == ButtonVariant.ghost && !hover ? Theme.text-dim : Theme.text;
+
+    height: h;
+    min-width: Math.max(h, lay.preferred-width);
+    horizontal-stretch: 0;
+    opacity: enabled ? 1 : 0.5;
+    border-radius: size == ButtonSize.sm ? 8px : size == ButtonSize.md ? 12px : 16px;
+    background: variant == ButtonVariant.primary ? @linear-gradient(120deg, Theme.accent 0%, Theme.accent-2 100%)
+        : variant == ButtonVariant.secondary ? (hover ? Theme.surface-3 : Theme.surface-2)
+        : variant == ButtonVariant.ghost ? (hover ? Theme.surface-2 : transparent)
+        : variant == ButtonVariant.danger ? (hover ? Theme.danger : Theme.danger.with-alpha(0.9))
+        : (hover ? Theme.surface-3 : Theme.glass);
+    border-width: variant == ButtonVariant.secondary || variant == ButtonVariant.glass ? 1px : 0px;
+    border-color: Theme.border;
+    drop-shadow-color: variant == ButtonVariant.primary ? Theme.accent.with-alpha(hover ? 0.55 : 0.4) : transparent;
+    drop-shadow-blur: 20px;
+    drop-shadow-offset-y: 6px;
+    animate background { duration: Motion.fast; }
+
+    // press feedback (active:scale-[0.97]) without transforms: a short inset
+    property <length> inset: ta.pressed && enabled ? 1px : 0px;
+    animate inset { duration: Motion.fast; }
+
+    lay := HorizontalLayout {
+        padding-left: root.px + root.inset;
+        padding-right: root.px + root.inset;
+        padding-top: root.inset;
+        padding-bottom: root.inset;
+        spacing: root.size == ButtonSize.sm ? 6px : root.size == ButtonSize.md ? 8px : 10px;
+        alignment: center;
+        if root.loading: Spinner {
+            size: 16px;
+            fg: root.fg;
+        }
+        if root.has-icon && !root.loading: Icon {
+            source: root.icon;
+            tint: root.fg;
+            size: 16px;
+        }
+        if root.text != "": Text {
+            text: root.text;
+            color: root.fg;
+            font-size: root.fs;
+            font-weight: 500;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled && !root.loading;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Tooltip text drawn below (or above) the hovered control after a short delay.
+export component TooltipBubble inherits Rectangle {
+    in property <string> text;
+    in property <bool> show;
+    visible: show && text != "";
+    opacity: show ? 1 : 0;
+    animate opacity { duration: Motion.fast; }
+    width: label.preferred-width + 16px;
+    height: 26px;
+    border-radius: 8px;
+    background: Theme.bg-elev-2;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: 12px;
+    drop-shadow-color: Theme.shadow;
+    drop-shadow-offset-y: 3px;
+    label := Text {
+        text: root.text;
+        color: Theme.text;
+        font-size: 12px;
+        font-weight: 500;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+}
+
+export enum IconButtonSize { sm, md, lg }
+
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    in property <IconButtonSize> size: IconButtonSize.md;
+    in property <bool> glass;
+    in property <length> icon-size: 18px;
+    in property <color> icon-color: root.active || ta.has-hover || root.glass ? Theme.text : Theme.text-dim;
+    // tooltip placement: below (default) or right of the button (nav rail)
+    in property <bool> tooltip-right;
+    in property <bool> dot;
+    in property <color> dot-color: Theme.accent;
+    callback clicked();
+    out property <bool> hovered: ta.has-hover;
+
+    width: size == IconButtonSize.sm ? 32px : size == IconButtonSize.md ? 40px : 48px;
+    height: self.width;
+    border-radius: size == IconButtonSize.sm ? 8px : size == IconButtonSize.md ? 12px : 16px;
+    opacity: enabled ? 1 : 0.4;
+    background: glass ? (ta.has-hover ? Theme.surface-3 : Theme.glass) : active ? Theme.surface-3 : ta.has-hover ? Theme.surface-2 : transparent;
+    border-width: glass ? 1px : 0px;
+    border-color: Theme.border;
+    animate background { duration: Motion.fast; }
+
+    property <length> press: ta.pressed ? 2px : 0px;
+    animate press { duration: Motion.fast; }
+    Image {
+        source: root.icon;
+        colorize: root.icon-color;
+        width: root.icon-size - root.press;
+        height: self.width;
+        animate colorize { duration: Motion.fast; }
+    }
+    if root.dot: Rectangle {
+        x: parent.width - 14px;
+        y: 8px;
+        width: 8px;
+        height: 8px;
+        border-radius: 4px;
+        background: root.dot-color;
+        border-width: 2px;
+        border-color: Theme.bg;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    property <bool> tip: false;
+    Timer {
+        interval: 600ms;
+        running: ta.has-hover && !root.tip;
+        triggered => { root.tip = true; }
+    }
+    changed hovered => { if !self.hovered { root.tip = false; } }
+    TooltipBubble {
+        text: root.label;
+        show: root.tip && ta.has-hover && !ta.pressed;
+        x: root.tooltip-right ? root.width + 8px : (root.width - self.width) / 2;
+        y: root.tooltip-right ? (root.height - self.height) / 2 : root.height + 6px;
+    }
+}

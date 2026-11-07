@@ -1,0 +1,56 @@
+// Thin overlay scrollbar for the scrolling pages (same look as the grid's).
+
+import { Theme, Motion } from "../theme.slint";
+
+export component ScrollBar inherits Rectangle {
+    in property <length> content-height;
+    in property <length> visible-height;
+    in property <length> offset;   // = -content-y (>= 0)
+    callback scroll-to(length);
+    property <length> max-offset: Math.max(0px, content-height - visible-height);
+    property <length> thumb-h: Math.max(32px, visible-height * visible-height / Math.max(1px, content-height));
+    width: 12px;
+    visible: max-offset > 0;
+    property <bool> active: ta.has-hover || ta.pressed;
+    Rectangle {
+        x: parent.width - self.width - 3px;
+        width: root.active ? 8px : 5px;
+        animate width { duration: Motion.fast; }
+        height: root.thumb-h;
+        y: root.max-offset > 0 ? (root.height - self.height) * root.offset / root.max-offset : 0;
+        border-radius: self.width / 2;
+        background: root.active ? Theme.border-strong : Theme.surface-3;
+    }
+    ta := TouchArea {
+        property <length> start-offset;
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down { self.start-offset = root.offset; }
+        }
+        moved => {
+            if self.pressed {
+                root.scroll-to(Math.clamp(self.start-offset + (self.mouse-y - self.pressed-y) * root.max-offset / Math.max(1px, root.height - root.thumb-h), 0, root.max-offset));
+            }
+        }
+    }
+}
+
+// a vertically scrolling page body with the overlay scrollbar
+export component ScrollPage inherits Rectangle {
+    in property <length> content-height;
+    in-out property <length> scroll-y <=> fl.content-y;
+    out property <length> visible-height: fl.height;
+    fl := Flickable {
+        width: root.width;
+        height: root.height;
+        content-height: root.content-height;
+        @children
+    }
+    ScrollBar {
+        x: root.width - self.width;
+        height: root.height;
+        content-height: fl.content-height;
+        visible-height: fl.height;
+        offset: -fl.content-y;
+        scroll-to(o) => { fl.content-y = -o; }
+    }
+}

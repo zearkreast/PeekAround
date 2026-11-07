@@ -1,0 +1,243 @@
+// Story-style memory player (MemoryPlayer.tsx): progress bars, auto-advance, tap left / right,
+// hold = pause, swipe down = close, Ken Burns pan / zoom, "see all" / "open as slideshow".
+// Rust (src/explore.rs Player) runs the clock and the gestures; this only draws.
+
+import { Theme, Motion, I18n } from "../../theme.slint";
+import { EIcons } from "icons.slint";
+import { PlayerState } from "state.slint";
+import { Spinner } from "../../components/feedback.slint";
+
+component RoundButton inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 20px;
+    callback clicked();
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    background: ta.has-hover ? #ffffff26 : transparent;
+    Image { source: root.icon; colorize: #ffffff; width: root.icon-size; height: root.icon-size; }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component Pill inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> light;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: 40px;
+    width: lay.preferred-width;
+    border-radius: 20px;
+    opacity: root.enabled ? 1 : 0.5;
+    background: root.light ? (ta.has-hover ? #ffffffe6 : #ffffff) : (ta.has-hover ? #ffffff40 : #ffffff26);
+    lay := HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 8px;
+        VerticalLayout { alignment: center; Image { source: root.icon; colorize: root.light ? #000000 : #ffffff; width: 16px; height: 16px; } }
+        Text {
+            text: root.text;
+            font-size: 14px;
+            font-weight: root.light ? 600 : 500;
+            color: root.light ? #000000 : #ffffff;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea { enabled: root.enabled; mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+export component MemoryPlayer inherits Rectangle {
+    // the Ken Burns transform of a w×h box: a = 1.02 → 1.14, −1.5 % / −1 %; b = 1.14 → 1.03, +1.5 % / +1 % → 0
+    property <bool> kb-on: Motion.level == 2;
+    property <float> kb-scale: !root.kb-on ? 1 : PlayerState.kb-b ? 1.14 - 0.11 * PlayerState.kb : 1.02 + 0.12 * PlayerState.kb;
+    property <float> kb-dx: !root.kb-on ? 0 : PlayerState.kb-b ? 0.015 * (1 - PlayerState.kb) : -0.015 * PlayerState.kb;
+    property <float> kb-dy: !root.kb-on ? 0 : PlayerState.kb-b ? 0.01 * (1 - PlayerState.kb) : -0.01 * PlayerState.kb;
+    property <float> drag-k: Math.min(1, PlayerState.drag-y / 400px);
+    property <float> appear: 0;
+    init => { self.appear = 1; fs.focus(); }
+    animate appear { duration: Motion.normal; easing: ease-out; }
+    opacity: root.appear;
+
+    // black backdrop fades while dragging down
+    Rectangle { background: #000000; opacity: 1 - 0.8 * root.drag-k; }
+
+    stage := Rectangle {
+        property <float> s: 1 - 0.14 * root.drag-k;
+        x: (root.width - self.width) / 2;
+        y: PlayerState.drag-y + (root.height - self.height) / 2;
+        width: root.width * self.s;
+        height: root.height * self.s;
+        clip: true;
+
+        if !PlayerState.ready: Rectangle {
+            if PlayerState.missing: Text {
+                text: I18n.t("explore.notFound", I18n.rev);
+                color: #ffffffcc;
+                font-size: 15px;
+            }
+            if !PlayerState.missing: Spinner { size: 32px; fg: #ffffff; }
+        }
+
+        // title card: the cover behind the memory's name
+        if PlayerState.ready && PlayerState.is-title: Rectangle {
+            if PlayerState.has-image: Image {
+                width: parent.width * root.kb-scale;
+                height: parent.height * root.kb-scale;
+                x: (parent.width - self.width) / 2 + parent.width * root.kb-dx;
+                y: (parent.height - self.height) / 2 + parent.height * root.kb-dy;
+                source: PlayerState.image;
+                image-fit: cover;
+                opacity: 0.55;
+            }
+            Rectangle { background: @linear-gradient(180deg, #0000004d 0%, #00000033 50%, #000000b3 100%); }
+            property <float> rise: 0;
+            init => { self.rise = 1; }
+            animate rise { duration: Motion.level == 2 ? 600ms : Motion.normal; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+            VerticalLayout {
+                x: 32px;
+                width: parent.width - 64px;
+                y: parent.height * 0.78 - self.preferred-height + (1 - parent.rise) * 18px;
+                height: self.preferred-height;
+                opacity: parent.rise;
+                spacing: 12px;
+                Text {
+                    text: PlayerState.title;
+                    font-family: Theme.font-display;
+                    font-size: 48px;
+                    font-weight: 700;
+                    color: #ffffff;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: PlayerState.subtitle;
+                    font-size: 15px;
+                    color: #ffffffcc;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        // a photo (or a video's poster): dimmed covering backdrop + the picture, contained
+        if PlayerState.ready && !PlayerState.is-title: Rectangle {
+            if PlayerState.has-backdrop: Image {
+                width: parent.width * 1.1;
+                height: parent.height * 1.1;
+                x: -parent.width * 0.05;
+                y: -parent.height * 0.05;
+                source: PlayerState.backdrop;
+                image-fit: cover;
+                opacity: 0.35;
+            }
+            property <length> fw: Math.min(self.width, self.height * PlayerState.aspect);
+            property <length> fh: self.fw / PlayerState.aspect;
+            if PlayerState.has-image: Image {
+                width: parent.fw * root.kb-scale;
+                height: parent.fh * root.kb-scale;
+                x: (parent.width - self.width) / 2 + parent.fw * root.kb-dx;
+                y: (parent.height - self.height) / 2 + parent.fh * root.kb-dy;
+                source: PlayerState.image;
+                image-fit: contain;
+            }
+            if PlayerState.is-video: Rectangle {
+                width: 64px;
+                height: 64px;
+                border-radius: 32px;
+                background: #00000066;
+                Image { source: EIcons.play-fill; colorize: #ffffff; width: 28px; height: 28px; }
+            }
+        }
+    }
+
+    // gestures (Rust: tap left 30 % = back, else next; hold = pause; swipe down = close; swipe sideways)
+    ta := TouchArea {
+        pointer-event(e) => {
+            if e.button == PointerEventButton.left && e.kind == PointerEventKind.down {
+                PlayerState.press(self.mouse-x, self.mouse-y);
+            } else if e.button == PointerEventButton.left && e.kind == PointerEventKind.up {
+                PlayerState.release(self.mouse-x, self.mouse-y, root.width);
+            }
+        }
+        moved => { if self.pressed { PlayerState.move(self.mouse-x, self.mouse-y); } }
+    }
+
+    fs := FocusScope {
+        key-pressed(e) => {
+            if e.text == Key.RightArrow { PlayerState.step(1); return accept; }
+            if e.text == Key.LeftArrow { PlayerState.step(-1); return accept; }
+            if e.text == " " { PlayerState.toggle-pause(); return accept; }
+            if e.text == Key.Escape { PlayerState.close(); return accept; }
+            reject
+        }
+    }
+
+    // top: progress bars + title + controls
+    Rectangle {
+        y: 0;
+        height: top.preferred-height + 40px;
+        opacity: PlayerState.ui ? 1 : 0;
+        animate opacity { duration: 200ms; }
+        background: @linear-gradient(180deg, #0000008c 0%, transparent 100%);
+        top := VerticalLayout {
+            y: 0;
+            height: self.preferred-height;
+            padding-top: 10px;
+            padding-left: 12px;
+            padding-right: 12px;
+            spacing: 12px;
+            bars := Rectangle {
+                height: 3px;
+                property <length> bw: (self.width - (PlayerState.count - 1) * 4px) / Math.max(1, PlayerState.count);
+                for k in PlayerState.count: Rectangle {
+                    x: k * (bars.bw + 4px);
+                    width: bars.bw;
+                    border-radius: 1.5px;
+                    clip: true;
+                    background: #ffffff52;
+                    Rectangle {
+                        x: 0;
+                        width: parent.width * (k < PlayerState.index ? 1 : k == PlayerState.index ? PlayerState.progress : 0);
+                        background: #ffffff;
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    Text { text: PlayerState.title; font-size: 14px; font-weight: 600; color: #ffffff; overflow: elide; }
+                    Text { text: PlayerState.subtitle; font-size: 12px; color: #ffffffb3; overflow: elide; }
+                }
+                RoundButton {
+                    icon: PlayerState.paused ? EIcons.play : EIcons.pause;
+                    clicked => { PlayerState.toggle-pause(); }
+                }
+                RoundButton { icon: EIcons.x; icon-size: 24px; clicked => { PlayerState.close(); } }
+            }
+        }
+    }
+
+    // bottom actions
+    Rectangle {
+        y: root.height - self.height;
+        height: 40px + 48px + 18px;
+        opacity: PlayerState.ui ? 1 : 0;
+        animate opacity { duration: 200ms; }
+        background: @linear-gradient(0deg, #00000099 0%, transparent 100%);
+        HorizontalLayout {
+            y: parent.height - 18px - 40px;
+            height: 40px;
+            alignment: center;
+            spacing: 8px;
+            Pill { icon: EIcons.grid-3x3; text: I18n.t("explore.player.openGrid", I18n.rev); clicked => { PlayerState.open-grid(); } }
+            Pill {
+                icon: EIcons.presentation;
+                text: I18n.t("explore.player.asSlideshow", I18n.rev);
+                light: true;
+                enabled: PlayerState.count > 1;
+                clicked => { PlayerState.as-slideshow(); }
+            }
+        }
+    }
+}

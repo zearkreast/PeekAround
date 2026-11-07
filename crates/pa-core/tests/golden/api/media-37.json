@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/37",
+ "response": {
+  "id": "37",
+  "folderId": "1",
+  "dir": "Fotoğraflar/Aile",
+  "name": "aile_4.jpg",
+  "ext": "jpg",
+  "kind": "image",
+  "size": 41449,
+  "mtime": 1793998143106,
+  "width": 1200,
+  "height": 1200,
+  "duration": null,
+  "takenAt": 1695207600000,
+  "localAt": 1695218400000,
+  "flags": 0,
+  "thumbhash": "qNYNLxSKVneAeHddl3l2aImJmAiYiIAF",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/Aile/aile_4.jpg",
+  "exif": {
+   "Make": "samsung",
+   "Model": "SM-G991B",
+   "LensModel": "Samsung Galaxy S21 back camera 5.4mm f/1.8",
+   "DateTimeOriginal": 1695218400000,
+   "latitude": 41.0373,
+   "longitude": 29.0294
+  },
+  "gps": {
+   "lat": 41.037328,
+   "lon": 29.029411
+  },
+  "place": {
+   "city": "Üsküdar",
+   "admin1": "İstanbul",
+   "cc": "TR",
+   "key": "TR-34"
+  },
+  "camera": {
+   "make": "Samsung",
+   "model": "SM-G991B",
+   "lens": "Samsung Galaxy S21 back camera 5.4mm f/1.8"
+  },
+  "tzOffset": 180
+ },
+ "raw": "{\"id\":\"37\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/Aile\",\"name\":\"aile_4.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":41449,\"mtime\":1793998143106,\"width\":1200,\"height\":1200,\"duration\":null,\"takenAt\":1695207600000,\"localAt\":1695218400000,\"flags\":0,\"thumbhash\":\"qNYNLxSKVneAeHddl3l2aImJmAiYiIAF\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/Aile/aile_4.jpg\",\"exif\":{\"Make\":\"samsung\",\"Model\":\"SM-G991B\",\"LensModel\":\"Samsung Galaxy S21 back camera 5.4mm f/1.8\",\"DateTimeOriginal\":1695218400000,\"latitude\":41.0373,\"longitude\":29.0294},\"gps\":{\"lat\":41.037328,\"lon\":29.029411},\"place\":{\"city\":\"Üsküdar\",\"admin1\":\"İstanbul\",\"cc\":\"TR\",\"key\":\"TR-34\"},\"camera\":{\"make\":\"Samsung\",\"model\":\"SM-G991B\",\"lens\":\"Samsung Galaxy S21 back camera 5.4mm f/1.8\"},\"tzOffset\":180}"
+}

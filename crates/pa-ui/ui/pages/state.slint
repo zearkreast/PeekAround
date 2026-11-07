@@ -1,0 +1,207 @@
+// State of the library hub, albums, album, library / folder pages (Rust: src/pages/*.rs).
+
+import { PIcons } from "icons.slint";
+
+// lucide name of a library → icon (lib/icons.tsx LIBRARY_ICONS)
+export global LibIcons {
+    pure public function get(name: string) -> image {
+        name == "camera" ? PIcons.camera : name == "film" ? PIcons.film : name == "heart" ? PIcons.heart
+            : name == "mountain" ? PIcons.mountain : name == "plane" ? PIcons.plane : name == "palette" ? PIcons.palette
+            : name == "star" ? PIcons.star : name == "music" ? PIcons.music : name == "baby" ? PIcons.baby
+            : name == "house" ? PIcons.house : name == "sun" ? PIcons.sun : name == "flower" ? PIcons.flower-2
+            : name == "paw" ? PIcons.paw-print : name == "trophy" ? PIcons.trophy : name == "folder" ? PIcons.folder
+            : name == "cloud" ? PIcons.cloud : PIcons.images
+    }
+}
+
+export struct LibCardData {
+    id: string,
+    name: string,
+    color: color,
+    icon: string,
+    cover: image,
+    has-cover: bool,
+    items: string,
+    size: string,
+    range: string,
+    // MEGA library: "" | "ok" | "busy" | "warn" | "error"
+    remote: string,
+}
+
+export struct AlbumCardData {
+    id: string,
+    name: string,
+    cover: image,
+    has-cover: bool,
+    sub: string,
+    count: int,
+}
+
+// a list row (phones' folders, temp sessions)
+export struct RowData {
+    id: string,
+    title: string,
+    sub: string,
+    online: bool,
+}
+
+export struct FolderCardData {
+    dir: string,
+    name: string,
+    count: string,
+    n: int,
+    c1: image,
+    c2: image,
+    c3: image,
+}
+
+export struct RootCardData {
+    id: string,
+    name: string,
+    path: string,
+    count: string,
+    remote: string,
+}
+
+export struct ArchiveData {
+    id: string,
+    name: string,
+    size: string,
+    busy: string,
+}
+
+export struct CrumbData {
+    label: string,
+    index: int,
+}
+
+// a MEGA folder banner (RemoteFolders.tsx RemoteRow)
+export struct RemoteBannerData {
+    id: string,
+    name: string,
+    status: string,
+    // "ok" | "listing" | "indexing" | "warn" | "error" | "offline"
+    state: string,
+    progress: float,
+    login-link: bool,
+    refreshing: bool,
+}
+
+export global HubState {
+    in property <[LibCardData]> libraries;
+    in property <[AlbumCardData]> albums;
+    in property <[RowData]> devices;
+    in property <[RowData]> temp;
+    in property <string> subtitle;
+    in property <bool> loaded;
+    in property <bool> albums-loaded;
+    in property <bool> mega;
+    callback open-library(string);
+    callback edit-library(string);
+    callback add-library();
+    callback add-mega();
+    callback open-album(string);
+    callback new-album();
+    callback open-folder(string);
+    callback close-temp(string);
+    callback open-quick(string);
+    callback open-tool(string);
+}
+
+export global AlbumsState {
+    in property <[AlbumCardData]> albums;
+    in property <bool> loaded;
+    in property <string> count-text;
+    callback open(string);
+}
+
+export global AlbumState {
+    in property <string> id;
+    in property <string> name;
+    in property <image> cover;
+    in property <bool> has-cover;
+    in property <string> sub;
+    in property <string> order: "desc";
+    in property <bool> cover-picked;
+    in property <bool> loaded;
+    in property <string> error;
+    callback rename(string);
+    callback set-order(string);
+    callback reset-cover();
+    callback delete();
+    callback download();
+    callback slideshow();
+}
+
+// library page (mode "library") and folder pages (mode "folder")
+export global LibState {
+    in property <string> mode: "library";
+    in property <string> name;
+    in property <color> color: #8b5cf6;
+    in property <string> icon;
+    in property <image> cover;
+    in property <bool> has-cover;
+    // library stats lines
+    in property <string> stats-main;
+    in property <string> stats-size;
+    in property <string> stats-range;
+    in property <string> stats-folders;
+    in property <string> stats-scan;
+    in property <bool> stats-scanning;
+    in property <string> stats-indexing;
+    in-out property <string> view: "all";
+    in property <[CrumbData]> crumbs;
+    in property <string> title;
+    in property <string> sub;
+    in property <[FolderCardData]> folders;
+    in property <[RootCardData]> roots;
+    in property <[ArchiveData]> archives;
+    in property <string> folder-sort: "name";
+    in property <bool> writable;
+    // folder id of the sub folder cards (drop targets for dragged tiles)
+    in property <string> base-folder;
+    in property <bool> can-slideshow;
+    in property <bool> cover-picked;
+    in property <int> exclusions;
+    in property <bool> rescanning;
+    in property <bool> loading: true;
+    in property <bool> empty;
+    in property <string> empty-hint;
+    // temporary session banner
+    in property <bool> temp;
+    in property <string> temp-title;
+    in property <string> temp-expires;
+    // MEGA banners
+    in property <[RemoteBannerData]> remotes;
+    // phone folder (view + copy only)
+    in property <bool> device;
+    in property <bool> device-online;
+    in property <string> device-name;
+    callback set-view(string);
+    callback open-crumb(int);
+    callback open-dir(string);
+    callback open-root(string);
+    callback folder-slideshow(string);
+    callback peek(string);
+    callback extract(string);
+    callback rescan();
+    callback edit();
+    callback exclusions-dialog();
+    callback reset-cover();
+    callback slideshow();
+    callback set-folder-sort(string);
+    callback temp-extend();
+    callback temp-close();
+    callback temp-keep();
+    callback remote-refresh(string);
+    callback remote-copy(string);
+    callback remote-link(string);
+    callback remote-remove(string);
+    callback remote-login();
+    callback upload();
+    callback new-folder();
+    callback download-folder();
+    callback copy-to-pc();
+    // sub folder card context menu: "slideshow" | "download" | "copy-to-pc" | "rename" | "move" | "delete"
+    callback folder-action(string, string);
+}

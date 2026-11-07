@@ -1,0 +1,871 @@
+{
+ "type": "ExploreResult",
+ "method": "GET",
+ "url": "/api/explore",
+ "response": {
+  "stats": {
+   "photos": 92,
+   "videos": 4,
+   "countries": 2,
+   "cities": 16,
+   "firstYear": 2023,
+   "lastYear": 2026,
+   "bytes": 24347786,
+   "cloudBytes": 0,
+   "withLocation": 78
+  },
+  "yearReviews": [
+   {
+    "id": "year-2026",
+    "kind": "year",
+    "from": 1767225600000,
+    "to": 1798761600000,
+    "count": 17,
+    "coverIds": [
+     "86",
+     "34",
+     "33",
+     "32"
+    ],
+    "months": [
+     1,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     14,
+     0
+    ]
+   },
+   {
+    "id": "year-2025",
+    "kind": "year",
+    "from": 1735689600000,
+    "to": 1767225600000,
+    "count": 25,
+    "coverIds": [
+     "98",
+     "67",
+     "31",
+     "30",
+     "26",
+     "54",
+     "43"
+    ],
+    "months": [
+     0,
+     4,
+     0,
+     13,
+     0,
+     1,
+     1,
+     0,
+     0,
+     1,
+     4,
+     1
+    ]
+   },
+   {
+    "id": "year-2024",
+    "kind": "year",
+    "from": 1704067200000,
+    "to": 1735689600000,
+    "count": 30,
+    "coverIds": [
+     "64",
+     "41",
+     "95",
+     "40",
+     "39"
+    ],
+    "months": [
+     0,
+     0,
+     1,
+     0,
+     1,
+     0,
+     22,
+     1,
+     0,
+     0,
+     5,
+     0
+    ]
+   },
+   {
+    "id": "year-2023",
+    "kind": "year",
+    "from": 1672531200000,
+    "to": 1704067200000,
+    "count": 24,
+    "coverIds": [
+     "38",
+     "59",
+     "81",
+     "76",
+     "73",
+     "35",
+     "27"
+    ],
+    "months": [
+     2,
+     0,
+     0,
+     1,
+     3,
+     3,
+     0,
+     0,
+     10,
+     0,
+     4,
+     1
+    ]
+   }
+  ],
+  "countries": [
+   {
+    "cc": "TR",
+    "count": 66,
+    "coverId": "34",
+    "regions": 4,
+    "cities": 13,
+    "lat": 39.31189,
+    "lon": 30.50845
+   },
+   {
+    "cc": "DE",
+    "count": 12,
+    "coverId": "53",
+    "regions": 1,
+    "cities": 3,
+    "lat": 52.51391,
+    "lon": 13.40792
+   }
+  ],
+  "cities": [
+   {
+    "key": "TR-34|Fatih",
+    "cc": "TR",
+    "placeKey": "TR-34",
+    "name": "Fatih",
+    "count": 14,
+    "coverId": "68",
+    "lat": 41.00549,
+    "lon": 28.97496
+   },
+   {
+    "key": "TR-07|Muratpaşa",
+    "cc": "TR",
+    "placeKey": "TR-07",
+    "name": "Muratpaşa",
+    "count": 14,
+    "coverId": "23",
+    "lat": 36.87795,
+    "lon": 30.71905
+   },
+   {
+    "key": "TR-50|Ürgüp",
+    "cc": "TR",
+    "placeKey": "TR-50",
+    "name": "Ürgüp",
+    "count": 8,
+    "coverId": "84",
+    "lat": 38.63941,
+    "lon": 34.86991
+   },
+   {
+    "key": "TR-34|Üsküdar",
+    "cc": "TR",
+    "placeKey": "TR-34",
+    "name": "Üsküdar",
+    "count": 8,
+    "coverId": "32",
+    "lat": 41.02837,
+    "lon": 29.02009
+   },
+   {
+    "key": "TR-34|Beşiktaş",
+    "cc": "TR",
+    "placeKey": "TR-34",
+    "name": "Beşiktaş",
+    "count": 6,
+    "coverId": "33",
+    "lat": 41.04176,
+    "lon": 29.00822
+   },
+   {
+    "key": "DE-16|Kreuzberg",
+    "cc": "DE",
+    "placeKey": "DE-16",
+    "name": "Kreuzberg",
+    "count": 5,
+    "coverId": "57",
+    "lat": 52.5032,
+    "lon": 13.40726
+   },
+   {
+    "key": "DE-16|Berlin",
+    "cc": "DE",
+    "placeKey": "DE-16",
+    "name": "Berlin",
+    "count": 4,
+    "coverId": "52",
+    "lat": 52.52516,
+    "lon": 13.41686
+   },
+   {
+    "key": "TR-07|Kemer",
+    "cc": "TR",
+    "placeKey": "TR-07",
+    "name": "Kemer",
+    "count": 4,
+    "coverId": "21",
+    "lat": 36.60472,
+    "lon": 30.5677
+   },
+   {
+    "key": "TR-68|Çankaya",
+    "cc": "TR",
+    "placeKey": "TR-68",
+    "name": "Çankaya",
+    "count": 3,
+    "coverId": "45",
+    "lat": 39.92629,
+    "lon": 32.83921
+   },
+   {
+    "key": "DE-16|Mitte",
+    "cc": "DE",
+    "placeKey": "DE-16",
+    "name": "Mitte",
+    "count": 3,
+    "coverId": "53",
+    "lat": 52.51675,
+    "lon": 13.3971
+   },
+   {
+    "key": "TR-34|Kadıköy",
+    "cc": "TR",
+    "placeKey": "TR-34",
+    "name": "Kadıköy",
+    "count": 2,
+    "coverId": "34",
+    "lat": 40.98984,
+    "lon": 29.02807
+   },
+   {
+    "key": "TR-07|Konyaaltı",
+    "cc": "TR",
+    "placeKey": "TR-07",
+    "name": "Konyaaltı",
+    "count": 2,
+    "coverId": "25",
+    "lat": 36.87945,
+    "lon": 30.64469
+   },
+   {
+    "key": "TR-34|Şişli",
+    "cc": "TR",
+    "placeKey": "TR-34",
+    "name": "Şişli",
+    "count": 2,
+    "coverId": "38",
+    "lat": 41.04783,
+    "lon": 29.00076
+   },
+   {
+    "key": "TR-50|Avanos",
+    "cc": "TR",
+    "placeKey": "TR-50",
+    "name": "Avanos",
+    "count": 1,
+    "coverId": "85",
+    "lat": 38.65572,
+    "lon": 34.84188
+   },
+   {
+    "key": "TR-34|Beyoğlu",
+    "cc": "TR",
+    "placeKey": "TR-34",
+    "name": "Beyoğlu",
+    "count": 1,
+    "coverId": "64",
+    "lat": 41.02895,
+    "lon": 29.00297
+   },
+   {
+    "key": "TR-07|Kepez",
+    "cc": "TR",
+    "placeKey": "TR-07",
+    "name": "Kepez",
+    "count": 1,
+    "coverId": "6",
+    "lat": 36.90705,
+    "lon": 30.69155
+   }
+  ],
+  "dayTimes": [
+   {
+    "value": "night",
+    "count": 10,
+    "coverId": "34",
+    "coverIds": [
+     "34",
+     "33",
+     "32",
+     "98"
+    ]
+   }
+  ],
+  "colors": [
+   {
+    "value": "orange",
+    "count": 1,
+    "coverId": "2",
+    "coverIds": [
+     "2"
+    ]
+   },
+   {
+    "value": "yellow",
+    "count": 10,
+    "coverId": "32",
+    "coverIds": [
+     "32",
+     "56",
+     "46",
+     "62"
+    ]
+   },
+   {
+    "value": "green",
+    "count": 15,
+    "coverId": "1",
+    "coverIds": [
+     "1",
+     "90",
+     "67",
+     "26"
+    ]
+   },
+   {
+    "value": "blue",
+    "count": 22,
+    "coverId": "4",
+    "coverIds": [
+     "4",
+     "93",
+     "34",
+     "68"
+    ]
+   },
+   {
+    "value": "purple",
+    "count": 1,
+    "coverId": "96",
+    "coverIds": [
+     "96"
+    ]
+   },
+   {
+    "value": "pink",
+    "count": 34,
+    "coverId": "3",
+    "coverIds": [
+     "3",
+     "87",
+     "91",
+     "74"
+    ]
+   },
+   {
+    "value": "bw",
+    "count": 13,
+    "coverId": "5",
+    "coverIds": [
+     "5",
+     "86",
+     "92",
+     "98"
+    ]
+   }
+  ],
+  "orientations": [
+   {
+    "value": "portrait",
+    "count": 18,
+    "coverId": "5",
+    "coverIds": [
+     "5",
+     "3",
+     "31",
+     "30"
+    ]
+   },
+   {
+    "value": "landscape",
+    "count": 63,
+    "coverId": "96",
+    "coverIds": [
+     "96",
+     "4",
+     "2",
+     "1"
+    ]
+   },
+   {
+    "value": "square",
+    "count": 13,
+    "coverId": "87",
+    "coverIds": [
+     "87",
+     "34",
+     "69",
+     "66"
+    ]
+   },
+   {
+    "value": "panorama",
+    "count": 2,
+    "coverId": "25",
+    "coverIds": [
+     "25",
+     "70"
+    ]
+   }
+  ],
+  "videoLengths": [
+   {
+    "value": "short",
+    "count": 4,
+    "coverId": "96",
+    "coverIds": [
+     "96",
+     "98",
+     "95",
+     "97"
+    ]
+   }
+  ],
+  "largest": [
+   {
+    "id": "96",
+    "value": 9004184
+   },
+   {
+    "id": "95",
+    "value": 6940824
+   },
+   {
+    "id": "97",
+    "value": 4638276
+   },
+   {
+    "id": "87",
+    "value": 163400
+   },
+   {
+    "id": "71",
+    "value": 120484
+   },
+   {
+    "id": "4",
+    "value": 117305
+   },
+   {
+    "id": "74",
+    "value": 97305
+   },
+   {
+    "id": "86",
+    "value": 82096
+   },
+   {
+    "id": "3",
+    "value": 80126
+   },
+   {
+    "id": "5",
+    "value": 70798
+   },
+   {
+    "id": "60",
+    "value": 54183
+   },
+   {
+    "id": "45",
+    "value": 52787
+   },
+   {
+    "id": "25",
+    "value": 52059
+   },
+   {
+    "id": "73",
+    "value": 50227
+   },
+   {
+    "id": "30",
+    "value": 49528
+   },
+   {
+    "id": "2",
+    "value": 48508
+   },
+   {
+    "id": "70",
+    "value": 45984
+   },
+   {
+    "id": "54",
+    "value": 45808
+   },
+   {
+    "id": "68",
+    "value": 45591
+   },
+   {
+    "id": "62",
+    "value": 45277
+   }
+  ],
+  "recent": [
+   {
+    "id": "96",
+    "value": 1793998143793
+   },
+   {
+    "id": "87",
+    "value": 1793998143793
+   },
+   {
+    "id": "86",
+    "value": 1793998143793
+   },
+   {
+    "id": "93",
+    "value": 1793998143793
+   },
+   {
+    "id": "92",
+    "value": 1793998143793
+   },
+   {
+    "id": "91",
+    "value": 1793998143793
+   },
+   {
+    "id": "90",
+    "value": 1793998143793
+   },
+   {
+    "id": "74",
+    "value": 1793998143793
+   },
+   {
+    "id": "71",
+    "value": 1793998143793
+   },
+   {
+    "id": "98",
+    "value": 1793998143793
+   },
+   {
+    "id": "69",
+    "value": 1793998143793
+   },
+   {
+    "id": "68",
+    "value": 1793998143793
+   },
+   {
+    "id": "67",
+    "value": 1793998143793
+   },
+   {
+    "id": "66",
+    "value": 1793998143793
+   },
+   {
+    "id": "53",
+    "value": 1793998143793
+   },
+   {
+    "id": "52",
+    "value": 1793998143793
+   },
+   {
+    "id": "57",
+    "value": 1793998143793
+   },
+   {
+    "id": "56",
+    "value": 1793998143793
+   },
+   {
+    "id": "55",
+    "value": 1793998143793
+   },
+   {
+    "id": "54",
+    "value": 1793998143793
+   }
+  ],
+  "calendarYears": [
+   2026,
+   2025,
+   2024,
+   2023
+  ],
+  "noLocation": 18,
+  "duplicates": {
+   "groups": 1,
+   "files": 2,
+   "wasted": 27971,
+   "pending": 0,
+   "coverIds": [
+    "88"
+   ]
+  },
+  "memories": [
+   {
+    "id": "otd-2025-11-06",
+    "kind": "onthisday",
+    "yearsAgo": 1,
+    "from": 1762128000000,
+    "to": 1762732800000,
+    "count": 4,
+    "coverIds": [
+     "66",
+     "67",
+     "68",
+     "69"
+    ]
+   },
+   {
+    "id": "otd-2024-11-06",
+    "kind": "onthisday",
+    "yearsAgo": 2,
+    "from": 1730592000000,
+    "to": 1731196800000,
+    "count": 4,
+    "coverIds": [
+     "62",
+     "63",
+     "64",
+     "65"
+    ]
+   },
+   {
+    "id": "otd-2023-11-06",
+    "kind": "onthisday",
+    "yearsAgo": 3,
+    "from": 1698969600000,
+    "to": 1699574400000,
+    "count": 4,
+    "coverIds": [
+     "58",
+     "59",
+     "60",
+     "61"
+    ]
+   },
+   {
+    "id": "trip-2025-04-18",
+    "kind": "trip",
+    "place": "Berlin",
+    "cc": "DE",
+    "from": 1744934400000,
+    "to": 1745107200000,
+    "count": 12,
+    "coverIds": [
+     "47",
+     "49",
+     "51",
+     "55",
+     "57",
+     "53"
+    ]
+   },
+   {
+    "id": "trip-2024-07-02",
+    "kind": "trip",
+    "place": "Antalya",
+    "cc": "TR",
+    "from": 1719878400000,
+    "to": 1720310400000,
+    "count": 22,
+    "coverIds": [
+     "7",
+     "11",
+     "14",
+     "16",
+     "19",
+     "22"
+    ]
+   },
+   {
+    "id": "trip-2023-09-15",
+    "kind": "trip",
+    "place": "Nevşehir",
+    "cc": "TR",
+    "from": 1694736000000,
+    "to": 1694995200000,
+    "count": 9,
+    "coverIds": [
+     "77",
+     "79",
+     "80",
+     "82",
+     "83",
+     "85"
+    ]
+   }
+  ],
+  "places": [
+   {
+    "key": "TR-34",
+    "cc": "TR",
+    "name": "İstanbul",
+    "city": "Fatih",
+    "count": 33,
+    "coverId": "34",
+    "lat": 41.01996,
+    "lon": 28.99758
+   },
+   {
+    "key": "TR-07",
+    "cc": "TR",
+    "name": "Antalya",
+    "city": "Muratpaşa",
+    "count": 21,
+    "coverId": "23",
+    "lat": 36.82743,
+    "lon": 30.68183
+   },
+   {
+    "key": "DE-16",
+    "cc": "DE",
+    "name": "Berlin",
+    "city": "Kreuzberg",
+    "count": 12,
+    "coverId": "53",
+    "lat": 52.51391,
+    "lon": 13.40792
+   },
+   {
+    "key": "TR-50",
+    "cc": "TR",
+    "name": "Nevşehir",
+    "city": "Ürgüp",
+    "count": 9,
+    "coverId": "85",
+    "lat": 38.64122,
+    "lon": 34.8668
+   },
+   {
+    "key": "TR-68",
+    "cc": "TR",
+    "name": "Ankara",
+    "city": "Çankaya",
+    "count": 3,
+    "coverId": "45",
+    "lat": 39.92629,
+    "lon": 32.83921
+   }
+  ],
+  "types": [
+   {
+    "flag": "video",
+    "count": 4,
+    "coverId": "96"
+   },
+   {
+    "flag": "selfie",
+    "count": 1,
+    "coverId": "26"
+   },
+   {
+    "flag": "screenshot",
+    "count": 5,
+    "coverId": "5"
+   },
+   {
+    "flag": "panorama",
+    "count": 2,
+    "coverId": "25"
+   },
+   {
+    "flag": "animated",
+    "count": 2,
+    "coverId": "87"
+   }
+  ],
+  "cameras": [
+   {
+    "key": "samsung|sm-g991b",
+    "make": "Samsung",
+    "model": "SM-G991B",
+    "count": 26,
+    "coverId": "34"
+   },
+   {
+    "key": "apple|iphone 13",
+    "make": "Apple",
+    "model": "iPhone 13",
+    "count": 25,
+    "coverId": "33"
+   },
+   {
+    "key": "google|pixel 7",
+    "make": "Google",
+    "model": "Pixel 7",
+    "count": 14,
+    "coverId": "53"
+   },
+   {
+    "key": "nikon|d750",
+    "make": "Nikon",
+    "model": "D750",
+    "count": 12,
+    "coverId": "20"
+   }
+  ],
+  "years": [
+   {
+    "year": 2026,
+    "count": 17,
+    "coverId": "96"
+   },
+   {
+    "year": 2025,
+    "count": 25,
+    "coverId": "98"
+   },
+   {
+    "year": 2024,
+    "count": 30,
+    "coverId": "42"
+   },
+   {
+    "year": 2023,
+    "count": 24,
+    "coverId": "38"
+   }
+  ],
+  "indexing": {
+   "done": 96,
+   "total": 96
+  }
+ },
+ "raw": "{\"stats\":{\"photos\":92,\"videos\":4,\"countries\":2,\"cities\":16,\"firstYear\":2023,\"lastYear\":2026,\"bytes\":24347786,\"cloudBytes\":0,\"withLocation\":78},\"yearReviews\":[{\"id\":\"year-2026\",\"kind\":\"year\",\"from\":1767225600000,\"to\":1798761600000,\"count\":17,\"coverIds\":[\"86\",\"34\",\"33\",\"32\"],\"months\":[1,0,1,0,0,1,0,0,0,0,14,0]},{\"id\":\"year-2025\",\"kind\":\"year\",\"from\":1735689600000,\"to\":1767225600000,\"count\":25,\"coverIds\":[\"98\",\"67\",\"31\",\"30\",\"26\",\"54\",\"43\"],\"months\":[0,4,0,13,0,1,1,0,0,1,4,1]},{\"id\":\"year-2024\",\"kind\":\"year\",\"from\":1704067200000,\"to\":1735689600000,\"count\":30,\"coverIds\":[\"64\",\"41\",\"95\",\"40\",\"39\"],\"months\":[0,0,1,0,1,0,22,1,0,0,5,0]},{\"id\":\"year-2023\",\"kind\":\"year\",\"from\":1672531200000,\"to\":1704067200000,\"count\":24,\"coverIds\":[\"38\",\"59\",\"81\",\"76\",\"73\",\"35\",\"27\"],\"months\":[2,0,0,1,3,3,0,0,10,0,4,1]}],\"countries\":[{\"cc\":\"TR\",\"count\":66,\"coverId\":\"34\",\"regions\":4,\"cities\":13,\"lat\":39.31189,\"lon\":30.50845},{\"cc\":\"DE\",\"count\":12,\"coverId\":\"53\",\"regions\":1,\"cities\":3,\"lat\":52.51391,\"lon\":13.40792}],\"cities\":[{\"key\":\"TR-34|Fatih\",\"cc\":\"TR\",\"placeKey\":\"TR-34\",\"name\":\"Fatih\",\"count\":14,\"coverId\":\"68\",\"lat\":41.00549,\"lon\":28.97496},{\"key\":\"TR-07|Muratpaşa\",\"cc\":\"TR\",\"placeKey\":\"TR-07\",\"name\":\"Muratpaşa\",\"count\":14,\"coverId\":\"23\",\"lat\":36.87795,\"lon\":30.71905},{\"key\":\"TR-50|Ürgüp\",\"cc\":\"TR\",\"placeKey\":\"TR-50\",\"name\":\"Ürgüp\",\"count\":8,\"coverId\":\"84\",\"lat\":38.63941,\"lon\":34.86991},{\"key\":\"TR-34|Üsküdar\",\"cc\":\"TR\",\"placeKey\":\"TR-34\",\"name\":\"Üsküdar\",\"count\":8,\"coverId\":\"32\",\"lat\":41.02837,\"lon\":29.02009},{\"key\":\"TR-34|Beşiktaş\",\"cc\":\"TR\",\"placeKey\":\"TR-34\",\"name\":\"Beşiktaş\",\"count\":6,\"coverId\":\"33\",\"lat\":41.04176,\"lon\":29.00822},{\"key\":\"DE-16|Kreuzberg\",\"cc\":\"DE\",\"placeKey\":\"DE-16\",\"name\":\"Kreuzberg\",\"count\":5,\"coverId\":\"57\",\"lat\":52.5032,\"lon\":13.40726},{\"key\":\"DE-16|Berlin\",\"cc\":\"DE\",\"placeKey\":\"DE-16\",\"name\":\"Berlin\",\"count\":4,\"coverId\":\"52\",\"lat\":52.52516,\"lon\":13.41686},{\"key\":\"TR-07|Kemer\",\"cc\":\"TR\",\"placeKey\":\"TR-07\",\"name\":\"Kemer\",\"count\":4,\"coverId\":\"21\",\"lat\":36.60472,\"lon\":30.5677},{\"key\":\"TR-68|Çankaya\",\"cc\":\"TR\",\"placeKey\":\"TR-68\",\"name\":\"Çankaya\",\"count\":3,\"coverId\":\"45\",\"lat\":39.92629,\"lon\":32.83921},{\"key\":\"DE-16|Mitte\",\"cc\":\"DE\",\"placeKey\":\"DE-16\",\"name\":\"Mitte\",\"count\":3,\"coverId\":\"53\",\"lat\":52.51675,\"lon\":13.3971},{\"key\":\"TR-34|Kadıköy\",\"cc\":\"TR\",\"placeKey\":\"TR-34\",\"name\":\"Kadıköy\",\"count\":2,\"coverId\":\"34\",\"lat\":40.98984,\"lon\":29.02807},{\"key\":\"TR-07|Konyaaltı\",\"cc\":\"TR\",\"placeKey\":\"TR-07\",\"name\":\"Konyaaltı\",\"count\":2,\"coverId\":\"25\",\"lat\":36.87945,\"lon\":30.64469},{\"key\":\"TR-34|Şişli\",\"cc\":\"TR\",\"placeKey\":\"TR-34\",\"name\":\"Şişli\",\"count\":2,\"coverId\":\"38\",\"lat\":41.04783,\"lon\":29.00076},{\"key\":\"TR-50|Avanos\",\"cc\":\"TR\",\"placeKey\":\"TR-50\",\"name\":\"Avanos\",\"count\":1,\"coverId\":\"85\",\"lat\":38.65572,\"lon\":34.84188},{\"key\":\"TR-34|Beyoğlu\",\"cc\":\"TR\",\"placeKey\":\"TR-34\",\"name\":\"Beyoğlu\",\"count\":1,\"coverId\":\"64\",\"lat\":41.02895,\"lon\":29.00297},{\"key\":\"TR-07|Kepez\",\"cc\":\"TR\",\"placeKey\":\"TR-07\",\"name\":\"Kepez\",\"count\":1,\"coverId\":\"6\",\"lat\":36.90705,\"lon\":30.69155}],\"dayTimes\":[{\"value\":\"night\",\"count\":10,\"coverId\":\"34\",\"coverIds\":[\"34\",\"33\",\"32\",\"98\"]}],\"colors\":[{\"value\":\"orange\",\"count\":1,\"coverId\":\"2\",\"coverIds\":[\"2\"]},{\"value\":\"yellow\",\"count\":10,\"coverId\":\"32\",\"coverIds\":[\"32\",\"56\",\"46\",\"62\"]},{\"value\":\"green\",\"count\":15,\"coverId\":\"1\",\"coverIds\":[\"1\",\"90\",\"67\",\"26\"]},{\"value\":\"blue\",\"count\":22,\"coverId\":\"4\",\"coverIds\":[\"4\",\"93\",\"34\",\"68\"]},{\"value\":\"purple\",\"count\":1,\"coverId\":\"96\",\"coverIds\":[\"96\"]},{\"value\":\"pink\",\"count\":34,\"coverId\":\"3\",\"coverIds\":[\"3\",\"87\",\"91\",\"74\"]},{\"value\":\"bw\",\"count\":13,\"coverId\":\"5\",\"coverIds\":[\"5\",\"86\",\"92\",\"98\"]}],\"orientations\":[{\"value\":\"portrait\",\"count\":18,\"coverId\":\"5\",\"coverIds\":[\"5\",\"3\",\"31\",\"30\"]},{\"value\":\"landscape\",\"count\":63,\"coverId\":\"96\",\"coverIds\":[\"96\",\"4\",\"2\",\"1\"]},{\"value\":\"square\",\"count\":13,\"coverId\":\"87\",\"coverIds\":[\"87\",\"34\",\"69\",\"66\"]},{\"value\":\"panorama\",\"count\":2,\"coverId\":\"25\",\"coverIds\":[\"25\",\"70\"]}],\"videoLengths\":[{\"value\":\"short\",\"count\":4,\"coverId\":\"96\",\"coverIds\":[\"96\",\"98\",\"95\",\"97\"]}],\"largest\":[{\"id\":\"96\",\"value\":9004184},{\"id\":\"95\",\"value\":6940824},{\"id\":\"97\",\"value\":4638276},{\"id\":\"87\",\"value\":163400},{\"id\":\"71\",\"value\":120484},{\"id\":\"4\",\"value\":117305},{\"id\":\"74\",\"value\":97305},{\"id\":\"86\",\"value\":82096},{\"id\":\"3\",\"value\":80126},{\"id\":\"5\",\"value\":70798},{\"id\":\"60\",\"value\":54183},{\"id\":\"45\",\"value\":52787},{\"id\":\"25\",\"value\":52059},{\"id\":\"73\",\"value\":50227},{\"id\":\"30\",\"value\":49528},{\"id\":\"2\",\"value\":48508},{\"id\":\"70\",\"value\":45984},{\"id\":\"54\",\"value\":45808},{\"id\":\"68\",\"value\":45591},{\"id\":\"62\",\"value\":45277}],\"recent\":[{\"id\":\"96\",\"value\":1793998143793},{\"id\":\"87\",\"value\":1793998143793},{\"id\":\"86\",\"value\":1793998143793},{\"id\":\"93\",\"value\":1793998143793},{\"id\":\"92\",\"value\":1793998143793},{\"id\":\"91\",\"value\":1793998143793},{\"id\":\"90\",\"value\":1793998143793},{\"id\":\"74\",\"value\":1793998143793},{\"id\":\"71\",\"value\":1793998143793},{\"id\":\"98\",\"value\":1793998143793},{\"id\":\"69\",\"value\":1793998143793},{\"id\":\"68\",\"value\":1793998143793},{\"id\":\"67\",\"value\":1793998143793},{\"id\":\"66\",\"value\":1793998143793},{\"id\":\"53\",\"value\":1793998143793},{\"id\":\"52\",\"value\":1793998143793},{\"id\":\"57\",\"value\":1793998143793},{\"id\":\"56\",\"value\":1793998143793},{\"id\":\"55\",\"value\":1793998143793},{\"id\":\"54\",\"value\":1793998143793}],\"calendarYears\":[2026,2025,2024,2023],\"noLocation\":18,\"duplicates\":{\"groups\":1,\"files\":2,\"wasted\":27971,\"pending\":0,\"coverIds\":[\"88\"]},\"memories\":[{\"id\":\"otd-2025-11-06\",\"kind\":\"onthisday\",\"yearsAgo\":1,\"from\":1762128000000,\"to\":1762732800000,\"count\":4,\"coverIds\":[\"66\",\"67\",\"68\",\"69\"]},{\"id\":\"otd-2024-11-06\",\"kind\":\"onthisday\",\"yearsAgo\":2,\"from\":1730592000000,\"to\":1731196800000,\"count\":4,\"coverIds\":[\"62\",\"63\",\"64\",\"65\"]},{\"id\":\"otd-2023-11-06\",\"kind\":\"onthisday\",\"yearsAgo\":3,\"from\":1698969600000,\"to\":1699574400000,\"count\":4,\"coverIds\":[\"58\",\"59\",\"60\",\"61\"]},{\"id\":\"trip-2025-04-18\",\"kind\":\"trip\",\"place\":\"Berlin\",\"cc\":\"DE\",\"from\":1744934400000,\"to\":1745107200000,\"count\":12,\"coverIds\":[\"47\",\"49\",\"51\",\"55\",\"57\",\"53\"]},{\"id\":\"trip-2024-07-02\",\"kind\":\"trip\",\"place\":\"Antalya\",\"cc\":\"TR\",\"from\":1719878400000,\"to\":1720310400000,\"count\":22,\"coverIds\":[\"7\",\"11\",\"14\",\"16\",\"19\",\"22\"]},{\"id\":\"trip-2023-09-15\",\"kind\":\"trip\",\"place\":\"Nevşehir\",\"cc\":\"TR\",\"from\":1694736000000,\"to\":1694995200000,\"count\":9,\"coverIds\":[\"77\",\"79\",\"80\",\"82\",\"83\",\"85\"]}],\"places\":[{\"key\":\"TR-34\",\"cc\":\"TR\",\"name\":\"İstanbul\",\"city\":\"Fatih\",\"count\":33,\"coverId\":\"34\",\"lat\":41.01996,\"lon\":28.99758},{\"key\":\"TR-07\",\"cc\":\"TR\",\"name\":\"Antalya\",\"city\":\"Muratpaşa\",\"count\":21,\"coverId\":\"23\",\"lat\":36.82743,\"lon\":30.68183},{\"key\":\"DE-16\",\"cc\":\"DE\",\"name\":\"Berlin\",\"city\":\"Kreuzberg\",\"count\":12,\"coverId\":\"53\",\"lat\":52.51391,\"lon\":13.40792},{\"key\":\"TR-50\",\"cc\":\"TR\",\"name\":\"Nevşehir\",\"city\":\"Ürgüp\",\"count\":9,\"coverId\":\"85\",\"lat\":38.64122,\"lon\":34.8668},{\"key\":\"TR-68\",\"cc\":\"TR\",\"name\":\"Ankara\",\"city\":\"Çankaya\",\"count\":3,\"coverId\":\"45\",\"lat\":39.92629,\"lon\":32.83921}],\"types\":[{\"flag\":\"video\",\"count\":4,\"coverId\":\"96\"},{\"flag\":\"selfie\",\"count\":1,\"coverId\":\"26\"},{\"flag\":\"screenshot\",\"count\":5,\"coverId\":\"5\"},{\"flag\":\"panorama\",\"count\":2,\"coverId\":\"25\"},{\"flag\":\"animated\",\"count\":2,\"coverId\":\"87\"}],\"cameras\":[{\"key\":\"samsung|sm-g991b\",\"make\":\"Samsung\",\"model\":\"SM-G991B\",\"count\":26,\"coverId\":\"34\"},{\"key\":\"apple|iphone 13\",\"make\":\"Apple\",\"model\":\"iPhone 13\",\"count\":25,\"coverId\":\"33\"},{\"key\":\"google|pixel 7\",\"make\":\"Google\",\"model\":\"Pixel 7\",\"count\":14,\"coverId\":\"53\"},{\"key\":\"nikon|d750\",\"make\":\"Nikon\",\"model\":\"D750\",\"count\":12,\"coverId\":\"20\"}],\"years\":[{\"year\":2026,\"count\":17,\"coverId\":\"96\"},{\"year\":2025,\"count\":25,\"coverId\":\"98\"},{\"year\":2024,\"count\":30,\"coverId\":\"42\"},{\"year\":2023,\"count\":24,\"coverId\":\"38\"}],\"indexing\":{\"done\":96,\"total\":96}}"
+}

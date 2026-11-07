@@ -1,0 +1,21 @@
+{
+ "type": "Album",
+ "method": "GET",
+ "url": "/api/albums/1",
+ "response": {
+  "id": "1",
+  "name": "Tatil ✈",
+  "coverId": "4",
+  "coverPicked": true,
+  "count": 6,
+  "photos": 4,
+  "videos": 1,
+  "from": 1793998143112,
+  "to": 1793998143132,
+  "order": "custom",
+  "created": 1793998163306,
+  "updated": 1793998163314,
+  "sort": 1
+ },
+ "raw": "{\"id\":\"1\",\"name\":\"Tatil ✈\",\"coverId\":\"4\",\"coverPicked\":true,\"count\":6,\"photos\":4,\"videos\":1,\"from\":1793998143112,\"to\":1793998143132,\"order\":\"custom\",\"created\":1793998163306,\"updated\":1793998163314,\"sort\":1}"
+}

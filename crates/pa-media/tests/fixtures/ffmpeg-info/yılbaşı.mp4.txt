@@ -1,0 +1,17 @@
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'yılbaşı.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    creation_time   : 2025-12-31T21:30:00.000000Z
+    encoder         : Lavf60.16.100
+    location-eng    : +41.0422+029.0067/
+    location        : +41.0422+029.0067/
+  Duration: 00:00:04.00, start: 0.000000, bitrate: 57 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 640x360 [SAR 1:1 DAR 16:9], 52 kb/s, 25 fps, 25 tbr, 12800 tbn (default)
+    Metadata:
+      creation_time   : 2025-12-31T21:30:00.000000Z
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+      encoder         : Lavc60.31.102 libx264
+At least one output file must be specified

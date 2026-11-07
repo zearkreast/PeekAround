@@ -1,0 +1,410 @@
+// Popover / Menu, Select (themed dropdown — never a native white list), Dialog (Modal), Sheet, Toaster
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Icon } from "icon.slint";
+import { IconButton, Button, ButtonVariant, IconButtonSize } from "button.slint";
+import { ProgressRing } from "feedback.slint";
+
+// The floating panel of popovers / menus: `min-w-48 rounded-2xl border bg-elev p-1.5 shadow-soft`,
+// with the motion entrance (fade + 6 px slide + slight scale). Put it inside a PopupWindow.
+export component PopoverPanel inherits Rectangle {
+    in property <bool> from-top;
+    property <bool> shown;
+    init => { shown = true; }
+    opacity: shown ? 1 : 0;
+    property <length> shift: shown ? 0px : (from-top ? 1 : -1) * Motion.pop-shift;
+    animate opacity { duration: Motion.fast; }
+    animate shift { duration: Motion.normal; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    min-width: 192px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev;
+    drop-shadow-blur: 40px;
+    drop-shadow-offset-y: 10px;
+    drop-shadow-color: Theme.shadow;
+    height: lay.preferred-height;
+    // swallow clicks on the panel's padding
+    TouchArea { }
+    lay := VerticalLayout {
+        y: root.shift;
+        width: root.width;
+        height: root.height;
+        padding: 6px;
+        spacing: 0px;
+        @children
+    }
+}
+
+export component MenuItem inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon;
+    in property <bool> checked;
+    in property <bool> danger;
+    in property <bool> enabled: true;
+    in property <string> hint;
+    callback clicked();
+    height: 36px;
+    border-radius: 12px;
+    opacity: enabled ? 1 : 0.4;
+    background: ta.has-hover && enabled ? (danger ? Theme.danger.with-alpha(0.1) : Theme.surface-2) : transparent;
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+        if root.has-icon: Icon {
+            source: root.icon;
+            tint: root.danger ? Theme.danger : Theme.text;
+            size: 16px;
+        }
+        Text {
+            text: root.text;
+            color: root.danger ? Theme.danger : Theme.text;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        if root.hint != "": Text { text: root.hint; color: Theme.text-faint; font-size: 12px; vertical-alignment: center; }
+        if root.checked: Icon {
+            source: Icons.check;
+            tint: Theme.accent;
+            size: 16px;
+        }
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component MenuLabel inherits Text {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: Theme.text-faint;
+    height: 28px;
+    vertical-alignment: bottom;
+    // uppercase is done by the caller's string (Slint has no text-transform)
+    x: 10px;
+}
+
+export component MenuSep inherits Rectangle {
+    height: 9px;
+    Rectangle {
+        height: 1px;
+        background: Theme.border;
+    }
+}
+
+export struct SelectOption {
+    value: string,
+    label: string,
+}
+
+// <select> replacement: a themed button + a themed popup list (both themes, check mark on the
+// current value). Width is the caller's (default 180 px), like a native select.
+export component Select inherits Rectangle {
+    in property <[SelectOption]> options;
+    in-out property <string> value;
+    in property <string> label;
+    in property <bool> small;
+    callback changed-value(string);
+
+    width: 180px;
+    height: small ? 32px : 36px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: ta.has-hover ? Theme.surface-2 : Theme.surface;
+    animate background { duration: Motion.fast; }
+
+    for o in root.options: Text {
+        visible: o.value == root.value;
+        x: 12px;
+        width: parent.width - 40px;
+        height: parent.height;
+        text: o.label;
+        color: Theme.text;
+        font-size: root.small ? 13px : 14px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Image {
+        x: parent.width - 28px;
+        source: Icons.chevron-down;
+        colorize: Theme.text-dim;
+        width: 16px;
+        height: 16px;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { popup.show(); }
+    }
+    popup := PopupWindow {
+        x: 0;
+        y: root.height + 6px;
+        width: Math.max(root.width, 180px);
+        close-policy: close-on-click-outside;
+        PopoverPanel {
+            y: 0;
+            width: parent.width;
+            for o in root.options: MenuItem {
+                text: o.label;
+                checked: o.value == root.value;
+                clicked => {
+                    popup.close();
+                    if root.value != o.value {
+                        root.value = o.value;
+                        root.changed-value(o.value);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Modal dialog: overlay + centred panel (rounded-3xl, bg-elev, header with close button, footer).
+export component Dialog inherits Rectangle {
+    in property <bool> open;
+    in property <string> title;
+    in property <length> panel-width: 480px;
+    in property <string> confirm-label;
+    in property <string> cancel-label;
+    in property <bool> danger;
+    in property <bool> busy;
+    in property <bool> confirm-enabled: true;
+    callback close();
+    callback confirm();
+
+    visible: self.opacity > 0.01;
+    opacity: open ? 1 : 0;
+    animate opacity { duration: Motion.normal; }
+    background: Theme.overlay;
+
+    // backdrop click / Escape close
+    TouchArea { clicked => { root.close(); } }
+    FocusScope {
+        enabled: root.open;
+        key-pressed(e) => {
+            if e.text == Key.Escape { root.close(); return accept; }
+            reject
+        }
+    }
+
+    panel := Rectangle {
+        width: Math.min(root.panel-width, root.width - 32px);
+        height: Math.min(lay.preferred-height, root.height * 0.88);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2 + (root.open ? 0px : 24px * (Motion.on ? 1 : 0));
+        animate y { duration: Motion.slow; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+        border-radius: 24px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.bg-elev;
+        drop-shadow-blur: 40px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        clip: true;
+        TouchArea { }
+        lay := VerticalLayout {
+            if root.title != "": HorizontalLayout {
+                padding-left: 24px;
+                padding-right: 20px;
+                padding-top: 20px;
+                padding-bottom: 8px;
+                Text {
+                    text: root.title;
+                    font-family: Theme.font-display;
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                IconButton {
+                    icon: Icons.x;
+                    label: I18n.t("common.close", I18n.rev);
+                    size: IconButtonSize.sm;
+                    clicked => { root.close(); }
+                }
+            }
+            VerticalLayout {
+                padding-left: 24px;
+                padding-right: 24px;
+                padding-top: 12px;
+                padding-bottom: 12px;
+                @children
+            }
+            if root.confirm-label != "" || root.cancel-label != "": Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            if root.confirm-label != "" || root.cancel-label != "": HorizontalLayout {
+                padding: 16px;
+                padding-left: 24px;
+                padding-right: 24px;
+                spacing: 8px;
+                alignment: end;
+                if root.cancel-label != "": Button {
+                    text: root.cancel-label;
+                    variant: ButtonVariant.ghost;
+                    clicked => { root.close(); }
+                }
+                if root.confirm-label != "": Button {
+                    text: root.confirm-label;
+                    variant: root.danger ? ButtonVariant.danger : ButtonVariant.primary;
+                    loading: root.busy;
+                    enabled: root.confirm-enabled;
+                    clicked => { root.confirm(); }
+                }
+            }
+        }
+    }
+}
+
+// Bottom sheet (phones; BottomSheet in sheet.tsx): slides up from the bottom edge.
+export component Sheet inherits Rectangle {
+    in property <bool> open;
+    in property <string> title;
+    callback close();
+    visible: self.opacity > 0.01;
+    opacity: open ? 1 : 0;
+    animate opacity { duration: Motion.normal; }
+    background: Theme.overlay;
+    TouchArea { clicked => { root.close(); } }
+    sheet := Rectangle {
+        width: root.width;
+        height: Math.min(lay.preferred-height, root.height * 0.92);
+        y: root.open ? root.height - self.height : root.height;
+        animate y { duration: Motion.slow; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+        border-top-left-radius: 28px;
+        border-top-right-radius: 28px;
+        background: Theme.bg-elev;
+        border-width: 1px;
+        border-color: Theme.border;
+        TouchArea { }
+        lay := VerticalLayout {
+            padding-bottom: 12px;
+            HorizontalLayout {
+                alignment: center;
+                height: 24px;
+                Rectangle {
+                    y: 9px;
+                    width: 40px;
+                    height: 6px;
+                    border-radius: 3px;
+                    background: Theme.border-strong;
+                }
+            }
+            if root.title != "": Text {
+                text: root.title;
+                font-family: Theme.font-display;
+                font-size: 18px;
+                font-weight: 600;
+                color: Theme.text;
+                x: 24px;
+                height: 36px;
+            }
+            VerticalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                @children
+            }
+        }
+    }
+}
+
+export enum ToastKind { info, success, error, progress }
+
+export struct ToastData {
+    id: int,
+    kind: ToastKind,
+    title: string,
+    body: string,
+    action: string,
+    progress: float,
+}
+
+component ToastItem inherits Rectangle {
+    in property <ToastData> data;
+    callback dismiss(int);
+    callback action(int);
+    property <bool> shown;
+    init => { shown = true; }
+    height: lay.preferred-height;
+    Rectangle {
+        y: root.shown ? 0px : (Motion.on ? 30px : 0px);
+        opacity: root.shown ? 1 : 0;
+        animate y { duration: Motion.slow; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+        animate opacity { duration: Motion.normal; }
+        height: root.height;
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.glass;
+        drop-shadow-blur: 40px;
+        drop-shadow-offset-y: 10px;
+        drop-shadow-color: Theme.shadow;
+        lay := HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 12px;
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 12px;
+            VerticalLayout {
+                alignment: start;
+                if root.data.kind == ToastKind.progress: ProgressRing { value: root.data.progress; size: 20px; stroke: 2.5px; }
+                if root.data.kind != ToastKind.progress: Image {
+                    width: 20px;
+                    height: 20px;
+                    source: root.data.kind == ToastKind.success ? Icons.circle-check : root.data.kind == ToastKind.error ? Icons.circle-alert : Icons.info;
+                    colorize: root.data.kind == ToastKind.success ? Theme.ok : root.data.kind == ToastKind.error ? Theme.danger : Theme.accent;
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
+                Text { text: root.data.title; font-size: 14px; font-weight: 500; color: Theme.text; wrap: word-wrap; }
+                if root.data.body != "": Text { text: root.data.body; font-size: 13px; color: Theme.text-dim; overflow: elide; }
+            }
+            if root.data.action != "": VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: at.preferred-width + 16px;
+                    height: 28px;
+                    border-radius: 8px;
+                    background: ata.has-hover ? Theme.surface-2 : transparent;
+                    at := Text { text: root.data.action; font-size: 13px; font-weight: 600; color: Theme.accent; }
+                    ata := TouchArea { mouse-cursor: pointer; clicked => { root.action(root.data.id); } }
+                }
+            }
+            VerticalLayout {
+                alignment: start;
+                Image {
+                    source: Icons.x;
+                    width: 16px;
+                    height: 16px;
+                    colorize: xa.has-hover ? Theme.text : Theme.text-faint;
+                    xa := TouchArea { mouse-cursor: pointer; clicked => { root.dismiss(root.data.id); } }
+                }
+            }
+        }
+    }
+}
+
+export component Toaster inherits VerticalLayout {
+    in property <[ToastData]> toasts;
+    callback dismiss(int);
+    callback action(int);
+    alignment: end;
+    spacing: 8px;
+    for t in root.toasts: ToastItem {
+        data: t;
+        dismiss(id) => { root.dismiss(id); }
+        action(id) => { root.action(id); }
+    }
+}

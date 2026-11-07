@@ -1,0 +1,32 @@
+{
+ "type": "ServerInfo",
+ "method": "GET",
+ "url": "/api/info",
+ "response": {
+  "name": "PeekAround",
+  "version": "1.3.0",
+  "apiVersion": 1,
+  "mode": "server",
+  "hostname": "vm",
+  "scanning": false,
+  "caps": {
+   "upload": true,
+   "fileOps": true,
+   "nativeFolders": false,
+   "browseHost": true,
+   "videoJobs": true,
+   "slideshowExport": true,
+   "zipDownload": true,
+   "trash": "folder",
+   "readonly": false,
+   "lanShare": false
+  },
+  "lan": {
+   "enabled": true,
+   "urls": [
+    "http://192.0.2.2:18901"
+   ]
+  }
+ },
+ "raw": "{\"name\":\"PeekAround\",\"version\":\"1.3.0\",\"apiVersion\":1,\"mode\":\"server\",\"hostname\":\"vm\",\"scanning\":false,\"caps\":{\"upload\":true,\"fileOps\":true,\"nativeFolders\":false,\"browseHost\":true,\"videoJobs\":true,\"slideshowExport\":true,\"zipDownload\":true,\"trash\":\"folder\",\"readonly\":false,\"lanShare\":false},\"lan\":{\"enabled\":true,\"urls\":[\"http://192.0.2.2:18901\"]}}"
+}

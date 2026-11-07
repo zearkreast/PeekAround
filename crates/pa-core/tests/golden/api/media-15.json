@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/15",
+ "response": {
+  "id": "15",
+  "folderId": "1",
+  "dir": "Fotoğraflar/2024 Yaz Tatili",
+  "name": "IMG_2409.jpg",
+  "ext": "jpg",
+  "kind": "image",
+  "size": 39573,
+  "mtime": 1793998143104,
+  "width": 1200,
+  "height": 1200,
+  "duration": null,
+  "takenAt": 1720083960000,
+  "localAt": 1720094760000,
+  "flags": 0,
+  "thumbhash": "WxkKXwphXIhAp4aKeDiKNYmHeAe3d3AL",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/2024 Yaz Tatili/IMG_2409.jpg",
+  "exif": {
+   "Make": "NIKON CORPORATION",
+   "Model": "NIKON D750",
+   "LensModel": "AF-S NIKKOR 24-120mm f/4G ED VR",
+   "DateTimeOriginal": 1720094760000,
+   "latitude": 36.8739,
+   "longitude": 30.7959
+  },
+  "gps": {
+   "lat": 36.873894,
+   "lon": 30.795925
+  },
+  "place": {
+   "city": "Muratpaşa",
+   "admin1": "Antalya",
+   "cc": "TR",
+   "key": "TR-07"
+  },
+  "camera": {
+   "make": "Nikon",
+   "model": "D750",
+   "lens": "AF-S NIKKOR 24-120mm f/4G ED VR"
+  },
+  "tzOffset": 180
+ },
+ "raw": "{\"id\":\"15\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/2024 Yaz Tatili\",\"name\":\"IMG_2409.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":39573,\"mtime\":1793998143104,\"width\":1200,\"height\":1200,\"duration\":null,\"takenAt\":1720083960000,\"localAt\":1720094760000,\"flags\":0,\"thumbhash\":\"WxkKXwphXIhAp4aKeDiKNYmHeAe3d3AL\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/2024 Yaz Tatili/IMG_2409.jpg\",\"exif\":{\"Make\":\"NIKON CORPORATION\",\"Model\":\"NIKON D750\",\"LensModel\":\"AF-S NIKKOR 24-120mm f/4G ED VR\",\"DateTimeOriginal\":1720094760000,\"latitude\":36.8739,\"longitude\":30.7959},\"gps\":{\"lat\":36.873894,\"lon\":30.795925},\"place\":{\"city\":\"Muratpaşa\",\"admin1\":\"Antalya\",\"cc\":\"TR\",\"key\":\"TR-07\"},\"camera\":{\"make\":\"Nikon\",\"model\":\"D750\",\"lens\":\"AF-S NIKKOR 24-120mm f/4G ED VR\"},\"tzOffset\":180}"
+}

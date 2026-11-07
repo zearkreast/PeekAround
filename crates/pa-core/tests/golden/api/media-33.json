@@ -1,0 +1,50 @@
+{
+ "type": "MediaDetails",
+ "method": "GET",
+ "url": "/api/media/33",
+ "response": {
+  "id": "33",
+  "folderId": "1",
+  "dir": "Fotoğraflar/Aile",
+  "name": "aile_15.jpg",
+  "ext": "jpg",
+  "kind": "image",
+  "size": 36371,
+  "mtime": 1793998143106,
+  "width": 1600,
+  "height": 1067,
+  "duration": null,
+  "takenAt": 1774476000000,
+  "localAt": 1774486800000,
+  "flags": 0,
+  "thumbhash": "KUgWPYJ3eId/h3eGeHiIiIiPtDoJ",
+  "favorite": false,
+  "playback": "direct",
+  "path": "lib/Fotoğraflar/Aile/aile_15.jpg",
+  "exif": {
+   "Make": "Apple",
+   "Model": "iPhone 13",
+   "LensModel": "iPhone 13 back dual wide camera 5.1mm f/1.6",
+   "DateTimeOriginal": 1774486800000,
+   "latitude": 41.0382,
+   "longitude": 29.0029
+  },
+  "gps": {
+   "lat": 41.038244,
+   "lon": 29.002878
+  },
+  "place": {
+   "city": "Beşiktaş",
+   "admin1": "İstanbul",
+   "cc": "TR",
+   "key": "TR-34"
+  },
+  "camera": {
+   "make": "Apple",
+   "model": "iPhone 13",
+   "lens": "iPhone 13 back dual wide camera 5.1mm f/1.6"
+  },
+  "tzOffset": 180
+ },
+ "raw": "{\"id\":\"33\",\"folderId\":\"1\",\"dir\":\"Fotoğraflar/Aile\",\"name\":\"aile_15.jpg\",\"ext\":\"jpg\",\"kind\":\"image\",\"size\":36371,\"mtime\":1793998143106,\"width\":1600,\"height\":1067,\"duration\":null,\"takenAt\":1774476000000,\"localAt\":1774486800000,\"flags\":0,\"thumbhash\":\"KUgWPYJ3eId/h3eGeHiIiIiPtDoJ\",\"favorite\":false,\"playback\":\"direct\",\"path\":\"lib/Fotoğraflar/Aile/aile_15.jpg\",\"exif\":{\"Make\":\"Apple\",\"Model\":\"iPhone 13\",\"LensModel\":\"iPhone 13 back dual wide camera 5.1mm f/1.6\",\"DateTimeOriginal\":1774486800000,\"latitude\":41.0382,\"longitude\":29.0029},\"gps\":{\"lat\":41.038244,\"lon\":29.002878},\"place\":{\"city\":\"Beşiktaş\",\"admin1\":\"İstanbul\",\"cc\":\"TR\",\"key\":\"TR-34\"},\"camera\":{\"make\":\"Apple\",\"model\":\"iPhone 13\",\"lens\":\"iPhone 13 back dual wide camera 5.1mm f/1.6\"},\"tzOffset\":180}"
+}

@@ -1,0 +1,79 @@
+// Design tokens — a 1:1 port of packages/web/src/styles.css (:root, [data-theme]) and the tailwind
+// scale the React components use. Rust drives `dark`, the accent colours (accent-2 / accent-3 are
+// hue-rotated partners, see src/theme.rs) and the animation level.
+
+import { Palette } from "std-widgets.slint";
+
+import "../fonts/InterVariable.ttf";
+import "../fonts/BricolageGrotesque-SemiBold.ttf";
+import "../fonts/BricolageGrotesque-Bold.ttf";
+
+export enum ThemeMode { dark, light, system }
+
+export global Theme {
+    in-out property <ThemeMode> mode: ThemeMode.dark;
+    // system mode follows the OS colour scheme (winit reports it; std-widgets' Palette exposes it)
+    out property <bool> dark: mode == ThemeMode.system ? Palette.color-scheme != ColorScheme.light : mode == ThemeMode.dark;
+
+    in-out property <color> accent: #8b5cf6;
+    in-out property <color> accent-2: #ec4899;
+    in-out property <color> accent-3: #f97316;
+    out property <color> accent-contrast: #ffffff;
+    // color-mix(in oklab, var(--accent) N%, transparent)
+    out property <color> accent-soft: accent.with-alpha(0.22);
+    out property <color> accent-faint: accent.with-alpha(0.16);
+
+    out property <color> bg: dark ? #09090d : #f4f4f7;
+    out property <color> bg-elev: dark ? #111118 : #ffffff;
+    out property <color> bg-elev-2: dark ? #17171f : #fbfbfd;
+    out property <color> surface: dark ? #ffffff0a : #0f0f1e0a;
+    out property <color> surface-2: dark ? #ffffff13 : #0f0f1e12;
+    out property <color> surface-3: dark ? #ffffff1f : #0f0f1e1c;
+    out property <color> border: dark ? #ffffff14 : #0f0f1e17;
+    out property <color> border-strong: dark ? #ffffff29 : #0f0f1e2e;
+    out property <color> text: dark ? #f5f5f7 : #121218;
+    out property <color> text-dim: dark ? #a3a3b0 : #555564;
+    out property <color> text-faint: dark ? #6c6c7a : #8a8a98;
+    out property <color> overlay: dark ? #050508b8 : #f0f0f5cc;
+    // no backdrop blur in Slint: the glass / top bar surfaces are a bit more opaque than on the web
+    out property <color> glass: dark ? #14141ce6 : #ffffffeb;
+    out property <color> topbar: dark ? #09090ded : #f4f4f7f0;
+    out property <color> tile-bg: dark ? #15151d : #e7e7ee;
+    out property <color> danger: dark ? #fb7185 : #e11d48;
+    out property <color> ok: dark ? #34d399 : #059669;
+    out property <color> warn: dark ? #fbbf24 : #d97706;
+    // --shadow: 0 10px 40px -10px rgb(0 0 0 / .6)
+    out property <color> shadow: dark ? #00000099 : #14142840;
+
+    out property <length> radius: 14px;
+    out property <length> rail-w: 84px;
+    out property <length> topbar-h: 60px;
+    out property <length> tile-radius: 10px;
+
+    out property <string> font-sans: "Inter";
+    out property <string> font-display: "Bricolage Grotesque";
+}
+
+// Animation level (Settings → Appearance → Animations): full / reduced / off.
+// Durations are read through these properties so "off" really means instant.
+export global Motion {
+    in-out property <int> level: 2;
+    out property <bool> on: level > 0;
+    out property <duration> fast: level == 2 ? 150ms : level == 1 ? 90ms : 0ms;
+    out property <duration> normal: level == 2 ? 220ms : level == 1 ? 120ms : 0ms;
+    out property <duration> slow: level == 2 ? 420ms : level == 1 ? 180ms : 0ms;
+    out property <duration> page: level == 2 ? 300ms : level == 1 ? 140ms : 0ms;
+    out property <length> page-shift: level == 2 ? 10px : 0px;
+    out property <length> pop-shift: level == 2 ? 6px : 0px;
+}
+
+// Strings: the TS tables (packages/web/src/i18n) ported to i18n/*.json, looked up in Rust.
+// `rev` is passed to every call so the bindings re-evaluate when the language changes.
+export global I18n {
+    in-out property <string> lang: "tr";
+    in-out property <int> rev;
+    pure callback t(key: string, rev: int) -> string;
+    // one `{name}` placeholder (+ "one|many" plural when name == "n")
+    pure callback t1(key: string, name: string, value: string, rev: int) -> string;
+    pure callback t2(key: string, n1: string, v1: string, n2: string, v2: string, rev: int) -> string;
+}

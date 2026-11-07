@@ -1,0 +1,754 @@
+// Building blocks of the library hub / albums / library pages (LibraryPage.tsx, AlbumCard.tsx,
+// FolderCards.tsx, LibraryHeader.tsx, RemoteFolders.tsx).
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "icons.slint";
+import { LibIcons, LibCardData, AlbumCardData, RowData, FolderCardData, RootCardData, ArchiveData, RemoteBannerData } from "state.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
+import { Spinner, ProgressRing } from "../components/feedback.slint";
+
+// columns for a window width, like tailwind's sm / md / lg / xl / 2xl breakpoints (viewport px)
+export global Cols {
+    pure public function of(w: length, base: int, sm: int, md: int, lg: int, xl: int, xxl: int) -> int {
+        w >= 1536px ? xxl : w >= 1280px ? xl : w >= 1024px ? lg : w >= 768px ? md : w >= 640px ? sm : base
+    }
+}
+
+// fade + rise of a card (motion initial opacity 0 / y 14 → 0, staggered)
+export component Enter inherits Rectangle {
+    in property <int> index;
+    in property <bool> animate: true;
+    property <bool> shown: !animate || !Motion.on;
+    init => {
+        if !self.shown { tm.running = true; }
+    }
+    tm := Timer {
+        interval: Math.min(root.index, 14) * 35ms + 1ms;
+        running: false;
+        triggered => { self.running = false; root.shown = true; }
+    }
+    opacity: shown ? 1 : 0;
+    animate opacity { duration: Motion.slow; easing: ease-out; }
+    Rectangle {
+        y: root.shown ? 0px : 14px;
+        animate y { duration: Motion.slow; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+        width: root.width;
+        height: root.height;
+        @children
+    }
+}
+
+// h1 of a page: optional icon + 34 px display title, subtitle
+export component PageTitle inherits VerticalLayout {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon;
+    in property <color> icon-color: Theme.accent;
+    in property <string> sub;
+    spacing: 4px;
+    HorizontalLayout {
+        spacing: 12px;
+        alignment: start;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Image { source: root.icon; colorize: root.icon-color; width: 28px; height: 28px; }
+        }
+        Text {
+            text: root.text;
+            font-family: Theme.font-display;
+            font-size: 34px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            color: Theme.text;
+            overflow: elide;
+        }
+    }
+    if root.sub != "": Text {
+        text: root.sub;
+        font-size: 14px;
+        color: Theme.text-dim;
+    }
+}
+
+// section heading row (`font-display text-xl font-semibold` + action slot)
+export component SectionHead inherits HorizontalLayout {
+    in property <string> text;
+    in property <bool> link;
+    callback clicked();
+    min-height: 36px;
+    padding-left: 4px;
+    padding-right: 4px;
+    spacing: 12px;
+    t := Rectangle {
+        horizontal-stretch: 1;
+        HorizontalLayout {
+            alignment: start;
+            spacing: 4px;
+            Text {
+                text: root.text;
+                font-family: Theme.font-display;
+                font-size: 20px;
+                font-weight: 600;
+                color: root.link && ta.has-hover ? Theme.accent : Theme.text;
+                vertical-alignment: center;
+            }
+            if root.link: VerticalLayout {
+                alignment: center;
+                Image { source: Icons.chevron-right; colorize: Theme.text-faint; width: 20px; height: 20px; }
+            }
+        }
+        ta := TouchArea {
+            enabled: root.link;
+            mouse-cursor: root.link ? pointer : default;
+            clicked => { root.clicked(); }
+        }
+    }
+    @children
+}
+
+// small uppercase heading with a count (GalleryPage SectionHeading)
+export component SmallHead inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> count;
+    spacing: 8px;
+    alignment: start;
+    height: 30px;
+    Text {
+        text: root.text.to-uppercase();
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.8px;
+        color: Theme.text-faint;
+        vertical-alignment: top;
+    }
+    if root.count != "": Text {
+        text: root.count;
+        font-size: 12px;
+        color: Theme.text-faint;
+        vertical-alignment: top;
+        y: 1px;
+    }
+}
+
+// quick collection tile of the hub
+export component QuickTile inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <color> tint;
+    callback clicked();
+    height: 56px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: ta.has-hover ? Theme.border-strong : Theme.border;
+    background: ta.has-hover ? Theme.surface-2 : Theme.surface;
+    animate background, border-color { duration: Motion.normal; }
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 36px;
+                height: 36px;
+                border-radius: 12px;
+                background: root.tint.with-alpha(0.18);
+                property <float> s: ta.has-hover ? 1.1 : 1;
+                animate s { duration: Motion.slow; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+                Image { source: root.icon; colorize: root.tint; width: 20px * parent.s; height: 20px * parent.s; }
+            }
+        }
+        Text {
+            text: root.label;
+            font-size: 15px;
+            font-weight: 500;
+            color: Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+// cover image with the hover zoom (`group-hover:scale-[1.04]`, 700 ms)
+export component Cover inherits Rectangle {
+    in property <image> source;
+    in property <bool> hover;
+    in property <float> zoom: 1.04;
+    clip: true;
+    property <float> s: hover ? zoom : 1;
+    animate s { duration: Motion.on ? 700ms : 0ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    Image {
+        width: root.width * root.s;
+        height: root.height * root.s;
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        source: root.source;
+        image-fit: cover;
+    }
+}
+
+// MEGA badge (cloud mark; pulsing dot while busy)
+export component RemoteMark inherits HorizontalLayout {
+    in property <string> state;
+    in property <color> on-dark: #e5484d;
+    spacing: 3px;
+    alignment: start;
+    property <color> c: state == "error" ? Theme.danger : state == "warn" || state == "offline" ? Theme.warn : on-dark;
+    VerticalLayout {
+        alignment: center;
+        Image {
+            source: root.state == "error" || root.state == "offline" ? PIcons.cloud-off : PIcons.cloud;
+            colorize: root.c;
+            width: 14px;
+            height: 14px;
+        }
+    }
+    if root.state == "busy": VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 6px;
+            height: 6px;
+            border-radius: 3px;
+            background: root.c;
+            opacity: Motion.on ? 0.4 + 0.6 * Math.abs(Math.sin(animation-tick() / 1s * 180deg)) : 1;
+        }
+    }
+}
+
+// library card (16:9 cover, gradient, colour chip, name, numbers; edit on hover)
+export component LibraryCard inherits Rectangle {
+    in property <LibCardData> data;
+    in property <bool> can-edit;
+    in property <int> index;
+    callback clicked();
+    callback edit();
+    property <bool> hover: ta.has-hover || eb.hovered;
+    // card-lift
+    property <length> lift: hover ? -3px : 0px;
+    animate lift { duration: Motion.normal; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    Rectangle {
+        y: root.lift;
+        width: root.width;
+        height: root.height;
+        border-radius: 24px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.bg-elev;
+        clip: true;
+        drop-shadow-blur: root.hover ? 30px : 0px;
+        // (no hard-edged offset shadow under a card at rest: blur 0 still draws the shadow)
+        drop-shadow-color: root.hover ? Theme.shadow : transparent;
+        drop-shadow-offset-y: 10px;
+        if root.data.has-cover: Cover {
+            width: parent.width;
+            height: parent.height;
+            source: root.data.cover;
+            hover: root.hover;
+        }
+        if !root.data.has-cover: Rectangle {
+            background: @linear-gradient(135deg, root.data.color 0%, root.data.color.mix(Theme.bg-elev, 0.2) 100%);
+        }
+        Rectangle {
+            background: @linear-gradient(0deg, #000000d9 0%, #00000033 50%, #00000000 100%);
+        }
+        HorizontalLayout {
+            y: parent.height - self.height;
+            height: self.preferred-height;
+            padding: 16px;
+            spacing: 12px;
+            VerticalLayout {
+                alignment: end;
+                Rectangle {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 12px;
+                    background: root.data.color;
+                    border-width: 1px;
+                    border-color: #ffffff33;
+                    drop-shadow-blur: 12px;
+                    drop-shadow-color: #00000066;
+                    Image { source: LibIcons.get(root.data.icon); colorize: #ffffff; width: 20px; height: 20px; }
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: end;
+                spacing: 1px;
+                HorizontalLayout {
+                    spacing: 6px;
+                    alignment: start;
+                    Text {
+                        text: root.data.name;
+                        font-family: Theme.font-display;
+                        font-size: 18px;
+                        font-weight: 600;
+                        color: #ffffff;
+                        overflow: elide;
+                    }
+                    if root.data.remote != "": RemoteMark { state: root.data.remote; }
+                }
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: start;
+                    Text { text: root.data.items; font-size: 12px; color: #ffffffbf; }
+                    if root.data.size != "" && root.width > 300px: HorizontalLayout {
+                        spacing: 4px;
+                        Image { source: PIcons.hard-drive; colorize: #ffffffbf; width: 12px; height: 12px; y: 2px; }
+                        Text { text: root.data.size; font-size: 12px; color: #ffffffbf; }
+                    }
+                }
+                // the date range on its own line (LibraryCard.tsx): it is elided less often
+                if root.data.range != "" && root.width > 260px: HorizontalLayout {
+                    spacing: 4px;
+                    alignment: start;
+                    Image { source: PIcons.calendar-range; colorize: #ffffffbf; width: 12px; height: 12px; y: 2px; }
+                    Text { text: root.data.range; font-size: 12px; color: #ffffffbf; overflow: elide; }
+                }
+            }
+            VerticalLayout {
+                alignment: end;
+                padding-bottom: 4px;
+                Image {
+                    source: PIcons.arrow-right;
+                    colorize: #ffffff;
+                    width: 20px;
+                    height: 20px;
+                    opacity: root.hover ? 1 : 0;
+                    x: root.hover ? 0px : -8px;
+                    animate opacity, x { duration: Motion.slow; }
+                }
+            }
+        }
+        ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+        eb := IconButton {
+            x: parent.width - self.width - 10px;
+            y: 10px;
+            visible: root.can-edit;
+            opacity: root.hover ? 1 : 0;
+            animate opacity { duration: Motion.normal; }
+            icon: PIcons.pencil;
+            label: I18n.t("lib2.edit", I18n.rev);
+            size: IconButtonSize.sm;
+            glass: true;
+            icon-size: 16px;
+            clicked => { root.edit(); }
+        }
+    }
+}
+
+// album card (square cover + name + "N items · range")
+export component AlbumCard inherits Rectangle {
+    in property <AlbumCardData> data;
+    in property <bool> drop-over;
+    callback clicked();
+    height: self.width + 52px;
+    property <bool> hover: ta.has-hover;
+    property <length> lift: hover ? -3px : 0px;
+    animate lift { duration: Motion.normal; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    Rectangle {
+        y: root.lift;
+        width: root.width;
+        height: root.width;
+        border-radius: 16px;
+        border-width: root.drop-over ? 2px : 1px;
+        border-color: root.drop-over ? Theme.accent : Theme.border;
+        background: Theme.surface;
+        clip: true;
+        drop-shadow-blur: root.hover ? 30px : 0px;
+        // (no hard-edged offset shadow under a card at rest: blur 0 still draws the shadow)
+        drop-shadow-color: root.hover ? Theme.shadow : transparent;
+        drop-shadow-offset-y: 10px;
+        if root.data.has-cover: Cover {
+            width: parent.width;
+            height: parent.height;
+            source: root.data.cover;
+            hover: root.hover;
+        }
+        if !root.data.has-cover: Rectangle {
+            background: @linear-gradient(135deg, Theme.accent.with-alpha(0.22) 0%, transparent 100%);
+            Image { source: PIcons.images; colorize: Theme.text-faint; width: 40px; height: 40px; }
+        }
+    }
+    VerticalLayout {
+        y: root.width + 10px;
+        height: 42px;
+        padding-left: 2px;
+        padding-right: 2px;
+        spacing: 1px;
+        Text { text: root.data.name; font-size: 14px; font-weight: 600; color: Theme.text; overflow: elide; }
+        Text { text: root.data.sub; font-size: 12px; color: Theme.text-dim; overflow: elide; }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+// list row of the hub (icon square, title, sub, trailing)
+export component ListRow inherits Rectangle {
+    in property <image> icon;
+    in property <color> icon-color: Theme.text-dim;
+    in property <string> title;
+    in property <string> sub;
+    in property <bool> dot;
+    in property <bool> dot-on;
+    in property <bool> closable;
+    in property <string> close-label;
+    callback clicked();
+    callback close();
+    min-height: 60px;
+    border-radius: 16px;
+    background: ta.pressed ? Theme.surface-2 : ta.has-hover ? Theme.surface : transparent;
+    animate background { duration: Motion.fast; }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                border-radius: 16px;
+                background: Theme.surface-2;
+                Image { source: root.icon; colorize: root.icon-color; width: 22px; height: 22px; }
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 1px;
+            Text { text: root.title; font-size: 15px; font-weight: 500; color: Theme.text; overflow: elide; }
+            if root.sub != "": HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                if root.dot: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 4px;
+                        background: root.dot-on ? Theme.ok : Theme.text-faint;
+                    }
+                }
+                Text { text: root.sub; font-size: 13px; color: Theme.text-dim; overflow: elide; }
+            }
+        }
+        if !root.closable: VerticalLayout {
+            alignment: center;
+            Image { source: Icons.chevron-right; colorize: Theme.text-faint; width: 20px; height: 20px; }
+        }
+        if root.closable: VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.x;
+                label: root.close-label;
+                clicked => { root.close(); }
+            }
+        }
+    }
+}
+
+// sub folder card (4:3 covers: one, or 2fr / 1fr with two stacked)
+export component FolderCard inherits Rectangle {
+    in property <FolderCardData> data;
+    callback clicked();
+    callback context(length, length);
+    height: self.width * 0.75 + 46px;
+    property <bool> hover: ta.has-hover;
+    property <length> lift: hover ? -4px : 0px;
+    animate lift { duration: Motion.normal; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+    Rectangle {
+        y: root.lift;
+        width: root.width;
+        height: root.height;
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.bg-elev;
+        clip: true;
+        drop-shadow-blur: root.hover ? 30px : 4px;
+        drop-shadow-color: root.hover ? Theme.shadow : #00000018;
+        drop-shadow-offset-y: root.hover ? 10px : 1px;
+        Rectangle {
+            y: 0;
+            height: root.width * 0.75;
+            clip: true;
+            background: Theme.surface;
+            if root.data.n == 0: Image { source: PIcons.folder; colorize: Theme.text-faint; width: 40px; height: 40px; }
+            if root.data.n == 1: Cover { source: root.data.c1; hover: root.hover; zoom: 1.05; }
+            if root.data.n >= 2: Cover {
+                x: 0;
+                width: (parent.width - 2px) * 2 / 3;
+                source: root.data.c1;
+                hover: root.hover;
+                zoom: 1.05;
+            }
+            if root.data.n >= 2: Cover {
+                x: (parent.width - 2px) * 2 / 3 + 2px;
+                y: 0;
+                width: (parent.width - 2px) / 3;
+                height: root.data.n >= 3 ? (parent.height - 2px) / 2 : parent.height;
+                source: root.data.c2;
+                hover: root.hover;
+                zoom: 1.05;
+            }
+            if root.data.n >= 3: Cover {
+                x: (parent.width - 2px) * 2 / 3 + 2px;
+                y: (parent.height - 2px) / 2 + 2px;
+                width: (parent.width - 2px) / 3;
+                height: (parent.height - 2px) / 2;
+                source: root.data.c3;
+                hover: root.hover;
+                zoom: 1.05;
+            }
+        }
+        HorizontalLayout {
+            y: root.width * 0.75;
+            height: 46px;
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                Image { source: PIcons.folder; colorize: Theme.accent; width: 16px; height: 16px; }
+            }
+            Text { text: root.data.name; font-size: 14px; font-weight: 500; color: Theme.text; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
+            Text { text: root.data.count; font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+        }
+        ta := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clicked(); }
+            pointer-event(e) => {
+                if e.button == PointerEventButton.right && e.kind == PointerEventKind.up {
+                    root.context(self.mouse-x, self.mouse-y);
+                }
+            }
+        }
+    }
+}
+
+// a folder of a multi-folder library root
+export component RootCard inherits Rectangle {
+    in property <RootCardData> data;
+    callback clicked();
+    height: 78px;
+    property <bool> hover: ta.has-hover;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev;
+    drop-shadow-blur: hover ? 30px : 0px;
+    drop-shadow-color: hover ? Theme.shadow : transparent;
+    drop-shadow-offset-y: 10px;
+    HorizontalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Rectangle {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: root.data.remote != "" ? #d9272e26 : Theme.surface-2;
+            Image { source: root.data.remote != "" ? PIcons.cloud : PIcons.folder; colorize: root.data.remote != "" ? #e5484d : Theme.accent; width: 20px; height: 20px; }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                Text { text: root.data.name; font-size: 15px; font-weight: 500; color: Theme.text; overflow: elide; }
+                if root.data.remote != "": RemoteMark { state: root.data.remote; }
+            }
+            Text { text: root.data.path; font-size: 11px; font-family: "monospace"; color: Theme.text-faint; overflow: elide; }
+        }
+        Text { text: root.data.count; font-size: 14px; color: Theme.text-dim; vertical-alignment: center; }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+// a zip in the folder (peek / extract)
+export component ArchiveCard inherits Rectangle {
+    in property <ArchiveData> data;
+    in property <bool> writable;
+    callback peek();
+    callback extract();
+    height: 70px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.bg-elev;
+    HorizontalLayout {
+        padding: 12px;
+        padding-right: 14px;
+        spacing: 12px;
+        Rectangle {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: Theme.warn.with-alpha(0.18);
+            Image { source: PIcons.archive; colorize: Theme.warn; width: 20px; height: 20px; }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            Text { text: root.data.name; font-size: 14px; font-weight: 500; color: Theme.text; overflow: elide; }
+            Text { text: root.data.size; font-size: 12px; color: Theme.text-faint; }
+        }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                text: I18n.t("gallery.peek", I18n.rev);
+                icon: PIcons.eye;
+                has-icon: true;
+                size: ButtonSize.sm;
+                loading: root.data.busy == "peek";
+                clicked => { root.peek(); }
+            }
+        }
+        if root.writable: VerticalLayout {
+            alignment: center;
+            Button {
+                text: I18n.t("gallery.extract", I18n.rev);
+                variant: ButtonVariant.ghost;
+                size: ButtonSize.sm;
+                loading: root.data.busy == "extract";
+                clicked => { root.extract(); }
+            }
+        }
+    }
+}
+
+// warn-tinted banner (temp session / MEGA problems)
+export component Banner inherits Rectangle {
+    in property <bool> warn;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: warn ? Theme.warn.with-alpha(0.35) : Theme.border;
+    background: warn ? Theme.warn.with-alpha(0.09) : Theme.surface;
+    min-height: lay.preferred-height;
+    lay := HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        spacing: 12px;
+        @children
+    }
+}
+
+// one MEGA folder banner
+export component RemoteBanner inherits Banner {
+    in property <RemoteBannerData> data;
+    in property <bool> writable;
+    in property <bool> desktop;
+    callback refresh();
+    callback copy();
+    callback link();
+    callback remove();
+    callback login();
+    warn: data.state == "error" || data.state == "offline" || data.state == "warn";
+    VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            background: #d9272e26;
+            Image {
+                source: root.data.state == "error" ? Icons.triangle-alert : root.data.state == "offline" ? PIcons.cloud-off : PIcons.cloud;
+                colorize: root.data.state == "error" ? Theme.danger : #e5484d;
+                width: 16px;
+                height: 16px;
+            }
+        }
+    }
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: 2px;
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Text { text: root.data.name; font-size: 14px; font-weight: 500; color: Theme.text; overflow: elide; }
+            Rectangle {
+                width: bt.preferred-width + 12px;
+                height: 16px;
+                y: 2px;
+                border-radius: 8px;
+                background: #d9272e26;
+                bt := Text { text: I18n.t("mega.badge", I18n.rev); font-size: 10px; font-weight: 600; color: #e5484d; }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            if root.data.state == "listing": Spinner { size: 12px; }
+            if root.data.state == "indexing": ProgressRing { value: root.data.progress; size: 12px; stroke: 2px; }
+            Text {
+                text: root.data.status;
+                font-size: 12px;
+                color: root.warn ? (root.data.state == "error" ? Theme.danger : Theme.warn) : Theme.text-dim;
+                overflow: elide;
+            }
+            if root.data.login-link: Text {
+                text: I18n.t("mega.account.loginLink", I18n.rev);
+                font-size: 12px;
+                font-weight: 500;
+                color: Theme.warn;
+                TouchArea { mouse-cursor: pointer; clicked => { root.login(); } }
+            }
+            Text { text: "· " + I18n.t("mega.readonly", I18n.rev); font-size: 12px; color: Theme.text-faint; }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        Button {
+            text: I18n.t("mega.refresh", I18n.rev);
+            icon: Icons.refresh-cw;
+            has-icon: true;
+            variant: ButtonVariant.ghost;
+            size: ButtonSize.sm;
+            loading: root.data.refreshing;
+            enabled: root.data.state != "listing";
+            clicked => { root.refresh(); }
+        }
+    }
+    if root.writable: VerticalLayout {
+        alignment: center;
+        Button {
+            text: I18n.t("mega.copyToComputer", I18n.rev);
+            icon: PIcons.hard-drive-download;
+            has-icon: true;
+            size: ButtonSize.sm;
+            clicked => { root.copy(); }
+        }
+    }
+    if root.desktop: VerticalLayout {
+        alignment: center;
+        IconButton { icon: PIcons.link; label: I18n.t("mega.copyLink", I18n.rev); size: IconButtonSize.sm; icon-size: 16px; clicked => { root.link(); } }
+    }
+    if root.writable: VerticalLayout {
+        alignment: center;
+        IconButton { icon: PIcons.unplug; label: I18n.t("mega.remove", I18n.rev); size: IconButtonSize.sm; icon-size: 16px; clicked => { root.remove(); } }
+    }
+}
+
+// position helper for manual grids: i-th of `cols` columns with `gap`
+export global GridPos {
+    pure public function x(i: int, cols: int, w: length, gap: length) -> length {
+        Math.mod(i, cols) * (w + gap)
+    }
+    pure public function y(i: int, cols: int, h: length, gap: length) -> length {
+        Math.floor(i / cols) * (h + gap)
+    }
+    pure public function rows(n: int, cols: int) -> int {
+        Math.ceil(n / cols)
+    }
+    pure public function cell(total: length, cols: int, gap: length) -> length {
+        (total - (cols - 1) * gap) / cols
+    }
+}
