@@ -233,6 +233,24 @@ pub(crate) struct Viewer {
     video_timer: slint::Timer,
     tap_timer: slint::Timer,
     settle_timer: slint::Timer,
+    /// Pages over this list instead of the grid (map panel, duplicates); indexes refer to it.
+    list: RefCell<Option<Rc<Vec<MediaItem>>>>,
+}
+
+type List = Option<Rc<Vec<MediaItem>>>;
+
+fn src_get(g: &GridCtl, l: &List, i: usize) -> Option<MediaItem> {
+    match l {
+        Some(l) => l.get(i).cloned(),
+        None => g.get_at(i),
+    }
+}
+
+fn src_total(g: &GridCtl, l: &List) -> usize {
+    match l {
+        Some(l) => l.len(),
+        None => g.total(),
+    }
 }
 
 thread_local! {
@@ -265,6 +283,7 @@ impl Viewer {
     /// Open at grid index `i`.
     pub fn open_index(&self, i: usize) {
         let Some(a) = self.app() else { return };
+        *self.list.borrow_mut() = None;
         let (item, tile, thumb) = {
             let mut g = a.grid.0.borrow_mut();
             let Some(item) = g.get_at(i) else { return };
@@ -281,7 +300,28 @@ impl Viewer {
 
     /// Open one item that is not in the grid (no paging).
     pub fn open_item(&self, item: MediaItem) {
+        *self.list.borrow_mut() = None;
         self.open_with(None, item, None, None);
+    }
+
+    /// Open `items[i]` and page over `items` (pages that are not the shared grid).
+    pub fn open_list(&self, items: Vec<MediaItem>, i: usize) {
+        let Some(item) = items.get(i).cloned() else { return };
+        *self.list.borrow_mut() = Some(Rc::new(items));
+        self.open_with(Some(i), item, None, None);
+    }
+
+    fn list(&self) -> List {
+        self.list.borrow().clone()
+    }
+
+    /// `i` as a grid index (None while paging over a list: grid caches are keyed by grid index).
+    fn grid_index(&self, i: Option<usize>) -> Option<usize> {
+        if self.list.borrow().is_some() {
+            None
+        } else {
+            i
+        }
     }
 
     fn open_with(
@@ -383,7 +423,7 @@ impl Viewer {
         // bring the tile into view, then fly back to it
         let mut tile = None;
         let mut thumb = None;
-        if let (Some(i), Some(item)) = (index, item.as_ref()) {
+        if let (Some(i), Some(item)) = (self.grid_index(index), item.as_ref()) {
             let mut g = a.grid.0.borrow_mut();
             g.scroll_to_index(i, false);
             tile = g.tile_window_rect(i);
@@ -503,12 +543,12 @@ impl Viewer {
 
     // ───────── items ─────────
 
-    fn step(g: &GridCtl, i: usize, d: i64) -> Option<(usize, MediaItem)> {
-        let total = g.total() as i64;
+    fn step(g: &GridCtl, l: &List, i: usize, d: i64) -> Option<(usize, MediaItem)> {
+        let total = src_total(g, l) as i64;
         let mut k = i as i64 + d;
         let mut n = 0;
         while k >= 0 && k < total && n < 50 {
-            let it = g.get_at(k as usize)?;
+            let it = src_get(g, l, k as usize)?;
             if viewable(&it) {
                 return Some((k as usize, it));
             }
@@ -577,8 +617,10 @@ impl Viewer {
         let mut s = self.st.borrow_mut();
         let Some(item) = s.item.clone() else { return };
         let idx = s.index;
+        let l = self.list();
+        let gidx = self.grid_index(idx);
         let (prev, next) = match idx {
-            Some(i) => (Self::step(&g, i, -1), Self::step(&g, i, 1)),
+            Some(i) => (Self::step(&g, &l, i, -1), Self::step(&g, &l, i, 1)),
             None => (None, None),
         };
         s.neighbours = [next.as_ref(), prev.as_ref()]
@@ -586,20 +628,20 @@ impl Viewer {
             .flatten()
             .map(|(_, m)| m.clone())
             .collect();
-        let cur = self.slide(&mut g, &mut s, idx, &item, true);
+        let cur = self.slide(&mut g, &mut s, gidx, &item, true);
         vs.set_cur(cur);
         vs.set_has_prev(prev.is_some());
         vs.set_has_next(next.is_some());
         if let Some((pi, pm)) = &prev {
-            let d = self.slide(&mut g, &mut s, Some(*pi), pm, false);
+            let d = self.slide(&mut g, &mut s, self.grid_index(Some(*pi)), pm, false);
             vs.set_prev(d);
         }
         if let Some((ni, nm)) = &next {
-            let d = self.slide(&mut g, &mut s, Some(*ni), nm, false);
+            let d = self.slide(&mut g, &mut s, self.grid_index(Some(*ni)), nm, false);
             vs.set_next(d);
         }
         // backdrop: the thumbhash (naturally blurry)
-        match idx.and_then(|i| g.placeholder_of(i)) {
+        match gidx.and_then(|i| g.placeholder_of(i)) {
             Some(h) => {
                 vs.set_backdrop(h);
                 vs.set_has_backdrop(true);
@@ -623,7 +665,7 @@ impl Viewer {
                         "mobile.viewer.position",
                         &[
                             ("i", &i18n::format_count(lang, i as i64 + 1)),
-                            ("n", &i18n::format_count(lang, g.total() as i64))
+                            ("n", &i18n::format_count(lang, src_total(&g, &l) as i64))
                         ]
                     )
                 )
@@ -639,13 +681,15 @@ impl Viewer {
                 if j < 0 {
                     continue;
                 }
-                if let Some(m) = g.get_at(j as usize) {
+                if let Some(m) = src_get(&g, &l, j as usize) {
                     if has_picture(&m) {
                         self.want(&mut s, &m.id, Kind::Mid);
                     }
                 }
             }
-            g.ensure_range(i.saturating_sub(6), i + 6);
+            if l.is_none() {
+                g.ensure_range(i.saturating_sub(6), i + 6);
+            }
         }
         // filmstrip (±30 viewable items)
         let mut strip = Vec::new();
@@ -653,12 +697,12 @@ impl Viewer {
         if let Some(i) = idx {
             let (a0, b0) = (
                 i.saturating_sub(30),
-                (i + 30).min(g.total().saturating_sub(1)),
+                (i + 30).min(src_total(&g, &l).saturating_sub(1)),
             );
             let mut x = 0.0f64;
             let mut missing = Vec::new();
             for k in a0..=b0 {
-                let Some(m) = g.get_at(k) else { continue };
+                let Some(m) = src_get(&g, &l, k) else { continue };
                 if !viewable(&m) {
                     continue;
                 }
@@ -823,15 +867,16 @@ impl Viewer {
         let mut s = self.st.borrow_mut();
         let Some(item) = s.item.clone() else { return };
         let idx = s.index;
-        let cur = self.slide(&mut g, &mut s, idx, &item, true);
+        let l = self.list();
+        let cur = self.slide(&mut g, &mut s, self.grid_index(idx), &item, true);
         vs.set_cur(cur);
         if let Some(i) = idx {
-            if let Some((pi, pm)) = Self::step(&g, i, -1) {
-                let d = self.slide(&mut g, &mut s, Some(pi), &pm, false);
+            if let Some((pi, pm)) = Self::step(&g, &l, i, -1) {
+                let d = self.slide(&mut g, &mut s, self.grid_index(Some(pi)), &pm, false);
                 vs.set_prev(d);
             }
-            if let Some((ni, nm)) = Self::step(&g, i, 1) {
-                let d = self.slide(&mut g, &mut s, Some(ni), &nm, false);
+            if let Some((ni, nm)) = Self::step(&g, &l, i, 1) {
+                let d = self.slide(&mut g, &mut s, self.grid_index(Some(ni)), &nm, false);
                 vs.set_next(d);
             }
         }
@@ -841,6 +886,7 @@ impl Viewer {
         let Some(a) = self.app() else { return };
         let vs = a.window.global::<ViewerState>();
         let strip = vs.get_strip();
+        let l = self.list();
         let mut g = a.grid.0.borrow_mut();
         for r in 0..strip.row_count() {
             let Some(mut it) = strip.row_data(r) else {
@@ -849,7 +895,7 @@ impl Viewer {
             if it.has_image || it.audio {
                 continue;
             }
-            if let Some(m) = g.get_at(it.index as usize) {
+            if let Some(m) = src_get(&g, &l, it.index as usize) {
                 if let Some(img) = g.cached_thumb(&m.id, 320) {
                     it.image = img;
                     it.has_image = true;
@@ -861,7 +907,7 @@ impl Viewer {
 
     /// The grid's pages / structure changed: neighbours may be known now, or the item is gone.
     pub fn on_grid_changed(&self) {
-        if !self.is_open() || self.st.borrow().closing {
+        if !self.is_open() || self.st.borrow().closing || self.list.borrow().is_some() {
             return;
         }
         let Some(a) = self.app() else { return };
@@ -949,7 +995,7 @@ impl Viewer {
             let s = self.st.borrow();
             let Some(i) = s.index else { return };
             let g = a.grid.0.borrow();
-            Self::step(&g, i, dir)
+            Self::step(&g, &self.list(), i, dir)
         };
         let motion = a.window.global::<crate::Motion>().get_level() > 0;
         let Some((i, m)) = target else {
@@ -975,7 +1021,7 @@ impl Viewer {
 
     fn strip_click(&self, i: usize) {
         let Some(a) = self.app() else { return };
-        let m = a.grid.0.borrow().get_at(i);
+        let m = src_get(&a.grid.0.borrow(), &self.list(), i);
         if let Some(m) = m {
             let cur = self.st.borrow().index;
             if cur != Some(i) {
@@ -1697,6 +1743,12 @@ impl Viewer {
         if id == "slideshow-from-here" {
             let Some(a) = self.app() else { return };
             let idx = self.st.borrow().index;
+            if let (Some(l), Some(i)) = (self.list(), idx) {
+                let list: Vec<MediaItem> =
+                    l.iter().skip(i).filter(|m| has_picture(m)).cloned().collect();
+                crate::actions_ui::run(&a, "slideshow", list, Surface::Viewer);
+                return;
+            }
             match idx {
                 Some(i) => {
                     let total = a.grid.0.borrow().total();
@@ -2202,6 +2254,7 @@ pub(crate) fn install(app: &Rc<AppInner>) -> Rc<Viewer> {
         video_timer: slint::Timer::default(),
         tap_timer: slint::Timer::default(),
         settle_timer: slint::Timer::default(),
+        list: RefCell::new(None),
     });
     VIEWER.with(|c| *c.borrow_mut() = Some(v.clone()));
     let vs = app.window.global::<ViewerState>();

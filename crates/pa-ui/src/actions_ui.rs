@@ -170,6 +170,13 @@ pub fn open_viewer_item(item: MediaItem) {
     }
 }
 
+/// Open the viewer at `items[i]`, paging over `items` (pages that don't use the shared grid).
+pub fn open_viewer_list(items: Vec<MediaItem>, i: usize) {
+    if let Some(v) = crate::viewer::get() {
+        v.open_list(items, i);
+    }
+}
+
 /// A server / connection event (called by the app's event loop).
 pub fn on_event(e: &BackendEvent) {
     let Some(h) = hub() else { return };

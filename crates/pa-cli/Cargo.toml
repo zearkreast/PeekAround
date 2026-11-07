@@ -11,7 +11,12 @@ rust-version.workspace = true
 name = "peekaround"
 path = "src/main.rs"
 
+[features]
+default = ["heif"]
+# HEIC / HEIF / AVIF through libheif (system library)
+heif = ["pa-server/heif"]
+
 [dependencies]
-pa-server = { path = "../pa-server" }
+pa-server = { path = "../pa-server", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }

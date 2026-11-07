@@ -1700,10 +1700,8 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         c.render_panel();
     });
     on!(on_panel_open_item, |c, i| {
-        let it = c.in_view.borrow().get(i as usize).cloned();
-        if let Some(it) = it {
-            crate::actions_ui::open_viewer_item(it);
-        }
+        let items = c.in_view.borrow().clone();
+        crate::actions_ui::open_viewer_list(items, i as usize);
     });
     let mst = app.window.global::<MiniMapState>();
     let w = Rc::downgrade(&ctl);

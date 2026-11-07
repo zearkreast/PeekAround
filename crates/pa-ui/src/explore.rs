@@ -1559,6 +1559,20 @@ impl Explore {
         }
     }
 
+    /// Every loaded duplicate, groups in order, and the position of group `gi` item `ii` in it.
+    fn dup_flat(&self, gi: usize, ii: usize) -> (Vec<MediaItem>, Option<usize>) {
+        let d = self.dups.borrow();
+        let mut all = Vec::new();
+        let mut at = None;
+        for (g, grp) in d.groups.iter().enumerate() {
+            if g == gi && ii < grp.1.len() {
+                at = Some(all.len() + ii);
+            }
+            all.extend(grp.1.iter().cloned());
+        }
+        (all, at)
+    }
+
     fn dup_item(&self, gi: usize, ii: usize) -> Option<MediaItem> {
         self.dups
             .borrow()
@@ -1677,8 +1691,8 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     let w = Rc::downgrade(&ex);
     ds.on_open_item(move |gi, ii| {
         if let Some(e) = w.upgrade() {
-            if let Some(it) = e.dup_item(gi as usize, ii as usize) {
-                crate::actions_ui::open_viewer_item(it);
+            if let (all, Some(at)) = e.dup_flat(gi as usize, ii as usize) {
+                crate::actions_ui::open_viewer_list(all, at);
             }
         }
     });
