@@ -1,0 +1,50 @@
+name: Rust Windows package
+
+# 2.0 desktop app for Windows, cross-built on Ubuntu with mingw-w64 like the alpha.1 package:
+# static libheif (HEIC / AVIF), the zip and the NSIS installer, uploaded as a run artifact.
+# Runs only on demand: push a `build-win-<anything>` tag (workflow_dispatch needs the file on the
+# default branch, which stays on 1.x). Releases are published by hand as pre-releases.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['build-win-*']
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Toolchain and packages
+        run: |
+          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-gnu
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64-win32 g++-mingw-w64-x86-64-win32 \
+            cmake ninja-build meson nasm nsis zip pkg-config
+      - name: Static libheif
+        run: |
+          cargo fetch --target x86_64-pc-windows-gnu
+          sh crates/pa-desktop/packaging/win-libheif.sh "$RUNNER_TEMP/heif"
+      - name: Build
+        run: |
+          . "$RUNNER_TEMP/heif/env.sh"
+          cargo build -p pa-desktop --release --target x86_64-pc-windows-gnu
+      # the same ffmpeg.exe as the alpha.1 package (6.1.1 essentials, gyan.dev)
+      - name: ffmpeg.exe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v2.0.0-alpha.1 -p '*-win-x64.zip' -D "$RUNNER_TEMP/a1"
+          unzip -j "$RUNNER_TEMP/a1/"*.zip '*/ffmpeg.exe' -d "$RUNNER_TEMP/a1"
+      - name: Package
+        run: sh crates/pa-desktop/packaging/win-dist.sh dist "$RUNNER_TEMP/a1/ffmpeg.exe"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: peekaround-windows
+          path: |
+            dist/*.zip
+            dist/*.exe
+          if-no-files-found: error
