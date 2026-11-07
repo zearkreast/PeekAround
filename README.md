@@ -2,7 +2,7 @@
   <img src="brand/logo.svg" width="112" alt="PeekAround logo — a black-browed albatross looking left">
 </p>
 
-<h1 align="center">PeekAround</h1>
+<h1 align="center">PeekAround 2.0</h1>
 <p align="center"><b>Klasörlerin, en güzel haliyle.</b> · <i>Your folders, beautifully.</i></p>
 
 <p align="center">
@@ -12,213 +12,125 @@
   <img src="https://img.shields.io/badge/Rust-Slint-b7410e" alt="Rust + Slint">
 </p>
 
-> 🦀 **Bu dal PeekAround 2.0'ın Rust + Slint ile baştan yazımıdır (alfa).** Electron ve React yok; arayüz yerel olarak çizilir. Günlük kullanım için kararlı **1.x** sürümü [`main`](https://github.com/zearkreast/PeekAround/tree/main) dalında ve [Releases](https://github.com/zearkreast/PeekAround/releases/latest) sayfasında.
+<p align="center">
+  <a href="https://github.com/zearkreast/PeekAround/releases/tag/v2.0.0-alpha.1"><b>⬇️ Alfayı indir</b></a> ·
+  <a href="#durum">Durum</a> ·
+  <a href="#bu-sürümde-olanlar">Özellikler</a> ·
+  <a href="#kurulum">Kurulum</a> ·
+  <a href="#geliştirme">Geliştirme</a>
+</p>
 
-| Aşama | Kapsam | Durum |
-|---|---|---|
-| M1 | Sunucu (tarama, küçük resim, API) | ✅ |
-| M2 | Masaüstü (galeri, görüntüleyici, seçim, ayarlar, tepsi) | ✅ |
-| M3 | Keşfet ve harita | 🟡 büyük ölçüde |
-| M4 | Düzenleyiciler (fotoğraf, kolaj, video, slayt, fontlar) | ⏳ |
-| M5 | Yerel Android uygulaması | ⏳ |
-| M6 | Docker tarayıcı arayüzü ve CI | ⏳ |
+> 🦀 **Bu dal PeekAround'un Rust + Slint ile baştan yazımıdır ve alfa aşamasındadır.** Electron ve React yok, arayüz yerel olarak çizilir. Windows paketi 148 MB'tan 41 MB'a indi. Günlük kullanım için kararlı **1.x** sürümü [`main`](https://github.com/zearkreast/PeekAround/tree/main) dalında ve [Releases](https://github.com/zearkreast/PeekAround/releases/latest) sayfasında.
 
-Denemek için: [v2.0.0-alpha.1](https://github.com/zearkreast/PeekAround/releases/tag/v2.0.0-alpha.1) ön sürümündeki Windows zip'i. Rust kodu `crates/` altında (`cargo build --release -p pa-desktop`); aşağıdaki özellik listesi ve kurulum adımları 1.x içindir.
+<p align="center">
+  <img src="docs/screenshots/explore-2.0.jpg" width="90%" alt="2.0 Keşfet sayfası: anılar, geziler ve yıl özetleri">
+</p>
 
-PeekAround; bilgisayarındaki, sunucundaki ya da telefonundaki klasörleri modern, animasyonlu bir galeriye dönüştürür.
-Fotoğraf ve videolarına göz at, izle, sürükle-bırak ile dosya/klasör/zip ekle, slayt gösterisi ve kolaj yap, fotoğraf ve videolarda basit düzenlemeler yap — **kendi fontlarınla** ve **orijinallere asla dokunmadan** (her düzenleme bir kopyaya kaydedilir).
-
-Aynı uygulama üç şekilde çalışır:
-
-| | Ne işe yarar | Paket |
-|---|---|---|
-| 🐳 **Docker / sunucu** | Ev sunucuna/NAS'a kur, galeriyi tüm ağa sun (tarayıcıdan, telefondan) | `docker compose up -d` |
-| 🖥️ **Masaüstü uygulaması** | Kişisel galeri; istersen tek tıkla ağda paylaş | Windows `.exe`, Arch Linux `.pacman` / PKGBUILD, AppImage, `.deb` |
-| 📱 **Android** | Telefonun kendi klasörlerini gez **veya** bir PeekAround sunucusuna bağlan | `.apk` |
+PeekAround; bilgisayarındaki ya da sunucundaki klasörleri modern, animasyonlu bir galeriye dönüştürür. Fotoğraf ve videolarına göz at, izle, albümlere ayır, anılarını ve gezilerini otomatik bulsun; orijinal dosyalara hiç dokunmaz.
 
 ---
 
-## Özellikler
+## Durum
 
-**Galeri**
-- Kütüphane = bir veya birden çok klasör; **Tümü | Klasörler** görünümü, istatistikler (boyut, tarih aralığı, son tarama), kapak fotoğrafı, yeniden tarama, **hariç tutma kuralları** (klasör adı/glob, en küçük boyut, gizli klasörler)
-- **Albümler:** kütüphanelerden bağımsız, elle oluşturulan koleksiyonlar (sürükle-bırak, özel sıralama, kapak, zip indir)
-- Açılışta **Fotoğraflar** (zaman çizelgesi + anılar), **Kitaplık** sayfasında albümler, kütüphaneler, cihazlar ve araçlar bir arada
-- Kesin yerleşimli *justified* ızgara: 100 bin dosyada bile kayma/zıplama yok; Google Fotoğraflar tarzı **tarih kaydırıcısı** ile istediğin aya anında atla
-- Telefonda **iki parmakla ızgara yoğunluğu**, uzun basıp sürükleyerek çoklu seçim, alt menü (Fotoğraflar / Keşfet / Kitaplık / Ayarlar), Android geri tuşu desteği
-- Küçük resimden tam ekrana **paylaşılan öğe geçişi**; görüntüleyicide parmağı takip eden kaydırma, odak noktalı pinch-zoom, çift dokunma, aşağı kaydırıp kapatma, yukarı kaydırıp bilgi; EXIF + konum + kamera bilgisi
-- Video: özel oynatıcı (önizlemeli zaman çubuğu, hız, döngü, PiP, kareyi fotoğraf olarak kaydet); tarayıcının oynatamadığı formatlar (MKV/HEVC/AVI…) sunucuda anlık dönüştürülür
-- Videoların üzerine gelince sessiz önizleme, thumbhash ile anında bulanık yer tutucu
-- Seçim: tık, Shift-aralık, Ctrl, **kement (dikdörtgen sürükleme)**; toplu favori/indir/taşı/kopyala/sil
-- Diskteki değişiklikler **canlı** yansır (dosya izleme + WebSocket)
+| Aşama | Kapsam | Durum |
+|---|---|---|
+| M1 | Sunucu: tarama, küçük resim, meta veri, API, MEGA, telefon bağlantısı | ✅ |
+| M2 | Masaüstü: galeri, görüntüleyici, seçim, kitaplık, ayarlar, tepsi | ✅ |
+| M3 | Keşfet, anı oynatıcı ve harita | 🟡 büyük ölçüde |
+| M4 | Düzenleyiciler: fotoğraf, kolaj, video, slayt gösterisi, fontlar | ⏳ |
+| M5 | Yerel Android uygulaması | ⏳ |
+| M6 | Docker için tarayıcı arayüzü, CI | ⏳ |
 
-**Keşfet — otomatik gruplama (Google Fotoğraflar gibi)**
-- **Anılar:** “Geçmişte bugün” ve otomatik bulunan **geziler** (“Antalya gezisi · Tem 2024”), hikâye tarzı anı oynatıcı
-- **Yerler + harita:** GPS’ten çevrimdışı yer adı (“Kadıköy, İstanbul”), ülke → bölge → şehir, küçük resimli kümelerle harita (standart / topoğrafik / uydu). Harita karoları sunucu üzerinden çekilip önbelleğe alınır; bakılan bölgeler çevrimdışı da görünür
-- Konum EXIF’in yanında **XMP**’den ve **Google Takeout** `.json` dosyalarından da okunur; Ayarlar → “Konum ve meta veri” kartı hangi dosyalarda konum olmadığını gösterir
-- **Daha fazla Keşfet:** yıl özeti, gece çekimleri ve altın saat, renkler, dikey/yatay/panorama, kısa klipler/uzun videolar, en büyük dosyalar, son eklenenler, **kopyalar**, takvim ısı haritası, “Beni şaşırt”
-- **Türler + kameralar:** videolar, ekran görüntüleri, selfie’ler, panoramalar, animasyonlar; telefon/kamera modeline göre; yıllar
-- Doğal dille arama: “istanbul 2023 video”, “Ağustos 2024”, “selfie”
-- Tarihler fotoğrafın çekildiği yerin saatine göre gruplanır (Ayarlar → Keşfet’ten ev saat dilimi)
+Alfa şimdiye kadar Linux'ta ve Wine'da denendi; gerçek bir Windows bilgisayarında, gerçek bir MEGA hesabıyla ve gerçek bir telefonla henüz denenmedi.
 
-**Telefon ↔ PC**
-- Masaüstü uygulaması ağda paylaşırken telefon bağlanınca, **telefonda seçtiğin klasörler PC’de görünür** (ilk bağlantıda PC’de 4 haneli kodla onay)
-- PC’den telefon klasörünü gez, izle, **PC’ye kopyala**; PC’deki dosyaları **telefona gönder** (telefondaki dosyalar PC’den silinemez/değiştirilemez)
-- Telefonda **Yükle** → PC’ye; **Telefona kaydet** → her seferinde klasör sorulur, dosyalar kalıcı kaydedilir ve galeride görünür; tarih ve konum bilgisi korunur
-- Telefon ekranı kapalıyken de çalışır (bildirimli arka plan servisi, “Durdur” düğmesi)
+## Bu sürümde olanlar
 
-**Ekleme**
-- Uygulamanın üzerine **dosya, klasör veya zip sürükle-bırak** (kenar çubuğundaki/kart üzerindeki klasöre bırakma da olur)
-- Zip için istem: **Kalıcı olarak çıkar** veya **Geçici olarak aç** + **“Seçimimi hatırla”** kutucuğu (Ayarlar’dan değiştirilebilir). Geçici oturumlar kendiliğinden silinir, istersen “Kalıcı yap”.
-- Kütüphanedeki zip’lere “Göz at” ile geçici bakma; Türkçe Windows zip’lerindeki (CP857) dosya adları doğru çözülür
-- Masaüstünde bırakılan klasör: **kütüphaneye bağla** (kopyalamadan) veya **buraya kopyala**
-- Android’de **Paylaş → PeekAround**
-- **MEGA linkleri:** mega.nz dosya/klasör linkini yapıştır, sürükle ya da MEGA uygulamasından paylaş → **indirmeden izle** (link kütüphane klasörü olur; fotoğraflar/videolar MEGA’dan akışla açılır, sadece küçük resimler ve sınırlı bir önbellek diske yazılır) veya seçip bilgisayara kopyala. MEGA aktarım kotası dolarsa Ayarlar → Ağ → **MEGA hesabı** ile giriş yapılabilir: aktarımlar IP’nin ortak kotası yerine hesabın kotasından düşer (Pro’da çok daha büyük)
+**Galeri ve görüntüleyici**
+- Fotoğraflar zaman çizelgesi: kesin yerleşimli ızgara, tarih başlıkları, hızlı kaydırıcı; klavyeyle gezinme, Ctrl+tekerlek ile ızgara yoğunluğu
+- Görüntüleyici: açılış/kapanış animasyonu, imlece göre yakınlaştırma, film şeridi, bilgi paneli (tarih, kamera, konum, dosya yolu), mini harita
+- Video ve ses ffmpeg ile çözülür: her format oynar ve sarılabilir; hız, döngü, tam ekran, kareyi fotoğraf olarak kaydetme
+- HEIC/AVIF Windows'ta da açılır (libheif paketin içinde)
 
-**Düzenleme (her zaman kopyaya: `ad_edit.jpg`, `ad_edit-2.jpg` …)**
-- Fotoğraf editörü: pozlama, kontrast, sıcaklık, gölge/vurgu, vinyet, gren… (WebGL), filtre ön ayarları, kırp/döndür/çevir/düzleştir, **özel fontlu metin katmanları**, geri/ileri al, önce/sonra
-- Kolaj: şablonlar, oranlar (1:1, 4:5, 9:16…), boşluk/köşe/arka plan, hücre içi kaydırma/yakınlaştırma, metin
-- Video editörü: kırpma (trim), crop, döndür/çevir, hız, ses, renk ayarları, zamanlı metin katmanları → MP4/WebM/GIF
-- Slayt gösterisi: tarayıcıda animasyonlu geçişlerle oynat **veya** müzikli MP4 olarak dışa aktar (Ken Burns, geçiş efektleri)
-- **Fontlar**: TTF/OTF/WOFF/WOFF2 yükle; tüm editörlerde canlı önizlemeli font seçici; Türkçe karakterli hazır fontlar
+**Seçim ve düzen**
+- Tık, Ctrl, Shift, dikdörtgen seçim, Ctrl+A; seçim çubuğu ve sağ tık menüsü: favori, albüme ekle, zip indir, taşı/kopyala, yeniden adlandır (F2), sil
+- Fotoğrafları albüme veya klasöre sürükle; bilgisayardan bırakılan dosyalar yüklenir
+- Kitaplık, albümler, kütüphane sayfası (istatistikler, kapak, **Tümü | Klasörler**), klasör sayfaları, hariç tutma kuralları
+
+**Keşfet ve harita**
+- İstatistikler (yerel ve bulut boyutu ayrı), anılar ve geziler, yıl özeti, ülkeler ve şehirler, günün saatleri, renkler, biçimler, kameralar, kopyalar, takvim ısı haritası, "Beni şaşırt"
+- Hikâye tarzı anı oynatıcı
+- Uygulamanın kendi haritası: kümelenmiş küçük resimler, "bu alandaki fotoğraflar" paneli, standart / topoğrafik / uydu görünümü, çevrimdışı önbellek
+
+<p align="center"><img src="docs/screenshots/map-2.0.jpg" width="90%" alt="2.0 harita: fotoğraflar konumlarına göre kümelenir, sağda o alandaki fotoğraflar"></p>
 
 **Diğer**
-- Türkçe / İngilizce arayüz, koyu/açık tema, vurgu rengi, animasyon seviyesi (tam/azaltılmış/kapalı), sayfa geçişleri
-- Aranabilir, bölümlere ayrılmış **Ayarlar** (ızgara, görüntüleyici, video, önbellek, performans, gizlilik, klavye kısayolları, ayar yedeği); `?` ile kısayol listesi
-- Masaüstü: sistem tepsisi, oturum açılışında başlat, güncelleme denetimi, bildirimler, görev çubuğunda ilerleme, dosyaları pencereden dışarı sürükleme
-- PWA: telefondan “Ana ekrana ekle”
-- Ağdaki sunucular mDNS ile otomatik bulunur (Android uygulaması), ayarlarda bağlantı adresi + QR kod
+- MEGA akış klasörleri ve MEGA hesabı, telefon eşleştirme (4 haneli kod), yükleme ve iş panelleri
+- Bölümlere ayrılmış, Türkçe ve İngilizce aranabilir ayarlar; ayar yedeği
+- Masaüstü: sistem tepsisi, tek pencere, oturum açılışında başlatma, bildirimler, görev çubuğunda ilerleme, güncelleme denetimi
+
+**Henüz olmayanlar:** düzenleyiciler (fotoğraf, kolaj, video, slayt gösterisi oluşturucu, fontlar), yerel Android uygulaması, Docker'ın tarayıcı arayüzü. Anı oynatıcıda videolar henüz oynamıyor.
 
 ---
 
 ## Kurulum
 
-### 🐳 Docker (ağa galeri sunmak için)
+### 🖥️ Windows
 
-```bash
-git clone https://github.com/zearkreast/PeekAround.git
-cd PeekAround
-```
+1. [v2.0.0-alpha.1](https://github.com/zearkreast/PeekAround/releases/tag/v2.0.0-alpha.1) sayfasından `PeekAround-2.0.0-alpha.1-win-x64.zip` dosyasını indir, bir klasöre çıkar ve `PeekAround.exe` dosyasını çalıştır. Kurulum gerekmez.
+2. Paket imzasız: "Windows bilgisayarınızı korudu" uyarısında "Ek bilgi" → "Yine de çalıştır".
+3. 1.x'teki verilerin (`%APPDATA%\PeekAround`) olduğu gibi okunur: kütüphaneler, favoriler, albümler, MEGA klasörleri, eşleşmiş telefonlar ve tercihler. 1.x ile 2.0'ı **aynı anda açma**; aynı veritabanını ve portu kullanırlar. İstersen önce bu klasörü yedekle.
 
-`docker/docker-compose.yml` içindeki klasör yollarını kendine göre düzenle (her `/media/<Ad>` bir kütüphane olur), sonra:
+Günlük dosyası: `%APPDATA%\PeekAround\logs\main.log`
 
-```bash
-docker compose -f docker/docker-compose.yml up -d --build
-```
+### 📱 Telefon
 
-Tarayıcıdan `http://<sunucu-ip>:8080` adresine git.
+Yerel Android uygulaması gelene kadar **1.3.2 APK** ile 2.0 masaüstüne bağlanabilirsin: masaüstünde Ayarlar → Ağ ve cihazlar → ağ paylaşımını aç (port `1313`). 2.0 masaüstüne tarayıcıdan bağlanılamaz, yalnızca uygulamayla.
 
-Hazır imaj (GitHub Actions ile `ghcr.io`'ya gönderilir, amd64 + arm64/Raspberry Pi):
+### 🐳 Docker
 
-```bash
-docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/Fotoğraflar:/media/Fotoğraflar -v ./peekaround-data:/data ghcr.io/zearkreast/peekaround:main
-```
-
-| Değişken | Varsayılan | Açıklama |
-|---|---|---|
-| `PEEK_ROOTS` | `/media` | İlk açılışta kütüphane yapılacak klasör(ler); `Ad=/yol` biçimi, virgülle ayrılır |
-| `PEEK_SPLIT_ROOTS` | `true` | Kökün her alt klasörü ayrı kütüphane olsun |
-| `PUID` / `PGID` | `0` | Yazılan dosyaların sahibi (`id -u` / `id -g`) |
-| `PEEK_WATCH_POLL` | `false` | Ağ paylaşımlarında (NFS/SMB) dosya değişikliklerini yoklayarak izle |
-| `PEEK_READONLY` | `false` | Yükleme/düzenleme/silmeyi kapat |
-| `PEEK_BROWSE_ROOTS` | `/media` | “Klasör ekle” gezgininin gösterebileceği dizinler |
-| `PEEK_PORT` | `8080` | Port |
-| `TZ` | – | Saat dilimi (ör. `Europe/Istanbul`); ilk açılışta “ev saat dilimi” olur |
-| `PEEK_ALLOWED_HOSTS` | – | Alan adıyla erişiyorsan (ör. ters vekil arkasında `foto.ornek.com`) virgülle ekle; `*` kontrolü kapatır |
-| `PEEK_ALLOWED_ORIGINS` | – | API’yi çağırabilecek ek tarayıcı kökenleri |
-
-> Kimlik doğrulama yoktur: PeekAround’u yalnızca güvendiğin ağlarda çalıştır ya da önüne bir ters vekil (reverse proxy) + şifre koy.
-> Yine de tarayıcı tabanlı saldırılara karşı korunur: bilinmeyen alan adları (DNS rebinding), başka sitelerden gelen yazma istekleri (CSRF) ve aşırı istekler (hız sınırı) reddedilir. `.local`, `.lan`, IP adresleri ve tek kelimelik ağ adları (ör. `nas`) her zaman çalışır.
->
-> **MEGA hesabı (isteğe bağlı, Ayarlar → Ağ):** şifre hiçbir yere kaydedilmez; sunucu yalnızca MEGA oturum kimliğini (`sid`) veritabanında (`peekaround.db`, `settings` tablosu, `megaSession`) tutar ve bunu hiçbir istemciye göndermez. Masaüstü uygulamasında giriş/çıkış yalnızca bilgisayarın kendisinden yapılabilir (yerel ağ paylaşımından gelen istekler 403 alır). **Sunucu/Docker modunda** bu ayrım yoktur: sunucuya erişebilen herkes hesaba giriş/çıkış yapabilir ve MEGA aktarımları o hesabın kotasından düşer. Veritabanı dosyası ve yedekleri oturum kimliğini içerir; “Çıkış yap” onu siler ve oturumu MEGA tarafında da sonlandırır.
-
-### 🖥️ Masaüstü
-
-- **Windows:** Releases’tan `PeekAround-Setup-x.y.z.exe` (kurulum) veya `PeekAround-x.y.z-portable.exe`
-- **Arch Linux:** `sudo pacman -U PeekAround-x.y.z-x64.pacman` ya da `packaging/arch/PKGBUILD` ile `makepkg -si`
-- **Diğer Linux:** `PeekAround-x.y.z-x86_64.AppImage` (çalıştırılabilir yap ve aç) veya `.deb`
-
-İlk açılışta Resimler ve Videolar klasörlerin kütüphane olarak eklenir. Ayarlar → Ağ’dan **“Galeriyi yerel ağda paylaş”** ile aynı uygulama ağdaki diğer cihazlara da galeri sunar.
-
-### 📱 Android
-
-Releases’tan `PeekAround-*.apk` indir ve yükle (bilinmeyen kaynaklara izin ver). İlk açılışta seç:
-- **Bu telefondaki fotoğraflar** — “Tüm dosyalara erişim” iznini ver; Kamera/Resimler/Filmler/İndirilenler/WhatsApp kütüphane olarak eklenir. Düzenlemeler, videolar ve slaytlar telefonda (Media3, donanım kodlayıcı) işlenir.
-- **Bir PeekAround sunucusuna bağlan** — ağdaki sunucular otomatik bulunur ya da adresi yaz.
-
-Bağlantıyı daha sonra Ayarlar → Bağlantı’dan değiştirebilirsin.
-
-**Telefon klasörünü PC’de göstermek için:** PC’de Ayarlar → Ağ → “Galeriyi yerel ağda paylaş”ı aç; telefonda Ayarlar → **Telefon paylaşımı** → klasörleri seç ve aç. PC’de çıkan penceredeki kodu telefondakiyle karşılaştırıp **İzin ver** de. İzinler: medya, konum (fotoğrafların konum bilgisi korunsun diye) ve bildirim.
+2.0'ın tarayıcı arayüzü hazır olana kadar Docker için **1.x** kullan: kurulum adımları [`main` dalının README'sinde](https://github.com/zearkreast/PeekAround/tree/main#-docker-ağa-galeri-sunmak-için).
 
 ---
 
 ## Geliştirme
 
-Gereksinimler: Node.js ≥ 22.13 (24 önerilir), ffmpeg (PATH’te; ffprobe varsa kullanılır, yoksa gerekmez).
+Gereksinimler: Rust 1.85+, ffmpeg (PATH'te). Linux'ta ayrıca `libheif` geliştirme paketi.
 
 ```bash
-npm install
-npm run fixtures      # örnek medya: fixtures/library
-npm run dev           # API :8787 + arayüz :5173 (http://localhost:5173)
+cargo build --release -p pa-desktop      # masaüstü uygulaması
+cargo build --release -p pa-cli          # başsız sunucu (Docker / sunucu)
+cargo test --workspace
 ```
 
-```bash
-npm run typecheck
-npm test
-npm run build                       # web + sunucu
-node packages/server/dist/cli.js --root ~/Resimler   # tek komutla sunucu
-```
-
-Masaüstü:
-
-```bash
-npm run build -w @peekaround/web
-node packages/desktop/scripts/stage.mjs                 # stage/ klasörü
-npx electron packages/desktop/stage                    # çalıştır
-node packages/desktop/scripts/dist.mjs --linux          # AppImage + pacman + deb (bsdtar gerekir)
-node packages/desktop/scripts/stage.mjs --platform=win32 --arch=x64 && node packages/desktop/scripts/dist.mjs --win
-```
-
-Android (JDK 21 + Android SDK, `ANDROID_HOME` ayarlı):
-
-```bash
-npm run build -w @peekaround/web
-cd packages/android && npx cap sync android && cd android && ./gradlew assembleDebug
-```
-
-İkonlar `brand/logo.svg`’den üretilir: `node scripts/make-icons.mjs`
+Sunucu olmadan arayüzü denemek için: `pa-desktop --demo 10000` (10 bin öğelik sahte kütüphane). Ekran görüntüsü ve otomasyon için `PA_SCRIPT` ortam değişkeni (`wait 2000; nav explore; shot a.png; quit`).
 
 ### Yapı
 
 ```
-packages/shared    Ortak TypeScript API sözleşmesi
-packages/server    Fastify 5 sunucu (Docker + masaüstü içinde aynı kod): tarama, izleme, küçük resim (sharp), ffmpeg işleri, zip, fontlar
-packages/web       React 19 + Vite + Tailwind 4 + Motion arayüz (tüm platformlar)
-packages/desktop   Electron kabuğu (gömülü sunucu, yerel klasör seçici, ağda paylaş)
-packages/android   Capacitor 8 + Kotlin eklentisi (yerel medya sunucusu, Media3, mDNS, paylaşım)
-docker/            Dockerfile + compose
-brand/             Logo (albatros)
+crates/pa-core     Saf mantık ve API tipleri (1.x'teki packages/shared karşılığı)
+crates/pa-server   HTTP/WebSocket sunucu: axum + tokio + SQLite
+crates/pa-cli      peekaround: başsız sunucu (Docker)
+crates/pa-desktop  Masaüstü uygulaması: Slint arayüz + gömülü sunucu, tepsi, bildirimler
+crates/pa-ui       Slint arayüzü: tüm ekranlar ve görünüm modelleri
+crates/pa-client   Tipli API istemcisi (HTTP + canlı olaylar)
+crates/pa-media    Resim çözme/küçültme, thumbhash, ffmpeg sarmalayıcı
+crates/pa-meta     EXIF / XMP, Google Takeout, video etiketleri
+crates/pa-jobs     İş kuyruğu: video düzenleme, slayt dışa aktarma, canlı dönüştürme
+crates/pa-mega     MEGA istemcisi: bağlantılar, şifreli parçalı indirme, hesap oturumu
+crates/pa-remote   MEGA akış klasörleri: listeleme, küçük resim, önbellek, kota
+crates/pa-link     Telefon bağlantısı: eşleştirme, cihaz klasörleri, aktarımlar
+third_party/       Slint winit arka ucunun yamalı kopyası (0 Hz ekran düzeltmesi)
+packages/          1.x TypeScript kodu (2.0 tamamlanana kadar başvuru için)
 ```
 
-### GitHub’a gönderince
-
-`.github/workflows/build.yml`:
-
-- **Her push ve pull request:** tip kontrolü ve testler.
-- **`v1.3.0` gibi bir etiket:** Windows/Linux paketleri, Android APK ve Docker imajı derlenip hepsi bir **Release**’e eklenir.
-
-```bash
-git tag v1.3.0
-git push origin v1.3.0
-```
-
-Kişisel token gerekmez; otomatik `GITHUB_TOKEN` yeterli. Push için token, imzalı APK secret’ları ve sorun giderme: [docs/github-actions.md](docs/github-actions.md).
+Teknik plan: [`docs/rust/PLAN.md`](docs/rust/PLAN.md)
 
 ## Atıflar
 
-- Yer adları: [GeoNames](https://www.geonames.org/) (CC BY 4.0) — `packages/web/public/geo/ATTRIBUTION.txt`
-- Harita: © [OpenStreetMap](https://www.openstreetmap.org/copyright) katkıcıları (Leaflet, supercluster); topoğrafik: © [OpenTopoMap](https://opentopomap.org) (CC-BY-SA); uydu: © Esri, Maxar, Earthstar Geographics
+- Yer adları: [GeoNames](https://www.geonames.org/) (CC BY 4.0)
+- Harita: © [OpenStreetMap](https://www.openstreetmap.org/copyright) katkıcıları; topoğrafik: © [OpenTopoMap](https://opentopomap.org) (CC-BY-SA); uydu: © Esri, Maxar, Earthstar Geographics
+- Arayüz fontları Inter ve Bricolage Grotesque (SIL OFL), simgeler Lucide (ISC)
 
 ## Lisans
 
-GNU GPL v3 — ayrıntılar `LICENSE` dosyasında. Hazır fontlar SIL Open Font License ile dağıtılır (@fontsource).
+GNU GPL v3 — ayrıntılar `LICENSE` dosyasında.
