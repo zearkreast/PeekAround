@@ -5,6 +5,20 @@
 <h1 align="center">PeekAround</h1>
 <p align="center"><b>Klasörlerin, en güzel haliyle.</b> · <i>Your folders, beautifully.</i></p>
 
+<p align="center">
+  <a href="https://github.com/zearkreast/PeekAround/releases/latest"><img src="https://img.shields.io/github/v/release/zearkreast/PeekAround?label=s%C3%BCr%C3%BCm&color=8b5cf6" alt="Son sürüm"></a>
+  <a href="https://github.com/zearkreast/PeekAround/releases"><img src="https://img.shields.io/github/downloads/zearkreast/PeekAround/total?label=indirme&color=ec4899" alt="İndirmeler"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/zearkreast/PeekAround?label=lisans&color=0ea5e9" alt="Lisans: GPL-3.0"></a>
+  <img src="https://img.shields.io/badge/platform-Docker%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20Android-22c55e" alt="Platformlar">
+</p>
+
+<p align="center">
+  <a href="https://github.com/zearkreast/PeekAround/releases/latest"><b>⬇️ İndir</b></a> ·
+  <a href="#özellikler">Özellikler</a> ·
+  <a href="#kurulum">Kurulum</a> ·
+  <a href="#geliştirme">Geliştirme</a>
+</p>
+
 PeekAround; bilgisayarındaki, sunucundaki ya da telefonundaki klasörleri modern, animasyonlu bir galeriye dönüştürür.
 Fotoğraf ve videolarına göz at, izle, sürükle-bırak ile dosya/klasör/zip ekle, slayt gösterisi ve kolaj yap, fotoğraf ve videolarda basit düzenlemeler yap — **kendi fontlarınla** ve **orijinallere asla dokunmadan** (her düzenleme bir kopyaya kaydedilir).
 
@@ -15,6 +29,10 @@ Aynı uygulama üç şekilde çalışır:
 | 🐳 **Docker / sunucu** | Ev sunucuna/NAS'a kur, galeriyi tüm ağa sun (tarayıcıdan, telefondan) | `docker compose up -d` |
 | 🖥️ **Masaüstü uygulaması** | Kişisel galeri; istersen tek tıkla ağda paylaş | Windows `.exe`, Arch Linux `.pacman` / PKGBUILD, AppImage, `.deb` |
 | 📱 **Android** | Telefonun kendi klasörlerini gez **veya** bir PeekAround sunucusuna bağlan | `.apk` |
+
+Hazır paketler her sürümle birlikte **[Releases](https://github.com/zearkreast/PeekAround/releases/latest)** sayfasında; sürüm notları da orada.
+
+> 🦀 **PeekAround 2.0** (Rust + Slint ile baştan yazım) alfa aşamasında. Kodu [`rust-rewrite`](https://github.com/zearkreast/PeekAround/tree/rust-rewrite) dalında, denemelik paketleri [ön sürümlerde](https://github.com/zearkreast/PeekAround/releases). Günlük kullanım için 1.x sürümleri önerilir.
 
 ---
 
@@ -76,8 +94,8 @@ Aynı uygulama üç şekilde çalışır:
 ### 🐳 Docker (ağa galeri sunmak için)
 
 ```bash
-git clone https://github.com/<kullanici>/peekaround.git
-cd peekaround
+git clone https://github.com/zearkreast/PeekAround.git
+cd PeekAround
 ```
 
 `docker/docker-compose.yml` içindeki klasör yollarını kendine göre düzenle (her `/media/<Ad>` bir kütüphane olur), sonra:
@@ -88,10 +106,10 @@ docker compose -f docker/docker-compose.yml up -d --build
 
 Tarayıcıdan `http://<sunucu-ip>:8080` adresine git.
 
-Hazır imaj (GitHub Actions ile `ghcr.io`'ya gönderilir, amd64 + arm64/Raspberry Pi):
+Hazır imaj (`main` dalının her güncellemesinde GitHub Actions ile `ghcr.io`'ya gönderilir, amd64):
 
 ```bash
-docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/Fotoğraflar:/media/Fotoğraflar -v ./peekaround-data:/data ghcr.io/<kullanici>/peekaround:latest
+docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/Fotoğraflar:/media/Fotoğraflar -v ./peekaround-data:/data ghcr.io/zearkreast/peekaround:main
 ```
 
 | Değişken | Varsayılan | Açıklama |
@@ -118,7 +136,7 @@ docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/F
 - **Arch Linux:** `sudo pacman -U PeekAround-x.y.z-x64.pacman` ya da `packaging/arch/PKGBUILD` ile `makepkg -si`
 - **Diğer Linux:** `PeekAround-x.y.z-x86_64.AppImage` (çalıştırılabilir yap ve aç) veya `.deb`
 
-İlk açılışta Resimler ve Videolar klasörlerin kütüphane olarak eklenir. Ayarlar → Ağ’dan **“Galeriyi yerel ağda paylaş”** ile aynı uygulama ağdaki diğer cihazlara da galeri sunar.
+İlk açılışta Resimler ve Videolar klasörlerin kütüphane olarak eklenir. Ayarlar → Ağ’dan **“Galeriyi yerel ağda paylaş”** ile aynı uygulama ağdaki diğer cihazlara da galeri sunar (varsayılan port `1313`).
 
 ### 📱 Android
 
