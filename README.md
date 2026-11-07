@@ -19,6 +19,11 @@
   <a href="#geliştirme">Geliştirme</a>
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/explore-desktop.jpg" width="72%" alt="Keşfet sayfası: anılar, geziler ve yıl özetleri">
+  <img src="docs/screenshots/explore-mobile.jpg" width="21%" alt="Telefonda Keşfet sayfası">
+</p>
+
 PeekAround; bilgisayarındaki, sunucundaki ya da telefonundaki klasörleri modern, animasyonlu bir galeriye dönüştürür.
 Fotoğraf ve videolarına göz at, izle, sürükle-bırak ile dosya/klasör/zip ekle, slayt gösterisi ve kolaj yap, fotoğraf ve videolarda basit düzenlemeler yap — **kendi fontlarınla** ve **orijinallere asla dokunmadan** (her düzenleme bir kopyaya kaydedilir).
 
@@ -57,6 +62,9 @@ Hazır paketler her sürümle birlikte **[Releases](https://github.com/zearkreas
 - **Daha fazla Keşfet:** yıl özeti, gece çekimleri ve altın saat, renkler, dikey/yatay/panorama, kısa klipler/uzun videolar, en büyük dosyalar, son eklenenler, **kopyalar**, takvim ısı haritası, “Beni şaşırt”
 - **Türler + kameralar:** videolar, ekran görüntüleri, selfie’ler, panoramalar, animasyonlar; telefon/kamera modeline göre; yıllar
 - Doğal dille arama: “istanbul 2023 video”, “Ağustos 2024”, “selfie”
+
+<p align="center"><img src="docs/screenshots/map-desktop.jpg" width="85%" alt="Harita: fotoğraflar konumlarına göre kümelenir, sağda o alandaki fotoğraflar"></p>
+
 - Tarihler fotoğrafın çekildiği yerin saatine göre gruplanır (Ayarlar → Keşfet’ten ev saat dilimi)
 
 **Telefon ↔ PC**
