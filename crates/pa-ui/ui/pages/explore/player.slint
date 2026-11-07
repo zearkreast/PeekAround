@@ -139,7 +139,16 @@ export component MemoryPlayer inherits Rectangle {
                 source: PlayerState.image;
                 image-fit: contain;
             }
-            if PlayerState.is-video: Rectangle {
+            if PlayerState.is-video && PlayerState.has-frame: Image {
+                width: parent.fw;
+                height: parent.fh;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                source: PlayerState.frame;
+                image-fit: contain;
+            }
+            // poster only: the video has not produced a frame (yet, or it can't play)
+            if PlayerState.is-video && !PlayerState.has-frame: Rectangle {
                 width: 64px;
                 height: 64px;
                 border-radius: 32px;
@@ -208,6 +217,10 @@ export component MemoryPlayer inherits Rectangle {
                     alignment: center;
                     Text { text: PlayerState.title; font-size: 14px; font-weight: 600; color: #ffffff; overflow: elide; }
                     Text { text: PlayerState.subtitle; font-size: 12px; color: #ffffffb3; overflow: elide; }
+                }
+                if PlayerState.is-video: RoundButton {
+                    icon: PlayerState.muted ? EIcons.volume-x : EIcons.volume-2;
+                    clicked => { PlayerState.toggle-mute(); }
                 }
                 RoundButton {
                     icon: PlayerState.paused ? EIcons.play : EIcons.pause;

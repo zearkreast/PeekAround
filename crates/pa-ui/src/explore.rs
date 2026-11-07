@@ -360,6 +360,17 @@ impl Explore {
             })
             .collect();
         st.set_memories(model(mems));
+        let strip: Vec<ECard> = r
+            .memories
+            .iter()
+            .map(|m| ECard {
+                key: sv(format!("play:{}", m.id)),
+                title: lb::memory_short(m, lang).into(),
+                covers: covers(&a, &m.cover_ids[..m.cover_ids.len().min(1)], true),
+                ..Default::default()
+            })
+            .collect();
+        st.set_strip(model(strip));
 
         // year in review
         let yrs: Vec<ECard> = x
@@ -1777,6 +1788,14 @@ pub(crate) fn enter(app: &Rc<AppInner>, route: &Route) {
         }
     }
     match route {
+        // the timeline's memories row reads the explore data
+        Route::Photos => {
+            let show = app.prefs.borrow().show_memories;
+            app.window.global::<ExploreState>().set_show_strip(show);
+            if show && ex.data.borrow().is_none() && !ex.loading.get() {
+                ex.load();
+            }
+        }
         Route::Explore => {
             ex.publish_home();
             if ex.data.borrow().is_none() || !ex.loading.get() {
@@ -1801,6 +1820,8 @@ pub(crate) fn on_event(app: &Rc<AppInner>, e: &BackendEvent) {
     let BackendEvent::Server(ev) = e else { return };
     use pa_core::ServerEvent as E;
     match ev {
+        // (re)connected: the first load may have run before the server answered
+        E::Hello { .. } if ex.data.borrow().is_none() => ex.schedule_refresh(),
         E::Explore | E::Folders { status: None } => ex.schedule_refresh(),
         E::Media {
             reason: Some(pa_core::MediaReason::Add | pa_core::MediaReason::Remove),
@@ -1823,6 +1844,9 @@ pub(crate) fn on_prefs(app: &Rc<AppInner>) {
     let changed = ex.lang.get() != lang || *ex.week_start.borrow() != ws;
     ex.lang.set(lang);
     *ex.week_start.borrow_mut() = ws;
+    app.window
+        .global::<ExploreState>()
+        .set_show_strip(app.prefs.borrow().show_memories);
     if changed {
         ex.publish_home();
         let route = app.route.borrow().clone();

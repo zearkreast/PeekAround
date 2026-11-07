@@ -318,6 +318,32 @@ export component MemoryCard inherits CardBox {
     }
 }
 
+// the timeline's memories row card (MemoriesStrip.tsx): 3:4 cover, short label at the bottom
+export component StripCard inherits CardBox {
+    in property <ECard> d;
+    width: 150px;
+    height: 200px;
+    lift: false;
+    Rectangle {
+        border-radius: 16px;
+        clip: true;
+        background: Theme.tile-bg;
+        Thumb { source: root.d.covers.length > 0 ? root.d.covers[0] : @image-url(""); zoomed: root.hovered; }
+        Shade { strength: 0.75; mid: 0; }
+        VerticalLayout {
+            alignment: end;
+            padding: 10px;
+            Text {
+                text: root.d.title;
+                font-size: 13px;
+                font-weight: 600;
+                color: #ffffff;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
 // a square photo card with two text lines under it (PlaceCard / CountryCard / CityCard)
 export component PhotoCard inherits CardBox {
     in property <ECard> d;

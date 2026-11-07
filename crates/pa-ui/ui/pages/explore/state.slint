@@ -75,6 +75,10 @@ export global ExploreState {
     in-out property <bool> surprise-busy;
 
     in property <[ECard]> memories;
+    // the Photos timeline's memories row: one cover each, short label (MemoriesStrip.tsx)
+    in property <[ECard]> strip;
+    // Settings › explore › memories strip
+    in property <bool> show-strip: true;
     in property <[ECard]> year-reviews;
     in property <[ECard]> places;
     in property <int> places-total;
@@ -199,6 +203,10 @@ export global PlayerState {
     // current slide: title card (cover) or an item
     in property <bool> is-title;
     in property <bool> is-video;
+    // decoded video frame over the poster (ffmpeg player, src/video.rs)
+    in property <image> frame;
+    in property <bool> has-frame;
+    in property <bool> muted: true;
     in property <image> image;
     in property <bool> has-image;
     in property <image> backdrop;
@@ -212,6 +220,7 @@ export global PlayerState {
     callback close();
     callback step(int);
     callback toggle-pause();
+    callback toggle-mute();
     callback press(length, length);
     callback move(length, length);
     callback release(length, length, length);

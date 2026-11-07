@@ -286,6 +286,8 @@ export component MediaGrid inherits Rectangle {
     in property <length> header-height: 140px;
     // the page draws its own header (children of MediaGrid, header-height tall); the built-in one hides
     in property <bool> custom-header;
+    // height of the built-in title row when the page adds more under it (Photos memories row)
+    in property <length> title-height: root.header-height;
     // `max-w-[1800px] px-7` of the gallery page
     in property <length> side-padding: 28px;
     in property <length> content-max-width: 1800px;
@@ -324,7 +326,7 @@ export component MediaGrid inherits Rectangle {
             x: root.grid-x;
             y: 0;
             width: root.grid-width;
-            height: root.header-height;
+            height: root.title-height;
             padding-top: 24px;
             padding-bottom: 28px;
             spacing: 24px;

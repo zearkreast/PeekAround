@@ -6,11 +6,17 @@ import { Shell, GridState, Page } from "../globals.slint";
 import { MediaGrid } from "grid.slint";
 import { Button, ButtonVariant, ButtonSize } from "../components/button.slint";
 import { Skeleton, EmptyState, Spinner } from "../components/feedback.slint";
+import { ExploreState } from "explore/state.slint";
+import { EIcons } from "explore/icons.slint";
+import { Carousel, SectionLink, StripCard } from "explore/cards.slint";
 
 export component PhotosPage inherits Rectangle {
     in property <image> title-icon: Icons.images;
     in property <color> title-icon-color: Theme.accent;
     callback slideshow();
+    // memories row under the title: the timeline only, never Favorites / search
+    property <length> strip-h: Shell.page == Page.photos && ExploreState.show-strip && ExploreState.strip.length > 0 ? 268px : 0px;
+    property <length> head-h: 128px + root.strip-h;
 
     grid := MediaGrid {
         width: root.width;
@@ -18,7 +24,8 @@ export component PhotosPage inherits Rectangle {
         tiles: GridState.tiles;
         headers: GridState.headers;
         grid-height: GridState.grid-height;
-        header-height: 128px;
+        header-height: root.head-h;
+        title-height: 128px;
         scroll-y <=> GridState.scroll-y;
         viewport-changed(y, h, w) => {
             GridState.viewport-changed(y, h, w);
@@ -33,14 +40,42 @@ export component PhotosPage inherits Rectangle {
         action-label: GridState.total > 0 ? I18n.t("nav.slideshow", I18n.rev) : "";
         action-icon: Icons.play;
         action => { root.slideshow(); }
+
+        if root.strip-h > 0: VerticalLayout {
+            y: 116px;
+            height: root.strip-h - 16px;
+            spacing: 12px;
+            HorizontalLayout {
+                height: 36px;
+                spacing: 8px;
+                VerticalLayout { alignment: center; Image { source: EIcons.sparkles; colorize: Theme.accent; width: 16px; height: 16px; } }
+                Text {
+                    text: I18n.t("explore.memories", I18n.rev);
+                    font-family: Theme.font-display;
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                SectionLink {
+                    text: I18n.t("explore.seeAll", I18n.rev);
+                    clicked => { Shell.navigate(Page.explore); }
+                }
+            }
+            Carousel {
+                row-height: 200px;
+                for m in ExploreState.strip: StripCard { d: m; clicked => { ExploreState.open(m.key); } }
+            }
+        }
     }
 
     // first load: shimmer rows where the grid will be
     if GridState.loading: Rectangle {
         x: grid.grid-x;
-        y: 128px;
+        y: root.head-h;
         width: grid.grid-width;
-        height: root.height - 128px;
+        height: root.height - root.head-h;
         clip: true;
         for i in 18: Skeleton {
             property <int> ci: Math.mod(i, 6);
@@ -53,8 +88,8 @@ export component PhotosPage inherits Rectangle {
     }
 
     if !GridState.loading && GridState.total == 0: VerticalLayout {
-        y: 128px;
-        height: root.height - 128px;
+        y: root.head-h;
+        height: root.height - root.head-h;
         alignment: start;
         EmptyState {
             icon: GridState.error != "" ? Icons.triangle-alert : Icons.images;

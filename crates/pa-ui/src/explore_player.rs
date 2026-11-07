@@ -2,7 +2,7 @@
 //! the memory (year in review: a few per month), auto-advance with progress bars (title 3.2 s,
 //! photo 5 s, video poster 7.5 s), tap left 30 % / right, hold = pause (+ hide the chrome),
 //! swipe down = close, sideways swipe = step, Ken Burns, "see all" and "open as slideshow".
-//! Video slides show the poster with a play badge (no in-player playback yet).
+//! Video slides play muted through the ffmpeg player (src/video.rs) for at most 15 s, over the poster.
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -18,7 +18,9 @@ use crate::PlayerState;
 
 const PHOTO_MS: f64 = 5000.0;
 const TITLE_MS: f64 = 3200.0;
-const VIDEO_MS: f64 = 15000.0 / 2.0;
+const VIDEO_MAX_MS: f64 = 15000.0;
+// a video that can't play (yet): photo-like clock
+const VIDEO_MS: f64 = VIDEO_MAX_MS / 2.0;
 const MAX_SLIDES: usize = 60;
 const HOLD_MS: u64 = 220;
 
@@ -44,6 +46,8 @@ struct Player {
     press: RefCell<Press>,
     drag_y: Cell<f64>,
     epoch: Cell<u64>,
+    video: RefCell<Option<crate::video::Player>>,
+    muted: Cell<bool>,
 }
 
 thread_local! {
@@ -228,6 +232,9 @@ impl Player {
         st.set_progress(0.0);
         st.set_has_image(false);
         st.set_has_backdrop(false);
+        st.set_has_frame(false);
+        st.set_muted(self.muted.get());
+        self.video.borrow_mut().take();
         let epoch = self.epoch.get();
         let set_img = |id: String, size: u32, back: bool| {
             let w = Rc::downgrade(self);
@@ -266,6 +273,9 @@ impl Player {
             st.set_aspect(aspect);
             set_img(it.id.clone(), 320, true);
             set_img(it.id.clone(), 1600, false);
+            if it.kind == MediaKind::Video {
+                self.start_video(&a, &it);
+            }
         }
         // preload
         for k in 1..=2 {
@@ -285,6 +295,57 @@ impl Player {
             Some(it) if it.kind == MediaKind::Video => VIDEO_MS,
             _ => PHOTO_MS,
         }
+    }
+
+    fn start_video(&self, a: &Rc<AppInner>, it: &MediaItem) {
+        let Some(src) = a.backend.ops().and_then(|o| o.source(it, None)) else {
+            return;
+        };
+        let size = a.window.window().size();
+        let aspect = match (it.width, it.height) {
+            (Some(w), Some(h)) if w > 0 && h > 0 => w as f64 / h as f64,
+            _ => 16.0 / 9.0,
+        };
+        let (w, h) = crate::video::output_size(
+            aspect,
+            size.width as f64,
+            size.height as f64,
+            it.width,
+            it.height,
+        );
+        let source = crate::video::Source {
+            input: src.as_input(),
+            video: true,
+            width: w,
+            height: h,
+            fps: 30.0,
+            duration: it.duration,
+            audio: None,
+        };
+        let player =
+            crate::video::Player::new(source, 0.0, !self.paused.get(), 1.0, self.muted.get(), 1.0);
+        *self.video.borrow_mut() = Some(player);
+    }
+
+    /// 0..1 of the current video slide by its own clock (at most 15 s); None = use the timer
+    fn video_progress(&self) -> Option<f64> {
+        let mut v = self.video.borrow_mut();
+        let p = v.as_mut()?;
+        if let Some(f) = p.take_frame() {
+            self.with(|_, st| {
+                st.set_frame(Image::from_rgba8(f.px));
+                st.set_has_frame(true);
+            });
+        }
+        let s = p.status();
+        if s.error.is_some() {
+            return None;
+        }
+        let d = p.source().duration.filter(|d| *d > 0.0)?;
+        if s.ended {
+            return Some(1.0);
+        }
+        Some((p.clock() * 1000.0 / (d * 1000.0).min(VIDEO_MAX_MS)).min(1.0))
     }
 
     fn start_clock(self: &Rc<Self>) {
@@ -317,7 +378,7 @@ impl Player {
         let dur = self.duration();
         let e = self.elapsed.get() + dt;
         self.elapsed.set(e);
-        let p = (e / dur).min(1.0);
+        let p = self.video_progress().unwrap_or((e / dur).min(1.0));
         let kb_total = dur
             + if self.index.get() == 0 {
                 1500.0
@@ -350,12 +411,16 @@ impl Player {
     fn set_paused(&self, p: bool) {
         self.paused.set(p);
         self.last.set(Instant::now());
+        if let Some(v) = self.video.borrow_mut().as_mut() {
+            v.set_playing(!p);
+        }
         self.with(|_, st| st.set_paused(p));
     }
 
     fn close(&self) {
         self.tick.stop();
         self.hold.stop();
+        self.video.borrow_mut().take();
         self.epoch.set(self.epoch.get() + 1);
         self.with(|_, st| st.set_open(false));
     }
@@ -439,6 +504,8 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         press: RefCell::new(Press::default()),
         drag_y: Cell::new(0.0),
         epoch: Cell::new(0),
+        video: RefCell::new(None),
+        muted: Cell::new(true),
     });
     PLAYER.with(|x| *x.borrow_mut() = Some(p.clone()));
     let st = app.window.global::<PlayerState>();
@@ -460,6 +527,17 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     st.on_toggle_pause(move || {
         if let Some(p) = w.upgrade() {
             p.set_paused(!p.paused.get());
+        }
+    });
+    let w = Rc::downgrade(&p);
+    st.on_toggle_mute(move || {
+        if let Some(p) = w.upgrade() {
+            let m = !p.muted.get();
+            p.muted.set(m);
+            if let Some(v) = p.video.borrow().as_ref() {
+                v.set_muted(m);
+            }
+            p.with(|_, st| st.set_muted(m));
         }
     });
     let w = Rc::downgrade(&p);
@@ -546,6 +624,14 @@ pub(crate) fn on_explore_data(app: &Rc<AppInner>) {
 }
 
 /// a route was entered: the player (a route of its own on the web) closes
+/// Stop a playing video before thread-local storage is torn down: its audio stream and decoder
+/// threads can't be shut down from a TLS destructor (the process aborts).
+pub(crate) fn shutdown() {
+    if let Some(p) = get() {
+        p.video.borrow_mut().take();
+    }
+}
+
 pub(crate) fn close() {
     if let Some(p) = get() {
         if p.app()

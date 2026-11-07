@@ -296,6 +296,11 @@ impl AppInner {
             self.history.borrow_mut().push(cur);
         }
         *self.route.borrow_mut() = route.clone();
+        // a search route reached by back / links / scripts carries its own query
+        if let crate::router::Route::Search(q) = &route {
+            *self.search_q.borrow_mut() = q.clone();
+            shell.set_search_text(q.as_str().into());
+        }
         shell.set_page(route.page());
         shell.set_nav_serial(shell.get_nav_serial() + 1);
         shell.set_title_revealed(false);
@@ -317,6 +322,7 @@ impl AppInner {
         }
         *self.search_q.borrow_mut() = q.to_string();
         let shell = self.window.global::<Shell>();
+        shell.set_search_text(q.into());
         if shell.get_page() == Page::Search {
             self.load_page_query();
         } else {
@@ -634,6 +640,8 @@ pub fn run_with(
     let r = if integ.show { window.show() } else { Ok(()) }
         .and_then(|_| slint::run_event_loop_until_quit());
     let _ = window.hide();
+    crate::explore_player::shutdown();
+    crate::viewer::shutdown();
     perf::report(&frames, &app.grid.0.borrow());
     drop(app);
     r

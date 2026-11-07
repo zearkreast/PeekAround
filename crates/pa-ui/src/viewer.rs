@@ -262,6 +262,16 @@ pub(crate) fn get() -> Option<Rc<Viewer>> {
     VIEWER.with(|v| v.borrow().clone())
 }
 
+/// Stop playback before thread-local storage is torn down (see explore_player::shutdown).
+pub(crate) fn shutdown() {
+    if let Some(v) = get() {
+        v.video_timer.stop();
+        if let Ok(mut s) = v.st.try_borrow_mut() {
+            s.player = None;
+        }
+    }
+}
+
 fn key(k: slint::platform::Key) -> SharedString {
     let c: char = k.into();
     c.to_string().into()
