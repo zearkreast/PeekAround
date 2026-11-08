@@ -299,12 +299,110 @@ impl Geo {
     }
 }
 
+/// Straight (not premultiplied) RGBA.
+pub type Rgba = [u8; 4];
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Align {
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextOutline {
+    pub color: Rgba,
+    pub width: f64,
+}
+
+/// Canvas-style shadow: `blur` is twice the Gaussian sigma.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextShadow {
+    pub color: Rgba,
+    pub blur: f64,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextBackground {
+    pub color: Rgba,
+    pub padding: f64,
+    pub radius: f64,
+}
+
+/// A text layer (lib/text.ts). Sizes and the centre (x, y) are in frame pixels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextLayer {
+    pub id: u32,
+    pub text: String,
+    pub family: String,
+    pub weight: f32,
+    pub italic: bool,
+    pub size: f64,
+    pub color: Rgba,
+    pub align: Align,
+    pub line_height: f64,
+    pub letter_spacing: f64,
+    pub x: f64,
+    pub y: f64,
+    /// degrees, clockwise
+    pub rotation: f64,
+    pub opacity: f64,
+    pub stroke: Option<TextOutline>,
+    pub shadow: Option<TextShadow>,
+    pub background: Option<TextBackground>,
+}
+
+impl TextLayer {
+    /// Everything that changes the rasterized look; position, rotation and opacity don't.
+    pub fn look_eq(&self, o: &TextLayer) -> bool {
+        self.text == o.text
+            && self.family == o.family
+            && self.weight == o.weight
+            && self.italic == o.italic
+            && self.size == o.size
+            && self.color == o.color
+            && self.align == o.align
+            && self.line_height == o.line_height
+            && self.letter_spacing == o.letter_spacing
+            && self.stroke == o.stroke
+            && self.shadow == o.shadow
+            && self.background == o.background
+    }
+
+    /// Every size-like property times `k` (a corner-handle resize).
+    pub fn scaled(&self, k: f64) -> TextLayer {
+        let r = |n: f64| (n * k * 100.0).round() / 100.0;
+        TextLayer {
+            size: r(self.size).max(4.0),
+            letter_spacing: r(self.letter_spacing),
+            stroke: self.stroke.map(|s| TextOutline { width: r(s.width), ..s }),
+            shadow: self.shadow.map(|s| TextShadow { blur: r(s.blur), x: r(s.x), y: r(s.y), ..s }),
+            background: self.background.map(|b| TextBackground { padding: r(b.padding), radius: r(b.radius), ..b }),
+            ..self.clone()
+        }
+    }
+}
+
+/// Freehand brush stroke (strokes.ts); points and size in frame pixels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Stroke {
+    pub color: Rgba,
+    pub size: f64,
+    pub opacity: f64,
+    pub points: Vec<[f64; 2]>,
+}
+
 /// Everything that defines an edit — the unit of undo / redo.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EditDoc {
     pub adjust: Adjust,
     pub filter: Filter,
     pub geo: Geo,
+    /// bottom to top
+    pub layers: Vec<TextLayer>,
+    pub strokes: Vec<Stroke>,
 }
 
 impl Default for EditDoc {
@@ -313,8 +411,38 @@ impl Default for EditDoc {
             adjust: [0.0; 15],
             filter: Filter { id: None, strength: 100.0 },
             geo: Geo::default(),
+            layers: Vec::new(),
+            strokes: Vec::new(),
         }
     }
+}
+
+/// Layers and strokes through a frame-pixel point map (quarter turns and flips).
+fn map_overlays(doc: &EditDoc, f: impl Fn(f64, f64) -> (f64, f64), mirror: bool) -> (Vec<TextLayer>, Vec<Stroke>) {
+    let layers = doc
+        .layers
+        .iter()
+        .map(|l| {
+            let (x, y) = f(l.x, l.y);
+            TextLayer { x, y, rotation: if mirror { -l.rotation } else { l.rotation }, ..l.clone() }
+        })
+        .collect();
+    let strokes = doc
+        .strokes
+        .iter()
+        .map(|s| Stroke {
+            points: s
+                .points
+                .iter()
+                .map(|p| {
+                    let (x, y) = f(p[0], p[1]);
+                    [x, y]
+                })
+                .collect(),
+            ..s.clone()
+        })
+        .collect();
+    (layers, strokes)
 }
 
 /// Frame size (after quarter turns) in source pixels.
@@ -376,8 +504,9 @@ pub fn fit_aspect(crop: Rect, ratio: f64, frame_w: f64, frame_h: f64) -> Rect {
     Rect { x: x / frame_w, y: y / frame_h, w: w / frame_w, h: h / frame_h }
 }
 
-/// Rotate the edit 90° clockwise (dir = 1) or counter-clockwise (dir = −1).
-pub fn rotate_doc(doc: &EditDoc, dir: i32) -> EditDoc {
+/// Rotate the edit 90° clockwise (dir = 1) or counter-clockwise (dir = −1); `frame_w` ×
+/// `frame_h` is the frame before the turn.
+pub fn rotate_doc(doc: &EditDoc, dir: i32, frame_w: f64, frame_h: f64) -> EditDoc {
     let g = &doc.geo;
     let one_flip = g.flip_h != g.flip_v;
     let rot = (g.rot as i32 + if one_flip { -dir } else { dir }).rem_euclid(4) as u8;
@@ -388,16 +517,26 @@ pub fn rotate_doc(doc: &EditDoc, dir: i32) -> EditDoc {
         Rect { x: c.y, y: 1.0 - c.x - c.w, w: c.h, h: c.w }
     };
     let aspect = if g.aspect == "1:1" || g.aspect == "free" { g.aspect } else { "free" };
-    EditDoc { geo: Geo { rot, crop, aspect, ..g.clone() }, ..doc.clone() }
+    let (layers, strokes) = if dir == 1 {
+        map_overlays(doc, |x, y| (frame_h - y, x), false)
+    } else {
+        map_overlays(doc, |x, y| (y, frame_w - x), false)
+    };
+    EditDoc { geo: Geo { rot, crop, aspect, ..g.clone() }, layers, strokes, ..doc.clone() }
 }
 
-pub fn flip_doc(doc: &EditDoc, horizontal: bool) -> EditDoc {
+pub fn flip_doc(doc: &EditDoc, horizontal: bool, frame_w: f64, frame_h: f64) -> EditDoc {
     let g = &doc.geo;
     let c = g.crop;
     let crop = if horizontal {
         Rect { x: 1.0 - c.x - c.w, ..c }
     } else {
         Rect { y: 1.0 - c.y - c.h, ..c }
+    };
+    let (layers, strokes) = if horizontal {
+        map_overlays(doc, |x, y| (frame_w - x, y), true)
+    } else {
+        map_overlays(doc, |x, y| (x, frame_h - y), true)
     };
     EditDoc {
         geo: Geo {
@@ -407,6 +546,8 @@ pub fn flip_doc(doc: &EditDoc, horizontal: bool) -> EditDoc {
             crop,
             ..g.clone()
         },
+        layers,
+        strokes,
         ..doc.clone()
     }
 }
@@ -673,17 +814,21 @@ mod tests {
     fn rotate_and_flip_remap_the_crop() {
         let mut d = EditDoc::default();
         d.geo.crop = Rect { x: 0.1, y: 0.2, w: 0.3, h: 0.4 };
-        let r = rotate_doc(&d, 1);
+        d.strokes.push(Stroke { color: [0, 0, 0, 255], size: 4.0, opacity: 1.0, points: vec![[10.0, 20.0]] });
+        let r = rotate_doc(&d, 1, 400.0, 300.0);
         assert_eq!(r.geo.rot, 1);
         assert!((r.geo.crop.x - 0.4).abs() < 1e-9 && (r.geo.crop.y - 0.1).abs() < 1e-9);
-        let back = rotate_doc(&r, -1).geo;
-        assert_eq!(back.rot, 0);
-        assert!((back.crop.x - 0.1).abs() < 1e-9 && (back.crop.y - 0.2).abs() < 1e-9);
-        let f = flip_doc(&d, true);
+        assert_eq!(r.strokes[0].points[0], [280.0, 10.0]);
+        let back = rotate_doc(&r, -1, 300.0, 400.0);
+        assert_eq!(back.geo.rot, 0);
+        assert!((back.geo.crop.x - 0.1).abs() < 1e-9 && (back.geo.crop.y - 0.2).abs() < 1e-9);
+        assert_eq!(back.strokes, d.strokes);
+        let f = flip_doc(&d, true, 400.0, 300.0);
         assert!(f.geo.flip_h && !f.geo.flip_v);
         assert!((f.geo.crop.x - 0.6).abs() < 1e-9);
+        assert_eq!(f.strokes[0].points[0], [390.0, 20.0]);
         // with one flip a clockwise turn counts backwards
-        assert_eq!(rotate_doc(&f, 1).geo.rot, 3);
+        assert_eq!(rotate_doc(&f, 1, 400.0, 300.0).geo.rot, 3);
     }
 
     #[test]

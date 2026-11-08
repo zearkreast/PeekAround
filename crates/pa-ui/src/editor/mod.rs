@@ -6,9 +6,12 @@
 mod doc;
 #[cfg(feature = "gpu")]
 mod gpu;
+mod layers;
+mod overlay;
 mod render;
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -21,8 +24,9 @@ use crate::actions_ops::ImageSize;
 use crate::app::AppInner;
 use crate::backend::ThumbData;
 use crate::i18n::Lang;
-use crate::{EdAspect, EdFilter, EdSlider, EditorState, ToastKind};
-use doc::{EditDoc, Handle, History, Rect, View};
+use crate::{EdAspect, EdFilter, EdLayerRow, EdLayerVis, EdSlider, EditorState, ToastKind};
+use doc::{EditDoc, Handle, History, Rect, Stroke, TextLayer, View};
+use layers::{Brush, LayerOp};
 use render::{RenderParams, Renderer};
 
 /// filter thumbnail size (device px)
@@ -30,10 +34,13 @@ const THUMB: u32 = 168;
 
 type SharedRenderer = Arc<Mutex<Option<Box<dyn Renderer>>>>;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum Drag {
     Pan { x: f64, y: f64, view: View },
     Crop { mode: Handle, x: f64, y: f64, start: Rect },
+    Layer { op: LayerOp, x: f64, y: f64, start: Box<TextLayer> },
+    /// last stage point added to the live stroke
+    Draw { x: f64, y: f64 },
 }
 
 struct Ctl {
@@ -66,6 +73,16 @@ struct Ctl {
     aspects: Rc<VecModel<EdAspect>>,
     /// language of the labels in the models
     lang: Cell<Lang>,
+    /// text shaping and glyph rasterizing on the UI thread (the stage previews)
+    fonts: RefCell<Option<overlay::Fonts>>,
+    rasters: RefCell<HashMap<u32, layers::Cached>>,
+    selected: Cell<Option<u32>>,
+    next_id: Cell<u32>,
+    /// the stroke being drawn
+    live: RefCell<Option<Stroke>>,
+    brush: RefCell<Brush>,
+    layer_rows: Rc<VecModel<EdLayerRow>>,
+    layer_vis: Rc<VecModel<EdLayerVis>>,
 }
 
 thread_local! {
@@ -131,6 +148,22 @@ impl Ctl {
 
     fn crop_mode(&self) -> bool {
         *self.tab.borrow() == "crop"
+    }
+
+    fn set_tab(self: &Rc<Self>, t: &str) {
+        *self.tab.borrow_mut() = t.to_string();
+        if let Some(a) = self.app() {
+            a.window.global::<EditorState>().set_tab(t.into());
+        }
+        if t == "crop" {
+            self.zoom.set(None);
+        }
+        self.update_view();
+        self.publish();
+        self.request_render();
+        if t == "filters" {
+            self.request_thumbs();
+        }
     }
 
     // ───────── document ─────────
@@ -236,6 +269,14 @@ impl Ctl {
         let sf = a.window.window().scale_factor() as f64;
         s.set_zoom_100(self.zoom.get().is_some_and(|z| (z - 1.0 / sf).abs() < 1e-6));
         s.set_can_pan(!self.crop_mode() && v.scale > fit.scale + 1e-9);
+        let rg = self.region();
+        let (cl, ct) = self.to_stage(rg.x, rg.y);
+        s.set_clip_x(cl as f32);
+        s.set_clip_y(ct as f32);
+        s.set_clip_w((rg.w * v.scale) as f32);
+        s.set_clip_h((rg.h * v.scale) as f32);
+        self.publish_layers();
+        self.publish_strokes();
     }
 
     // ───────── view ─────────
@@ -486,7 +527,14 @@ impl Ctl {
         self.compare.set(false);
         *self.drag.borrow_mut() = None;
         *self.tab.borrow_mut() = "adjust".into();
+        self.selected.set(None);
+        self.next_id.set(1);
+        *self.live.borrow_mut() = None;
+        self.rasters.borrow_mut().clear();
+        self.set_guides((false, false));
         self.relabel(a.lang());
+        crate::pages::fonts::load(a);
+        self.publish_fonts();
         let base = match item.name.rfind('.') {
             Some(i) if i > 0 => item.name[..i].to_string(),
             _ => item.name.clone(),
@@ -597,6 +645,17 @@ impl Ctl {
             return;
         }
         if mode == "pan" {
+            if *self.tab.borrow() == "draw" && !self.compare.get() {
+                self.start_draw(x, y);
+                return;
+            }
+            if let Some((id, op)) = self.hit_layer(x, y) {
+                self.start_layer_drag(id, op, x, y);
+                return;
+            }
+            if self.selected.get().is_some() {
+                self.select(None);
+            }
             let fit = self.fit_view();
             if self.view.get().scale > fit.scale + 1e-9 {
                 *self.drag.borrow_mut() = Some(Drag::Pan { x, y, view: self.view.get() });
@@ -613,7 +672,7 @@ impl Ctl {
     fn drag_to(self: &Rc<Self>, x: f64, y: f64) {
         let (sw, sh) = self.stage.get();
         let v = self.view.get();
-        let drag = *self.drag.borrow();
+        let drag = self.drag.borrow().clone();
         match drag {
             Some(Drag::Pan { x: x0, y: y0, view }) => {
                 let n = View { cx: view.cx - (x - x0) / view.scale, cy: view.cy - (y - y0) / view.scale, ..view };
@@ -629,13 +688,34 @@ impl Ctl {
                 let crop = Rect { x: n.x / fw, y: n.y / fh, w: n.w / fw, h: n.h / fh };
                 self.change(|d| EditDoc { geo: doc::Geo { crop, ..d.geo.clone() }, ..d.clone() }, Some("geo.crop"));
             }
-            None => {}
+            Some(Drag::Layer { op, x: x0, y: y0, start }) => self.drag_layer(op, x0, y0, &start, x, y),
+            Some(Drag::Draw { x: lx, y: ly }) if self.draw_to(lx, ly, x, y) => {
+                *self.drag.borrow_mut() = Some(Drag::Draw { x, y });
+            }
+            _ => {}
         }
     }
 
-    fn release(&self) {
-        if self.drag.borrow_mut().take().is_some() {
+    fn release(self: &Rc<Self>) {
+        let drag = self.drag.borrow_mut().take();
+        match drag {
+            Some(Drag::Draw { .. }) => self.end_draw(),
+            Some(Drag::Layer { .. }) => self.set_guides((false, false)),
+            _ => {}
+        }
+        if drag.is_some() {
             self.hist.borrow_mut().seal();
+        }
+    }
+
+    /// Double click on a layer: select it and put the cursor in its text box.
+    fn double_click(self: &Rc<Self>, x: f64, y: f64) {
+        let Some((id, _)) = self.hit_layer(x, y) else { return };
+        self.start_layer_drag(id, LayerOp::Move, x, y);
+        *self.drag.borrow_mut() = None;
+        if let Some(a) = self.app() {
+            let s = a.window.global::<EditorState>();
+            s.set_focus_text(s.get_focus_text() + 1);
         }
     }
 
@@ -686,6 +766,7 @@ impl Ctl {
         let gen = self.gen.get();
         let r = self.renderer.clone();
         let doc2 = d.clone();
+        let collection = (!d.layers.is_empty()).then(slint::fontique_011::shared_collection);
         let rendering = a.t("photo.rendering");
         let encoding = a.t("photo.encoding");
         let render = async move {
@@ -693,8 +774,10 @@ impl Ctl {
                 use image::ImageEncoder;
                 let mut g = r.lock().unwrap();
                 let rr = g.as_mut().filter(|r| r.has_source()).ok_or("no source")?;
-                let img = render::render_full(rr.as_mut(), &doc2, src_w, src_h, &|p| progress(gen, p * 0.8, &rendering));
+                let mut img = render::render_full(rr.as_mut(), &doc2, src_w, src_h, &|p| progress(gen, p * 0.8, &rendering));
                 drop(g);
+                let mut fonts = collection.map(overlay::Fonts::new);
+                overlay::compose(&mut img, &doc2, src_w, src_h, fonts.as_mut());
                 progress(gen, 0.82, &encoding);
                 let mut out = Vec::new();
                 image::codecs::png::PngEncoder::new_with_quality(
@@ -787,13 +870,23 @@ pub(crate) fn open(a: &Rc<AppInner>, item: MediaItem) {
     }
 }
 
+/// A font was registered: text drawn with a fallback is drawn again, the picker lists it.
+pub(crate) fn fonts_changed(_a: &Rc<AppInner>) {
+    let Some(c) = ctl() else { return };
+    c.publish_fonts();
+    if c.src.get().is_some() {
+        c.rasters.borrow_mut().clear();
+        c.publish_layers();
+    }
+}
+
 /// Script step `estate`: the editor's state on stderr.
 pub(crate) fn debug_state() {
     let Some(c) = ctl() else { return };
     let name = c.renderer.lock().map(|r| r.as_ref().map(|r| r.name())).ok().flatten();
     let d = c.doc();
     eprintln!(
-        "[editor] renderer={:?} src={:?} tab={} view={:?} undo={} adjust={:?} filter={:?} geo={:?}",
+        "[editor] renderer={:?} src={:?} tab={} view={:?} undo={} adjust={:?} filter={:?} geo={:?} layers={:?} strokes={} selected={:?}",
         name,
         c.src.get(),
         c.tab.borrow(),
@@ -801,7 +894,10 @@ pub(crate) fn debug_state() {
         c.hist.borrow().can_undo(),
         d.adjust,
         d.filter,
-        d.geo
+        d.geo,
+        d.layers.iter().map(|l| (l.id, l.text.as_str(), l.x, l.y, l.size, l.rotation)).collect::<Vec<_>>(),
+        d.strokes.len(),
+        c.selected.get()
     );
 }
 
@@ -872,12 +968,24 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         filters: Rc::new(VecModel::from(filters)),
         aspects: Rc::new(VecModel::from(aspects)),
         lang: Cell::new(lang),
+        fonts: RefCell::new(None),
+        rasters: RefCell::new(HashMap::new()),
+        selected: Cell::new(None),
+        next_id: Cell::new(1),
+        live: RefCell::new(None),
+        brush: RefCell::new(Brush::default()),
+        layer_rows: Rc::new(VecModel::default()),
+        layer_vis: Rc::new(VecModel::default()),
     });
     CTL.with(|x| *x.borrow_mut() = Some(c.clone()));
     let s = app.window.global::<EditorState>();
     s.set_sliders(ModelRc::from(c.sliders.clone()));
     s.set_filters(ModelRc::from(c.filters.clone()));
     s.set_aspects(ModelRc::from(c.aspects.clone()));
+    s.set_layer_rows(ModelRc::from(c.layer_rows.clone()));
+    s.set_layers(ModelRc::from(c.layer_vis.clone()));
+    s.set_stickers(layers::stickers());
+    c.set_brush(|_| {});
     macro_rules! on {
         ($cb:ident, |$c:ident $(, $arg:ident)*| $body:expr) => {{
             let w = Rc::downgrade(&c);
@@ -898,11 +1006,13 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     on!(on_undo, |c| {
         if c.hist.borrow_mut().undo() {
             c.after_change();
+            c.sync_text();
         }
     });
     on!(on_redo, |c| {
         if c.hist.borrow_mut().redo() {
             c.after_change();
+            c.sync_text();
         }
     });
     on!(on_set_compare, |c, v| {
@@ -911,24 +1021,11 @@ pub(crate) fn install(app: &Rc<AppInner>) {
             if let Some(a) = c.app() {
                 a.window.global::<EditorState>().set_compare(v);
             }
+            c.publish_crop();
             c.request_render();
         }
     });
-    on!(on_set_tab, |c, t| {
-        *c.tab.borrow_mut() = t.to_string();
-        if let Some(a) = c.app() {
-            a.window.global::<EditorState>().set_tab(t.clone());
-        }
-        if t == "crop" {
-            c.zoom.set(None);
-        }
-        c.update_view();
-        c.publish();
-        c.request_render();
-        if t == "filters" {
-            c.request_thumbs();
-        }
-    });
+    on!(on_set_tab, |c, t| c.set_tab(&t));
     on!(on_slider, |c, key, v| {
         if let Some(i) = doc::key_index(&key) {
             let k = format!("adj.{key}");
@@ -982,8 +1079,14 @@ pub(crate) fn install(app: &Rc<AppInner>) {
             None,
         );
     });
-    on!(on_rotate, |c, dir| c.change(|d| doc::rotate_doc(d, if dir < 0 { -1 } else { 1 }), None));
-    on!(on_flip, |c, h| c.change(|d| doc::flip_doc(d, h), None));
+    on!(on_rotate, |c, dir| {
+        let (fw, fh) = c.frame();
+        c.change(|d| doc::rotate_doc(d, if dir < 0 { -1 } else { 1 }, fw, fh), None)
+    });
+    on!(on_flip, |c, h| {
+        let (fw, fh) = c.frame();
+        c.change(|d| doc::flip_doc(d, h, fw, fh), None)
+    });
     on!(on_set_straighten, |c, v| {
         c.change(|d| EditDoc { geo: doc::Geo { straighten: v as f64, ..d.geo.clone() }, ..d.clone() }, Some("geo.straighten"));
     });
@@ -994,6 +1097,36 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         );
     });
     on!(on_press, |c, mode, x, y| c.press(&mode, x as f64, y as f64));
+    on!(on_double_click, |c, x, y| c.double_click(x as f64, y as f64));
+    on!(on_add_text, |c, sticker| c.add_text(&sticker));
+    on!(on_select_layer, |c, id| c.select(Some(id as u32)));
+    on!(on_deselect, |c| c.select(None));
+    on!(on_duplicate_layer, |c, id| c.duplicate(id as u32));
+    on!(on_delete_layer, |c, id| c.delete_layer(id as u32));
+    on!(on_delete_selected, |c| {
+        if let Some(id) = c.selected.get() {
+            c.delete_layer(id);
+        }
+    });
+    on!(on_restack, |c, id, dir| c.restack(id as u32, dir));
+    on!(on_text_num, |c, key, v| c.set_num(&key, v));
+    on!(on_text_str, |c, key, v| c.set_str(&key, &v));
+    on!(on_text_color, |c, key, v| c.set_color(&key, v));
+    on!(on_text_toggle, |c, key, v| c.toggle(&key, v));
+    on!(on_pick_brush_color, |c, v| c.set_brush(|b| b.color = [v.red(), v.green(), v.blue(), 255]));
+    on!(on_set_brush_size, |c, v| c.set_brush(|b| b.size = (v as f64).clamp(2.0, 100.0)));
+    on!(on_set_brush_opacity, |c, v| c.set_brush(|b| b.opacity = (v as f64 / 100.0).clamp(0.1, 1.0)));
+    on!(on_undo_stroke, |c| {
+        c.change_overlay(
+            |d| {
+                let mut n = d.clone();
+                n.strokes.pop();
+                n
+            },
+            None,
+        )
+    });
+    on!(on_clear_strokes, |c| c.change_overlay(|d| EditDoc { strokes: Vec::new(), ..d.clone() }, None));
     on!(on_drag, |c, x, y| c.drag_to(x as f64, y as f64));
     on!(on_release, |c| c.release());
     on!(on_wheel, |c, x, y, dy| c.wheel(x as f64, y as f64, dy as f64));

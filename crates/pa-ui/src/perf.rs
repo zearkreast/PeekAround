@@ -240,7 +240,7 @@ pub(crate) fn run_script(app: &Rc<AppInner>, script: &str) {
                     .set_scroll_y(-arg.parse::<f32>().unwrap_or(0.0)),
                 "section" => a.window.global::<Shell>().set_settings_section(arg.into()),
                 "toast" => a.toast(crate::ToastKind::Success, &cmd[1..].join(" "), ""),
-                "click" | "move" => pointer(a.window.window(), cmd),
+                "click" | "move" | "down" | "up" => pointer(a.window.window(), cmd),
                 "type" => type_text(a.window.window(), &cmd[1..].join(" ")),
                 "quit" => {
                     let _ = slint::quit_event_loop();
@@ -285,18 +285,20 @@ pub fn run_window_script<T: ComponentHandle + 'static>(win: slint::Weak<T>, scri
     );
 }
 
-/// `click x y` / `move x y` (logical px): synthetic pointer events
+/// `click x y` / `move x y` / `down x y` / `up x y` (logical px): synthetic pointer events
 fn pointer(window: &slint::Window, cmd: &[String]) {
     use slint::platform::{PointerEventButton, WindowEvent};
     let x: f32 = cmd.get(1).and_then(|v| v.parse().ok()).unwrap_or(0.0);
     let y: f32 = cmd.get(2).and_then(|v| v.parse().ok()).unwrap_or(0.0);
     let position = slint::LogicalPosition::new(x, y);
     window.dispatch_event(WindowEvent::PointerMoved { position });
-    if cmd[0] == "click" {
+    if cmd[0] == "click" || cmd[0] == "down" {
         window.dispatch_event(WindowEvent::PointerPressed {
             position,
             button: PointerEventButton::Left,
         });
+    }
+    if cmd[0] == "click" || cmd[0] == "up" {
         window.dispatch_event(WindowEvent::PointerReleased {
             position,
             button: PointerEventButton::Left,

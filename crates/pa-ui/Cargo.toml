@@ -44,6 +44,10 @@ cpal = { version = "0.16", optional = true }
 arboard = { version = "3", default-features = false, optional = true }
 wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "wgsl", "dx12", "vulkan", "metal"], optional = true }
 pollster = { version = "0.4", optional = true }
+# photo editor text layers and brush strokes: the layout and rasterizer Slint itself uses, so
+# fonts registered with Slint (bundled, uploaded) render the same in the saved file
+parley = { version = "=0.11.1", default-features = false, features = ["std", "system"] }
+swash = { version = "=0.2.10", default-features = false, features = ["std", "render"] }
 
 [build-dependencies]
 slint-build = "=1.18.1"

@@ -1,12 +1,13 @@
 // Photo editor (features/photo-editor): top bar (back · undo / redo · compare · zoom · save as
-// copy), the stage with the GPU-rendered preview and the crop overlay, and the tool panel
-// (adjust, filters, crop). Keys: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, Ctrl+S, hold \ to compare,
-// 0 fit, 1 actual size, Esc back.
+// copy), the stage with the GPU-rendered preview, the drawing and text layers and the crop
+// overlay, and the tool panel (adjust, filters, crop, text, draw). Keys: Ctrl+Z / Ctrl+Shift+Z /
+// Ctrl+Y, Ctrl+S, hold \ to compare, 0 fit, 1 actual size, Delete removes the selected layer,
+// Esc deselects, then goes back.
 
 import { Theme, Motion, I18n } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
-import { Segmented, SegOption, Slider } from "../components/inputs.slint";
+import { Segmented, SegOption, Slider, Switch } from "../components/inputs.slint";
 import { Spinner, ProgressBar } from "../components/feedback.slint";
 
 export global EIcons {
@@ -21,6 +22,15 @@ export global EIcons {
     out property <image> fit: @image-url("icons/maximize.svg");
     out property <image> reset: @image-url("icons/rotate-ccw.svg");
     out property <image> image-off: @image-url("icons/image-off.svg");
+    out property <image> brush: @image-url("icons/brush.svg");
+    out property <image> eraser: @image-url("icons/eraser.svg");
+    out property <image> bold: @image-url("icons/bold.svg");
+    out property <image> italic: @image-url("icons/italic.svg");
+    out property <image> align-left: @image-url("icons/text-align-start.svg");
+    out property <image> align-center: @image-url("icons/text-align-center.svg");
+    out property <image> align-right: @image-url("icons/text-align-end.svg");
+    out property <image> type: @image-url("../pages/icons/type.svg");
+    out property <image> copy: @image-url("../pages/icons/copy.svg");
 }
 
 export struct EdSlider {
@@ -50,6 +60,70 @@ export struct EdAspect {
     h: length,
     free: bool,
     active: bool,
+}
+
+// a text layer on the stage; lengths in stage px, (x, y) is the centre
+export struct EdLayerVis {
+    id: int,
+    image: image,
+    x: length,
+    y: length,
+    w: length,
+    h: length,
+    // the box (text + background padding), centred in the image
+    bw: length,
+    bh: length,
+    rotation: float,
+    opacity: float,
+    selected: bool,
+}
+
+export struct EdLayerRow {
+    id: int,
+    label: string,
+    family: string,
+    color: color,
+    selected: bool,
+}
+
+export struct EdFont {
+    family: string,
+    label: string,
+}
+
+// the selected text layer's properties (opacity in %, sizes in frame px)
+export struct EdText {
+    id: int,
+    text: string,
+    family: string,
+    weight: float,
+    wmin: float,
+    wmax: float,
+    italic: bool,
+    italic-ok: bool,
+    bold: bool,
+    size: float,
+    size-max: float,
+    color: color,
+    align: string,
+    spacing: float,
+    line: float,
+    rotation: float,
+    opacity: float,
+    stroke: bool,
+    stroke-color: color,
+    stroke-width: float,
+    stroke-max: float,
+    shadow: bool,
+    shadow-color: color,
+    shadow-blur: float,
+    shadow-x: float,
+    shadow-y: float,
+    bg: bool,
+    bg-color: color,
+    bg-padding: float,
+    bg-radius: float,
+    bg-max: float,
 }
 
 export global EditorState {
@@ -90,6 +164,33 @@ export global EditorState {
     in property <string> file-base;
     in property <string> file-suffix: "_edit";
     in property <bool> confirm-leave;
+    // text layers and drawing
+    in property <[EdLayerVis]> layers;
+    in property <[EdLayerRow]> layer-rows;
+    in property <[EdFont]> fonts;
+    in property <[string]> stickers;
+    in property <bool> has-sel;
+    in property <EdText> sel;
+    // bumps when the text box should show sel.text again / take the focus
+    in property <int> text-sync;
+    in property <int> focus-text;
+    in property <int> stroke-count;
+    in property <image> strokes-img;
+    in property <length> strokes-x;
+    in property <length> strokes-y;
+    in property <length> strokes-w;
+    in property <length> strokes-h;
+    // the crop on the stage (the whole frame while cropping): layers are clipped to it
+    in property <length> clip-x;
+    in property <length> clip-y;
+    in property <length> clip-w;
+    in property <length> clip-h;
+    in property <bool> guide-x;
+    in property <bool> guide-y;
+    in property <color> brush-color: #f43f5e;
+    in property <float> brush-size: 12;
+    in property <float> brush-opacity: 100;
+    in property <length> brush-px: 12px;
     callback close();
     callback leave();
     callback stay();
@@ -118,6 +219,25 @@ export global EditorState {
     callback set-format(string);
     callback set-quality(float);
     callback save();
+    callback double-click(length, length);
+    // "" = a text layer, else the emoji of a sticker
+    callback add-text(string);
+    callback select-layer(int);
+    callback deselect();
+    callback duplicate-layer(int);
+    callback delete-layer(int);
+    callback delete-selected();
+    // layer id, +1 up / −1 down
+    callback restack(int, int);
+    callback text-num(string, float);
+    callback text-str(string, string);
+    callback text-color(string, color);
+    callback text-toggle(string, bool);
+    callback pick-brush-color(color);
+    callback set-brush-size(float);
+    callback set-brush-opacity(float);
+    callback undo-stroke();
+    callback clear-strokes();
 
     // colour swatch next to the colour sliders (adjust.ts `hint`)
     public pure function hint-brush(key: string) -> brush {
@@ -497,6 +617,519 @@ component CropPanel inherits VerticalLayout {
     }
 }
 
+// colour swatches that wrap (DrawPanel COLORS); the alpha of `value` is ignored
+component Swatches inherits Rectangle {
+    in property <[color]> colors: [#ffffff, #111111, #f43f5e, #f97316, #facc15, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ec4899];
+    in property <color> value;
+    callback picked(color);
+    property <length> cell: 24px;
+    property <length> gap: 3px;
+    property <int> cols: Math.max(1, Math.floor((self.width + self.gap) / (self.cell + self.gap)));
+    height: Math.ceil(self.colors.length / self.cols) * (self.cell + self.gap) - self.gap;
+    for c[i] in root.colors: Rectangle {
+        property <bool> on: c.with-alpha(1) == root.value.with-alpha(1);
+        x: Math.mod(i, root.cols) * (root.cell + root.gap);
+        y: Math.floor(i / root.cols) * (root.cell + root.gap);
+        width: root.cell;
+        height: root.cell;
+        border-radius: root.cell / 2;
+        background: self.on ? Theme.accent : transparent;
+        Rectangle {
+            property <length> s: parent.on ? root.cell - 6px : sw.has-hover ? root.cell + 2px : root.cell;
+            animate s { duration: Motion.fast; }
+            width: self.s;
+            height: self.s;
+            border-radius: self.s / 2;
+            background: c;
+            border-width: 1px;
+            border-color: #ffffff26;
+        }
+        sw := TouchArea { mouse-cursor: pointer; clicked => { root.picked(c); } }
+    }
+}
+
+// a switch that only reports clicks; the state comes from Rust
+component Toggle inherits Rectangle {
+    in property <bool> on;
+    callback toggled(bool);
+    width: 40px;
+    height: 22px;
+    border-radius: 11px;
+    background: root.on ? Theme.accent : Theme.surface-3;
+    animate background { duration: Motion.normal; }
+    Rectangle {
+        x: root.on ? 20px : 2px;
+        y: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: #ffffff;
+        animate x { duration: Motion.normal; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    }
+    TouchArea { mouse-cursor: pointer; clicked => { root.toggled(!root.on); } }
+}
+
+component ToggleHeader inherits HorizontalLayout {
+    in property <string> title;
+    in property <bool> on;
+    callback toggled(bool);
+    Text { text: root.title; font-size: 13px; font-weight: 500; color: Theme.text-dim; horizontal-stretch: 1; vertical-alignment: center; }
+    Toggle { on: root.on; toggled(v) => { root.toggled(v); } }
+}
+
+component ToolChip inherits Rectangle {
+    in property <image> icon;
+    in property <bool> on;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: Theme.border;
+    opacity: root.enabled ? 1 : 0.4;
+    background: root.on ? Theme.surface-3 : ta.has-hover ? Theme.surface-2 : transparent;
+    Image { source: root.icon; width: 16px; height: 16px; colorize: root.on ? Theme.text : Theme.text-faint; }
+    ta := TouchArea { enabled: root.enabled; mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+// the selected layer: text, font, style, sizes, outline, shadow, background (TextLayerControls)
+component TextProps inherits Rectangle {
+    property <EdText> t: EditorState.sel;
+    property <int> sync: EditorState.text-sync;
+    property <int> focus-seq: EditorState.focus-text;
+    property <bool> fonts-open;
+    changed sync => { input.text = EditorState.sel.text; }
+    changed focus-seq => {
+        input.text = EditorState.sel.text;
+        input.focus();
+        input.select-all();
+    }
+    init => { input.text = EditorState.sel.text; }
+    height: lay.preferred-height;
+    border-radius: 22px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface;
+    lay := VerticalLayout {
+        padding: 14px;
+        spacing: 12px;
+        Rectangle {
+            height: Math.max(76px, input.preferred-height + 20px);
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: input.has-focus ? Theme.accent.with-alpha(0.6) : Theme.border;
+            background: Theme.bg-elev;
+            TouchArea { mouse-cursor: MouseCursor.text; clicked => { input.focus(); } }
+            input := TextInput {
+                x: 12px;
+                y: 10px;
+                width: parent.width - 24px;
+                height: parent.height - 20px;
+                single-line: false;
+                wrap: word-wrap;
+                font-size: 14px;
+                color: Theme.text;
+                selection-background-color: Theme.accent.with-alpha(0.45);
+                edited => { EditorState.text-str("text", self.text); }
+            }
+        }
+        // font picker
+        VerticalLayout {
+            spacing: 6px;
+            Rectangle {
+                height: 40px;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: root.fonts-open ? Theme.accent.with-alpha(0.6) : Theme.border;
+                background: fta.has-hover ? Theme.surface-2 : Theme.bg-elev;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 10px;
+                    spacing: 8px;
+                    Text { text: root.t.family; font-family: root.t.family; font-size: 15px; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                    Image { source: root.fonts-open ? Icons.chevron-up : Icons.chevron-down; width: 16px; height: 16px; colorize: Theme.text-faint; y: (parent.height - self.height) / 2; }
+                }
+                fta := TouchArea { mouse-cursor: pointer; clicked => { root.fonts-open = !root.fonts-open; } }
+            }
+            if root.fonts-open: Rectangle {
+                height: Math.min(260px, EditorState.fonts.length * 36px + 8px);
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.bg-elev;
+                clip: true;
+                Flickable {
+                    content-height: EditorState.fonts.length * 36px + 8px;
+                    for f[i] in EditorState.fonts: Rectangle {
+                        x: 4px;
+                        y: 4px + i * 36px;
+                        width: parent.width - 8px;
+                        height: 36px;
+                        border-radius: 8px;
+                        background: f.family == root.t.family ? Theme.surface-3 : ra.has-hover ? Theme.surface-2 : transparent;
+                        Text { x: 10px; width: parent.width - 20px; text: f.label; font-family: f.family; font-size: 16px; color: Theme.text; vertical-alignment: center; overflow: elide; }
+                        ra := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                EditorState.text-str("family", f.family);
+                                root.fonts-open = false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            ToolChip { icon: EIcons.align-left; on: root.t.align == "left"; clicked => { EditorState.text-str("align", "left"); } }
+            ToolChip { icon: EIcons.align-center; on: root.t.align == "center"; clicked => { EditorState.text-str("align", "center"); } }
+            ToolChip { icon: EIcons.align-right; on: root.t.align == "right"; clicked => { EditorState.text-str("align", "right"); } }
+            Rectangle { width: 4px; }
+            ToolChip { icon: EIcons.bold; on: root.t.bold; enabled: root.t.wmin != root.t.wmax; clicked => { EditorState.text-toggle("bold", !root.t.bold); } }
+            ToolChip { icon: EIcons.italic; on: root.t.italic; enabled: root.t.italic-ok; clicked => { EditorState.text-toggle("italic", !root.t.italic); } }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        VerticalLayout {
+            spacing: 6px;
+            Heading { text: I18n.t("photo.text.ctl.color", I18n.rev).to-uppercase(); }
+            Swatches { value: root.t.color; picked(c) => { EditorState.text-color("color", c); } }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.size", I18n.rev);
+            value-text: root.t.size;
+            value: root.t.size;
+            minimum: 8;
+            maximum: root.t.size-max;
+            origin: 8;
+            changed(v) => { EditorState.text-num("size", v); }
+        }
+        if root.t.wmin != root.t.wmax: EdSliderRow {
+            label: I18n.t("photo.text.ctl.weight", I18n.rev);
+            value-text: root.t.weight;
+            value: root.t.weight;
+            minimum: root.t.wmin;
+            maximum: root.t.wmax;
+            origin: root.t.wmin;
+            step: 100;
+            changed(v) => { EditorState.text-num("weight", v); }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.spacing", I18n.rev);
+            value-text: root.t.spacing;
+            value: root.t.spacing;
+            minimum: -10;
+            maximum: 60;
+            changed(v) => { EditorState.text-num("spacing", v); }
+            reset => { EditorState.text-num("spacing", 0); }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.line", I18n.rev);
+            value-text: Math.round(root.t.line * 100) / 100;
+            value: root.t.line;
+            minimum: 0.7;
+            maximum: 2.5;
+            step: 0.05;
+            origin: 1.15;
+            changed(v) => { EditorState.text-num("line", v); }
+            reset => { EditorState.text-num("line", 1.15); }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.rotation", I18n.rev);
+            value-text: root.t.rotation + "°";
+            value: root.t.rotation;
+            minimum: -180;
+            maximum: 180;
+            changed(v) => { EditorState.text-num("rotation", v); }
+            reset => { EditorState.text-num("rotation", 0); }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.opacity", I18n.rev);
+            value-text: root.t.opacity + "%";
+            value: root.t.opacity;
+            minimum: 0;
+            maximum: 100;
+            origin: 100;
+            changed(v) => { EditorState.text-num("opacity", v); }
+            reset => { EditorState.text-num("opacity", 100); }
+        }
+        Rectangle {
+            height: sl.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            sl := VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                ToggleHeader { title: I18n.t("photo.text.ctl.stroke", I18n.rev); on: root.t.stroke; toggled(v) => { EditorState.text-toggle("stroke", v); } }
+                if root.t.stroke: Swatches { value: root.t.stroke-color; picked(c) => { EditorState.text-color("stroke.color", c); } }
+                if root.t.stroke: EdSliderRow {
+                    label: I18n.t("photo.text.ctl.width", I18n.rev);
+                    value-text: root.t.stroke-width;
+                    value: root.t.stroke-width;
+                    minimum: 1;
+                    maximum: root.t.stroke-max;
+                    origin: 1;
+                    changed(v) => { EditorState.text-num("stroke.width", v); }
+                }
+            }
+        }
+        Rectangle {
+            height: shl.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            shl := VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                ToggleHeader { title: I18n.t("photo.text.ctl.shadow", I18n.rev); on: root.t.shadow; toggled(v) => { EditorState.text-toggle("shadow", v); } }
+                if root.t.shadow: Swatches { value: root.t.shadow-color; picked(c) => { EditorState.text-color("shadow.color", c); } }
+                if root.t.shadow: EdSliderRow {
+                    label: I18n.t("photo.text.ctl.blur", I18n.rev);
+                    value-text: root.t.shadow-blur;
+                    value: root.t.shadow-blur;
+                    minimum: 0;
+                    maximum: 80;
+                    changed(v) => { EditorState.text-num("shadow.blur", v); }
+                }
+                if root.t.shadow: EdSliderRow {
+                    label: "X";
+                    value-text: root.t.shadow-x;
+                    value: root.t.shadow-x;
+                    minimum: -40;
+                    maximum: 40;
+                    changed(v) => { EditorState.text-num("shadow.x", v); }
+                    reset => { EditorState.text-num("shadow.x", 0); }
+                }
+                if root.t.shadow: EdSliderRow {
+                    label: "Y";
+                    value-text: root.t.shadow-y;
+                    value: root.t.shadow-y;
+                    minimum: -40;
+                    maximum: 40;
+                    changed(v) => { EditorState.text-num("shadow.y", v); }
+                    reset => { EditorState.text-num("shadow.y", 0); }
+                }
+            }
+        }
+        Rectangle {
+            height: bgl.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            bgl := VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                ToggleHeader { title: I18n.t("photo.text.ctl.background", I18n.rev); on: root.t.bg; toggled(v) => { EditorState.text-toggle("bg", v); } }
+                if root.t.bg: Swatches { value: root.t.bg-color; picked(c) => { EditorState.text-color("bg.color", c); } }
+                if root.t.bg: EdSliderRow {
+                    label: I18n.t("photo.text.ctl.padding", I18n.rev);
+                    value-text: root.t.bg-padding;
+                    value: root.t.bg-padding;
+                    minimum: 0;
+                    maximum: root.t.bg-max;
+                    changed(v) => { EditorState.text-num("bg.padding", v); }
+                }
+                if root.t.bg: EdSliderRow {
+                    label: I18n.t("photo.text.ctl.radius", I18n.rev);
+                    value-text: root.t.bg-radius;
+                    value: root.t.bg-radius;
+                    minimum: 0;
+                    maximum: root.t.bg-max;
+                    changed(v) => { EditorState.text-num("bg.radius", v); }
+                }
+            }
+        }
+    }
+}
+
+component TextPanel inherits VerticalLayout {
+    spacing: 20px;
+    Button {
+        text: I18n.t("photo.text.add", I18n.rev);
+        icon: Icons.plus;
+        has-icon: true;
+        variant: ButtonVariant.primary;
+        size: ButtonSize.lg;
+        clicked => { EditorState.add-text(""); }
+    }
+    VerticalLayout {
+        spacing: 8px;
+        Heading { text: I18n.t("photo.text.stickers", I18n.rev).to-uppercase(); }
+        grid := Rectangle {
+            property <length> cell: self.width / 8;
+            height: Math.ceil(EditorState.stickers.length / 8) * self.cell;
+            for e[i] in EditorState.stickers: Rectangle {
+                x: Math.mod(i, 8) * grid.cell;
+                y: Math.floor(i / 8) * grid.cell;
+                width: grid.cell;
+                height: grid.cell;
+                border-radius: 12px;
+                background: sta.has-hover ? Theme.surface-2 : transparent;
+                Text { text: e; font-size: sta.has-hover ? 25px : 21px; animate font-size { duration: Motion.fast; } }
+                sta := TouchArea { mouse-cursor: pointer; clicked => { EditorState.add-text(e); } }
+            }
+        }
+    }
+    VerticalLayout {
+        spacing: 8px;
+        Heading { text: I18n.t("photo.text.layers", I18n.rev).to-uppercase(); }
+        if EditorState.layer-rows.length == 0: Rectangle {
+            height: el.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            el := HorizontalLayout {
+                padding: 14px;
+                spacing: 10px;
+                VerticalLayout { alignment: start; Image { source: EIcons.type; width: 16px; height: 16px; colorize: Theme.accent; } }
+                Text { text: I18n.t("photo.text.empty", I18n.rev); font-size: 13px; color: Theme.text-dim; wrap: word-wrap; horizontal-stretch: 1; }
+            }
+        }
+        for r[i] in EditorState.layer-rows: Rectangle {
+            height: 44px;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: r.selected ? Theme.accent.with-alpha(0.55) : Theme.border;
+            background: r.selected ? Theme.accent.with-alpha(0.12) : rta.has-hover ? Theme.surface-2 : Theme.surface;
+            rta := TouchArea { mouse-cursor: pointer; clicked => { EditorState.select-layer(r.id); } }
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 4px;
+                spacing: 2px;
+                Text {
+                    text: r.label;
+                    font-family: r.family;
+                    font-size: 15px;
+                    color: r.selected ? Theme.text : Theme.text-dim;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle { width: 14px; height: 14px; border-radius: 7px; background: r.color; border-width: 1px; border-color: #ffffff33; }
+                }
+                Rectangle { width: 4px; }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: Icons.chevron-up; icon-size: 15px; label: I18n.t("photo.text.ctl.up", I18n.rev); enabled: i > 0; clicked => { EditorState.restack(r.id, 1); } }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: Icons.chevron-down; icon-size: 15px; label: I18n.t("photo.text.ctl.down", I18n.rev); enabled: i < EditorState.layer-rows.length - 1; clicked => { EditorState.restack(r.id, -1); } }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: EIcons.copy; icon-size: 15px; label: I18n.t("photo.text.duplicate", I18n.rev); clicked => { EditorState.duplicate-layer(r.id); } }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: Icons.trash-2; icon-size: 15px; label: I18n.t("photo.text.delete", I18n.rev); clicked => { EditorState.delete-layer(r.id); } }
+                }
+            }
+        }
+    }
+    if EditorState.has-sel: TextProps { }
+    Text { text: I18n.t("photo.text.hint", I18n.rev); font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+}
+
+component DrawPanel inherits VerticalLayout {
+    spacing: 22px;
+    Rectangle {
+        height: 80px;
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.surface;
+        HorizontalLayout {
+            padding: 12px;
+            spacing: 12px;
+            Rectangle {
+                width: 56px;
+                border-radius: 12px;
+                background: #1c1c23;
+                clip: true;
+                Rectangle {
+                    property <length> d: Math.max(4px, Math.min(44px, EditorState.brush-size * 0.9px));
+                    animate d { duration: Motion.fast; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+                    width: self.d;
+                    height: self.d;
+                    border-radius: self.d / 2;
+                    background: EditorState.brush-color;
+                    opacity: EditorState.brush-opacity / 100;
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                horizontal-stretch: 1;
+                VerticalLayout { alignment: center; Image { source: EIcons.brush; width: 16px; height: 16px; colorize: Theme.accent; } }
+                Text { text: I18n.t("photo.draw.hint", I18n.rev); font-size: 13px; color: Theme.text-dim; wrap: word-wrap; vertical-alignment: center; horizontal-stretch: 1; }
+            }
+        }
+    }
+    VerticalLayout {
+        spacing: 8px;
+        Heading { text: I18n.t("photo.draw.color", I18n.rev).to-uppercase(); }
+        Swatches { value: EditorState.brush-color; picked(c) => { EditorState.pick-brush-color(c); } }
+    }
+    VerticalLayout {
+        spacing: 12px;
+        EdSliderRow {
+            label: I18n.t("photo.draw.size", I18n.rev);
+            value-text: EditorState.brush-size;
+            value: EditorState.brush-size;
+            minimum: 2;
+            maximum: 100;
+            origin: 12;
+            changed(v) => { EditorState.set-brush-size(v); }
+            reset => { EditorState.set-brush-size(12); }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.draw.opacity", I18n.rev);
+            value-text: EditorState.brush-opacity + "%";
+            value: EditorState.brush-opacity;
+            minimum: 10;
+            maximum: 100;
+            origin: 100;
+            changed(v) => { EditorState.set-brush-opacity(v); }
+            reset => { EditorState.set-brush-opacity(100); }
+        }
+    }
+    Rectangle { height: 1px; background: Theme.border; }
+    HorizontalLayout {
+        spacing: 6px;
+        Text {
+            text: I18n.t1("photo.draw.strokes", "n", EditorState.stroke-count, I18n.rev);
+            font-size: 12px;
+            color: Theme.text-faint;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        Button {
+            text: I18n.t("photo.draw.undo", I18n.rev);
+            icon: EIcons.undo;
+            has-icon: true;
+            size: ButtonSize.sm;
+            variant: ButtonVariant.ghost;
+            enabled: EditorState.stroke-count > 0;
+            clicked => { EditorState.undo-stroke(); }
+        }
+        Button {
+            text: I18n.t("photo.draw.clear", I18n.rev);
+            icon: EIcons.eraser;
+            has-icon: true;
+            size: ButtonSize.sm;
+            variant: ButtonVariant.ghost;
+            enabled: EditorState.stroke-count > 0;
+            clicked => { EditorState.clear-strokes(); }
+        }
+    }
+}
+
 // the crop box: dimmed surroundings, rule-of-thirds grid, corner and edge handles
 component CropOverlay inherits Rectangle {
     in property <bool> dragging;
@@ -562,6 +1195,7 @@ component CropOverlay inherits Rectangle {
 }
 
 component Stage inherits Rectangle {
+    callback pressed();
     clip: true;
     changed width => { EditorState.resized(self.width, self.height); }
     changed height => { EditorState.resized(self.width, self.height); }
@@ -573,6 +1207,66 @@ component Stage inherits Rectangle {
         height: root.height;
         source: EditorState.preview;
         image-fit: fill;
+    }
+    // drawing and text layers, clipped to the crop
+    if !EditorState.loading && EditorState.error == "": Rectangle {
+        x: EditorState.clip-x;
+        y: EditorState.clip-y;
+        width: EditorState.clip-w;
+        height: EditorState.clip-h;
+        clip: true;
+        Image {
+            x: EditorState.strokes-x - EditorState.clip-x;
+            y: EditorState.strokes-y - EditorState.clip-y;
+            width: EditorState.strokes-w;
+            height: EditorState.strokes-h;
+            source: EditorState.strokes-img;
+            image-fit: fill;
+        }
+        for l in EditorState.layers: Image {
+            x: l.x - l.w / 2 - EditorState.clip-x;
+            y: l.y - l.h / 2 - EditorState.clip-y;
+            width: l.w;
+            height: l.h;
+            source: l.image;
+            image-fit: fill;
+            transform-rotation: l.rotation * 1deg;
+            opacity: l.opacity;
+        }
+        if EditorState.guide-x: Rectangle { x: parent.width / 2; width: 1.25px; background: Theme.accent; }
+        if EditorState.guide-y: Rectangle { y: parent.height / 2; height: 1.25px; background: Theme.accent; }
+    }
+    // selection frame: corner handles resize, the knob above rotates
+    for l in EditorState.layers: Rectangle {
+        visible: l.selected;
+        x: l.x - self.width / 2;
+        y: l.y - self.height / 2;
+        width: l.bw + 12px;
+        height: l.bh + 12px;
+        transform-rotation: l.rotation * 1deg;
+        border-width: 1.5px;
+        border-color: Theme.accent;
+        Rectangle { x: parent.width / 2 - 0.75px; y: -26px; width: 1.5px; height: 26px; background: Theme.accent; }
+        Rectangle {
+            x: parent.width / 2 - 6px;
+            y: -32px;
+            width: 12px;
+            height: 12px;
+            border-radius: 6px;
+            background: #ffffff;
+            border-width: 2px;
+            border-color: Theme.accent;
+        }
+        for c in 4: Rectangle {
+            x: (c == 1 || c == 3 ? parent.width : 0px) - 5.5px;
+            y: (c >= 2 ? parent.height : 0px) - 5.5px;
+            width: 11px;
+            height: 11px;
+            border-radius: 5.5px;
+            background: #ffffff;
+            border-width: 2px;
+            border-color: Theme.accent;
+        }
     }
     if EditorState.tab == "crop" && !EditorState.loading && EditorState.error == "": CropOverlay {
         width: root.width;
@@ -607,6 +1301,7 @@ component Stage inherits Rectangle {
             return "";
         }
         pure function cursor(m: string) -> MouseCursor {
+            if m == "pan" && EditorState.tab == "draw" && !EditorState.compare { return MouseCursor.none; }
             if m == "pan" {
                 return EditorState.can-pan ? (self.pressed ? MouseCursor.grabbing : MouseCursor.grab) : MouseCursor.default;
             }
@@ -620,6 +1315,7 @@ component Stage inherits Rectangle {
         mouse-cursor: self.cursor(self.pressed ? self.mode : self.hit(self.mouse-x, self.mouse-y));
         pointer-event(e) => {
             if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                root.pressed();
                 self.mode = self.hit(self.mouse-x, self.mouse-y);
                 EditorState.press(self.mode, self.mouse-x, self.mouse-y);
             }
@@ -628,10 +1324,28 @@ component Stage inherits Rectangle {
             }
         }
         moved => { EditorState.drag(self.mouse-x, self.mouse-y); }
+        double-clicked => { EditorState.double-click(self.mouse-x, self.mouse-y); }
         scroll-event(e) => {
             if EditorState.tab == "crop" { return reject; }
             EditorState.wheel(self.mouse-x, self.mouse-y, e.delta-y / 1px);
             accept
+        }
+    }
+    // brush cursor
+    if EditorState.tab == "draw" && !EditorState.compare && ta.has-hover: Rectangle {
+        x: ta.mouse-x - self.width / 2;
+        y: ta.mouse-y - self.height / 2;
+        width: EditorState.brush-px + 2px;
+        height: self.width;
+        border-radius: self.width / 2;
+        border-width: 1px;
+        border-color: #00000099;
+        Rectangle {
+            width: parent.width - 2px;
+            height: self.width;
+            border-radius: self.width / 2;
+            border-width: 1.5px;
+            border-color: #ffffff;
         }
     }
     if EditorState.loading: Spinner { size: 28px; }
@@ -852,7 +1566,12 @@ export component EditorOverlay inherits Rectangle {
             if e.text == Key.Escape {
                 if EditorState.confirm-leave { EditorState.stay(); }
                 else if EditorState.save-open && !EditorState.saving { EditorState.toggle-save(); }
+                else if EditorState.has-sel { EditorState.deselect(); }
                 else { EditorState.close(); }
+                return accept;
+            }
+            if (e.text == Key.Delete || e.text == Key.Backspace) && EditorState.has-sel {
+                EditorState.delete-selected();
                 return accept;
             }
             if e.text == "0" && EditorState.tab != "crop" { EditorState.zoom("fit"); return accept; }
@@ -868,7 +1587,7 @@ export component EditorOverlay inherits Rectangle {
         TopBar { }
         HorizontalLayout {
             vertical-stretch: 1;
-            Stage { horizontal-stretch: 1; }
+            Stage { horizontal-stretch: 1; pressed => { fs.focus(); } }
             Rectangle {
                 width: 356px;
                 background: Theme.bg-elev;
@@ -882,6 +1601,8 @@ export component EditorOverlay inherits Rectangle {
                         ToolTab { icon: Icons.sliders-horizontal; text: I18n.t("photo.tab.adjust", I18n.rev); selected: EditorState.tab == "adjust"; clicked => { EditorState.set-tab("adjust"); fs.focus(); } }
                         ToolTab { icon: Icons.sparkles; text: I18n.t("photo.tab.filters", I18n.rev); selected: EditorState.tab == "filters"; clicked => { EditorState.set-tab("filters"); fs.focus(); } }
                         ToolTab { icon: EIcons.crop; text: I18n.t("photo.tab.crop", I18n.rev); selected: EditorState.tab == "crop"; clicked => { EditorState.set-tab("crop"); fs.focus(); } }
+                        ToolTab { icon: EIcons.type; text: I18n.t("photo.tab.text", I18n.rev); selected: EditorState.tab == "text"; clicked => { EditorState.set-tab("text"); fs.focus(); } }
+                        ToolTab { icon: EIcons.brush; text: I18n.t("photo.tab.draw", I18n.rev); selected: EditorState.tab == "draw"; clicked => { EditorState.set-tab("draw"); fs.focus(); } }
                     }
                     Flickable {
                         vertical-stretch: 1;
@@ -894,6 +1615,8 @@ export component EditorOverlay inherits Rectangle {
                             if EditorState.tab == "adjust": AdjustPanel { }
                             if EditorState.tab == "filters": FiltersPanel { }
                             if EditorState.tab == "crop": CropPanel { }
+                            if EditorState.tab == "text": TextPanel { }
+                            if EditorState.tab == "draw": DrawPanel { }
                         }
                     }
                 }

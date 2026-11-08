@@ -48,6 +48,46 @@ pub(crate) fn uploaded() -> Vec<FontInfo> {
     FONTS.with(|f| f.borrow().clone())
 }
 
+/// Families a text layer can use: (family, weights, has italic), bundled first, then the
+/// uploaded faces the renderer has.
+pub(crate) fn picker() -> Vec<(String, Vec<u16>, bool)> {
+    let mut out: Vec<(String, Vec<u16>, bool)> = BUNDLED
+        .iter()
+        .map(|(family, _, _, weights, italic)| {
+            ((*family).to_string(), weights.split(' ').filter_map(|w| w.parse().ok()).collect(), *italic)
+        })
+        .collect();
+    let registered = REGISTERED.with(|r| r.borrow().clone());
+    let mut custom: Vec<(String, Vec<u16>, bool)> = Vec::new();
+    for f in uploaded().iter().filter(|f| registered.contains(&f.id)) {
+        let i = match custom.iter().position(|c| c.0 == f.family) {
+            Some(i) => i,
+            None => {
+                custom.push((f.family.clone(), Vec::new(), false));
+                custom.len() - 1
+            }
+        };
+        let c = &mut custom[i];
+        let w = f.weight.clamp(1, 1000) as u16;
+        if !c.1.contains(&w) {
+            c.1.push(w);
+        }
+        c.2 |= f.style == FontStyle::Italic;
+    }
+    for c in custom.iter_mut() {
+        c.1.sort_unstable();
+    }
+    custom.sort_by_key(|c| c.0.to_lowercase());
+    custom.retain(|c| !BUNDLED.iter().any(|b| b.0 == c.0));
+    out.extend(custom);
+    out
+}
+
+/// Bumps whenever a face is registered, so text drawn with a fallback is drawn again.
+pub(crate) fn epoch() -> usize {
+    REGISTERED.with(|r| r.borrow().len())
+}
+
 pub(crate) fn enter(app: &Rc<AppInner>) {
     publish_bundled(app);
     load(app);
@@ -185,6 +225,7 @@ fn register_all(app: &Rc<AppInner>, list: &[FontInfo]) {
                 if n > 0 {
                     REGISTERED.with(|r| r.borrow_mut().insert(id));
                     publish(&a);
+                    crate::editor::fonts_changed(&a);
                 }
             },
         );
