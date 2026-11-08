@@ -44,6 +44,7 @@ mod router;
 mod slideshow;
 mod slideshow_show;
 mod slideshow_ui;
+mod editor;
 
 #[allow(missing_docs, clippy::all)]
 mod generated {
