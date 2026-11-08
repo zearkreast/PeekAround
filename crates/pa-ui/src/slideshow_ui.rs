@@ -1,22 +1,48 @@
 //! Slideshow builder page + full-screen player (features/slideshow): the slide list and its
 //! settings (kept in the UI preferences), the live preview, playback with background music, the
-//! music picker and the video export (`POST /api/jobs/slideshow`).
+//! music picker, the media picker and the video export (`POST /api/jobs/slideshow`).
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::rc::{Rc, Weak};
 
-use pa_core::{BrowseQuery, DirTarget, KindFilter, LibrariesResponse, MediaItem, MediaKind, SlideTransition};
-use slint::{Color, ComponentHandle, ModelRc, SharedString, VecModel};
+use pa_core::{BrowseQuery, DirTarget, KindFilter, LibrariesResponse, Library, MediaItem, MediaKind, SlideTransition};
+use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::app::AppInner;
 use crate::router::Route;
 use crate::slideshow::{self as model, Aspect, Rng, SlideItem, SlideSettings};
 use crate::slideshow_show::{Show, ShowStatus};
 use crate::video;
-use crate::{MusicRow, SlideBuilder, SlidePlayer, SlideRow, ToastKind};
+use crate::{MediaDirRow, MediaTileRow, MusicRow, SlideBuilder, SlidePlayer, SlideRow, ToastKind};
 
 /// slides in the builder's preview
 const PREVIEW_SLIDES: usize = 12;
+
+/// a place of the media picker
+#[derive(Clone)]
+struct Loc {
+    folder_id: String,
+    dir: String,
+    label: String,
+}
+
+/// The "Medya ekle" picker (MediaPicker.tsx); the selection survives folder changes.
+#[derive(Default)]
+struct MediaPick {
+    libs: Vec<Library>,
+    stack: Vec<Loc>,
+    /// where each row of `media-dirs` leads
+    dirs: Vec<Loc>,
+    /// the open folder's photos and videos
+    items: Vec<MediaItem>,
+    selected: Vec<MediaItem>,
+    tiles: Option<Rc<VecModel<MediaTileRow>>>,
+    /// tiles whose thumbnail was requested
+    asked: HashSet<usize>,
+    /// bumps on every navigation (late browse results are dropped)
+    epoch: u64,
+}
 
 struct Ctl {
     app: Weak<AppInner>,
@@ -30,6 +56,7 @@ struct Ctl {
     /// the player made the window full screen (undo on close)
     went_full: Cell<bool>,
     hide_timer: slint::Timer,
+    pick: RefCell<MediaPick>,
 }
 
 thread_local! {
@@ -99,6 +126,29 @@ impl Ctl {
         SlideItem { key: format!("{}-{k}", m.id), media: m, duration: None, trim: None }
     }
 
+    /// Keep the editor on the same slide after the list changed (`None` = deselect).
+    fn follow_sel(&self, f: impl FnOnce(usize) -> Option<usize>) {
+        let Some(a) = self.app() else { return };
+        let b = a.window.global::<SlideBuilder>();
+        if let Ok(s) = usize::try_from(b.get_sel()) {
+            b.set_sel(f(s).map_or(-1, |s| s as i32));
+        }
+    }
+
+    /// Move a slide (drag or the ← → buttons).
+    fn reorder(&self, from: usize, to: usize) {
+        {
+            let mut items = self.items.borrow_mut();
+            if from >= items.len() || to >= items.len() || from == to {
+                return;
+            }
+            let it = items.remove(from);
+            items.insert(to, it);
+        }
+        self.follow_sel(|s| Some(moved_index(s, from, to)));
+        self.publish();
+    }
+
     /// The settings controls → preferences (+ the preview restarts with the new style).
     fn read_settings(&self) {
         let Some(a) = self.app() else { return };
@@ -145,7 +195,21 @@ impl Ctl {
             .map(|it| {
                 let video = it.media.kind == MediaKind::Video;
                 let dur = model::item_duration(it, &s);
+                let full = it.media.duration.filter(|d| *d > 0.0);
                 SlideRow {
+                    own_dur: if video { None } else { it.duration }.map(fmt_num).unwrap_or_default().into(),
+                    clip_start: it.trim.map(|t| fmt_num(t.start)).unwrap_or_default().into(),
+                    clip_end: it.trim.map(|t| fmt_num(t.end)).unwrap_or_default().into(),
+                    full: full.map(fmt_num).unwrap_or_default().into(),
+                    of_full: match (video, full) {
+                        (true, Some(f)) => crate::i18n::tv(
+                            lang,
+                            "slide.ofFull",
+                            &[("d", &crate::i18n::format_duration(Some(f)))],
+                        ),
+                        _ => String::new(),
+                    }
+                    .into(),
                     thumb: Default::default(),
                     has_thumb: false,
                     name: it.media.name.clone().into(),
@@ -173,6 +237,9 @@ impl Ctl {
             });
         }
         b.set_rows(ModelRc::from(model));
+        if b.get_sel() >= items.len() as i32 {
+            b.set_sel(-1);
+        }
         let photos = items.iter().filter(|i| i.media.kind == MediaKind::Image).count();
         let videos = items.len() - photos;
         b.set_stats(
@@ -423,6 +490,251 @@ impl Ctl {
         self.publish();
     }
 
+    // ───────── media picker ─────────
+
+    fn open_media(&self) {
+        let Some(a) = self.app() else { return };
+        *self.pick.borrow_mut() = MediaPick::default();
+        let b = a.window.global::<SlideBuilder>();
+        b.set_media_open(true);
+        b.set_media_loading(true);
+        self.publish_pick();
+        crate::api::call::<LibrariesResponse>(&a, "GET", "/api/libraries", None, |a, r| {
+            let Some(c) = ctl() else { return };
+            c.pick.borrow_mut().libs = r.map(|r| r.libraries).unwrap_or_default();
+            a.window.global::<SlideBuilder>().set_media_loading(false);
+            c.publish_pick();
+        });
+    }
+
+    fn close_media(&self) {
+        *self.pick.borrow_mut() = MediaPick::default();
+        if let Some(a) = self.app() {
+            let b = a.window.global::<SlideBuilder>();
+            b.set_media_open(false);
+            b.set_media_dirs(ModelRc::default());
+            b.set_media_items(ModelRc::default());
+        }
+    }
+
+    /// The breadcrumb, the selection count and, at the top, the library folders.
+    fn publish_pick(&self) {
+        let Some(a) = self.app() else { return };
+        let b = a.window.global::<SlideBuilder>();
+        let mut p = self.pick.borrow_mut();
+        let path = p.stack.iter().map(|s| s.label.as_str()).collect::<Vec<_>>().join(" / ");
+        b.set_media_path(if path.is_empty() { a.t("nav.libraries") } else { path }.into());
+        b.set_media_can_back(!p.stack.is_empty());
+        b.set_media_selected(p.selected.len() as i32);
+        if !p.stack.is_empty() {
+            return;
+        }
+        let mut rows = vec![];
+        let mut dirs = vec![];
+        for l in &p.libs {
+            for f in &l.folders {
+                let multi = l.folders.len() > 1;
+                rows.push(MediaDirRow {
+                    label: if multi { format!("{} · {}", l.name, f.name) } else { l.name.clone() }.into(),
+                    lib: true,
+                    color: crate::theme::color(&l.color),
+                    icon: l.icon.clone().into(),
+                });
+                dirs.push(Loc {
+                    folder_id: f.id.clone(),
+                    dir: String::new(),
+                    label: if multi { f.name.clone() } else { l.name.clone() },
+                });
+            }
+        }
+        p.dirs = dirs;
+        p.items.clear();
+        p.tiles = None;
+        drop(p);
+        b.set_media_dirs(ModelRc::new(VecModel::from(rows)));
+        b.set_media_items(ModelRc::default());
+    }
+
+    /// Browse the picker's current folder: sub folders + its photos and videos.
+    fn load_pick(&self) {
+        let Some(a) = self.app() else { return };
+        let (q, epoch) = {
+            let mut p = self.pick.borrow_mut();
+            let Some(cur) = p.stack.last().cloned() else { return };
+            p.epoch += 1;
+            p.dirs.clear();
+            p.items.clear();
+            p.tiles = None;
+            p.asked.clear();
+            let q = BrowseQuery {
+                folder_id: Some(cur.folder_id),
+                dir: Some(cur.dir),
+                kind: Some(KindFilter::All),
+                limit: Some(1000),
+                ..Default::default()
+            };
+            (q, p.epoch)
+        };
+        let b = a.window.global::<SlideBuilder>();
+        b.set_media_loading(true);
+        b.set_media_dirs(ModelRc::default());
+        b.set_media_items(ModelRc::default());
+        self.publish_pick();
+        let fut = a.backend.browse(q);
+        let w = Rc::downgrade(&a);
+        a.rt.spawn_then(fut, move |r| {
+            let (Some(a), Some(c)) = (w.upgrade(), ctl()) else { return };
+            let b = a.window.global::<SlideBuilder>();
+            let mut p = c.pick.borrow_mut();
+            if p.epoch != epoch {
+                return;
+            }
+            let Some(cur) = p.stack.last().cloned() else { return };
+            let Ok(r) = r else {
+                drop(p);
+                b.set_media_loading(false);
+                return;
+            };
+            p.dirs = r
+                .folders
+                .iter()
+                .map(|f| Loc { folder_id: cur.folder_id.clone(), dir: f.dir.clone(), label: f.name.clone() })
+                .collect();
+            let rows: Vec<MediaDirRow> = r
+                .folders
+                .iter()
+                .map(|f| MediaDirRow { label: f.name.clone().into(), ..Default::default() })
+                .collect();
+            p.items = r.items.into_iter().filter(visual).collect();
+            let tiles: Vec<MediaTileRow> = p
+                .items
+                .iter()
+                .map(|m| MediaTileRow {
+                    is_video: m.kind == MediaKind::Video,
+                    dur: crate::i18n::format_duration(m.duration).into(),
+                    on: p.selected.iter().any(|s| s.id == m.id),
+                    ..Default::default()
+                })
+                .collect();
+            let tiles = Rc::new(VecModel::from(tiles));
+            p.tiles = Some(tiles.clone());
+            drop(p);
+            b.set_media_loading(false);
+            b.set_media_dirs(ModelRc::new(VecModel::from(rows)));
+            b.set_media_items(ModelRc::from(tiles));
+        });
+    }
+
+    fn pick_open_dir(&self, i: usize) {
+        let next = self.pick.borrow().dirs.get(i).cloned();
+        if let Some(l) = next {
+            self.pick.borrow_mut().stack.push(l);
+            self.load_pick();
+        }
+    }
+
+    fn pick_back(&self) {
+        let empty = {
+            let mut p = self.pick.borrow_mut();
+            p.stack.pop();
+            p.epoch += 1;
+            p.stack.is_empty()
+        };
+        if empty {
+            if let Some(a) = self.app() {
+                a.window.global::<SlideBuilder>().set_media_loading(false);
+            }
+            self.publish_pick();
+        } else {
+            self.load_pick();
+        }
+    }
+
+    /// a tile became visible: fetch its thumbnail once
+    fn pick_need(&self, i: usize) {
+        let Some(a) = self.app() else { return };
+        let (id, tiles, epoch) = {
+            let mut p = self.pick.borrow_mut();
+            let (Some(m), Some(t)) = (p.items.get(i), p.tiles.clone()) else { return };
+            let id = m.id.clone();
+            if !p.asked.insert(i) {
+                return;
+            }
+            (id, t, p.epoch)
+        };
+        let w = Rc::downgrade(&tiles);
+        crate::pages::cover(&a, &id, 320, move |img| {
+            let still = ctl().is_some_and(|c| c.pick.borrow().epoch == epoch);
+            if let (true, Some(m)) = (still, w.upgrade()) {
+                if let Some(mut r) = m.row_data(i) {
+                    r.thumb = img;
+                    r.has_thumb = true;
+                    m.set_row_data(i, r);
+                }
+            }
+        });
+    }
+
+    fn pick_toggle(&self, i: usize) {
+        {
+            let mut p = self.pick.borrow_mut();
+            let Some(m) = p.items.get(i).cloned() else { return };
+            let on = match p.selected.iter().position(|s| s.id == m.id) {
+                Some(k) => {
+                    p.selected.remove(k);
+                    false
+                }
+                None => {
+                    p.selected.push(m);
+                    true
+                }
+            };
+            if let Some(t) = &p.tiles {
+                if let Some(mut r) = t.row_data(i) {
+                    r.on = on;
+                    t.set_row_data(i, r);
+                }
+            }
+        }
+        self.publish_pick();
+    }
+
+    fn pick_select_all(&self) {
+        {
+            let mut p = self.pick.borrow_mut();
+            let p = &mut *p;
+            for (i, m) in p.items.iter().enumerate() {
+                if !p.selected.iter().any(|s| s.id == m.id) {
+                    p.selected.push(m.clone());
+                }
+                if let Some(t) = &p.tiles {
+                    if let Some(mut r) = t.row_data(i) {
+                        r.on = true;
+                        t.set_row_data(i, r);
+                    }
+                }
+            }
+        }
+        self.publish_pick();
+    }
+
+    fn pick_add(&self) {
+        let picked = std::mem::take(&mut self.pick.borrow_mut().selected);
+        if picked.is_empty() {
+            return;
+        }
+        let first = self.items.borrow().is_empty();
+        let new: Vec<SlideItem> = picked.into_iter().map(|m| self.to_item(m)).collect();
+        if first && self.target.borrow().is_none() {
+            *self.target.borrow_mut() = new
+                .first()
+                .map(|i| DirTarget { folder_id: i.media.folder_id.clone(), dir: i.media.dir.clone() });
+        }
+        self.items.borrow_mut().extend(new);
+        self.close_media();
+        self.publish();
+    }
+
     // ───────── export ─────────
 
     fn export(&self) {
@@ -459,6 +771,29 @@ fn fmt_num(v: f64) -> String {
     }
 }
 
+/// Where index `s` ends up after the slide at `from` moved to `to`.
+fn moved_index(s: usize, from: usize, to: usize) -> usize {
+    if s == from {
+        to
+    } else if from < s && s <= to {
+        s - 1
+    } else if to <= s && s < from {
+        s + 1
+    } else {
+        s
+    }
+}
+
+/// Seconds typed in the slide editor ("2,5" too); -1 = empty or not a number.
+fn parse_secs(s: &str) -> f32 {
+    s.trim()
+        .replace(',', ".")
+        .parse::<f32>()
+        .ok()
+        .filter(|v| v.is_finite() && *v >= 0.0)
+        .unwrap_or(-1.0)
+}
+
 fn target_label(t: &DirTarget) -> String {
     let base = crate::actions_ui::folder_name(&t.folder_id).unwrap_or_default();
     match (base.is_empty(), t.dir.is_empty()) {
@@ -477,6 +812,7 @@ pub(crate) fn open_with(app: &Rc<AppInner>, media: Vec<MediaItem>) {
         .map(|i| DirTarget { folder_id: i.media.folder_id.clone(), dir: i.media.dir.clone() });
     *c.items.borrow_mut() = list;
     app.window.global::<SlideBuilder>().set_name(SharedString::new());
+    app.window.global::<SlideBuilder>().set_sel(-1);
     app.go(Route::Slideshow, true);
 }
 
@@ -530,6 +866,7 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         music_muted: Cell::new(false),
         went_full: Cell::new(false),
         hide_timer: slint::Timer::default(),
+        pick: RefCell::new(MediaPick::default()),
     });
     CTL.with(|x| *x.borrow_mut() = Some(c.clone()));
     let b = app.window.global::<SlideBuilder>();
@@ -550,28 +887,56 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         let n = c.items.borrow().len();
         if i < n {
             c.items.borrow_mut().remove(i);
+            c.follow_sel(|s| match s.cmp(&i) {
+                std::cmp::Ordering::Less => Some(s),
+                std::cmp::Ordering::Equal => None,
+                std::cmp::Ordering::Greater => Some(s - 1),
+            });
         }
         c.publish();
     });
     on!(b, on_move, |c, i, d| {
-        let i = i as usize;
         let j = i as i64 + d as i64;
-        let n = c.items.borrow().len() as i64;
-        if (0..n).contains(&j) && (i as i64) < n {
-            c.items.borrow_mut().swap(i, j as usize);
+        if j >= 0 {
+            c.reorder(i as usize, j as usize);
         }
-        c.publish();
+    });
+    on!(b, on_reorder, |c, from, to| {
+        if from >= 0 && to >= 0 {
+            c.reorder(from as usize, to as usize);
+        }
     });
     on!(b, on_set_item_duration, |c, i, secs| {
         if let Some(it) = c.items.borrow_mut().get_mut(i as usize) {
-            it.duration = if secs > 0.0 { Some(secs as f64) } else { None };
+            it.duration = model::photo_duration(Some(secs as f64));
         }
         c.publish();
     });
+    on!(b, on_set_clip_start, |c, i, secs| {
+        if let Some(it) = c.items.borrow_mut().get_mut(i as usize) {
+            model::set_clip_start(it, Some(secs as f64).filter(|v| *v >= 0.0));
+        }
+        c.publish();
+    });
+    on!(b, on_set_clip_end, |c, i, secs| {
+        if let Some(it) = c.items.borrow_mut().get_mut(i as usize) {
+            model::set_clip_end(it, Some(secs as f64).filter(|v| *v >= 0.0));
+        }
+        c.publish();
+    });
+    b.on_parse_secs(|s| parse_secs(&s));
     on!(b, on_clear, |c| {
         c.items.borrow_mut().clear();
         c.publish();
     });
+    on!(b, on_add_media, |c| c.open_media());
+    on!(b, on_media_close, |c| c.close_media());
+    on!(b, on_media_open_dir, |c, i| c.pick_open_dir(i as usize));
+    on!(b, on_media_back, |c| c.pick_back());
+    on!(b, on_media_need, |c, i| c.pick_need(i as usize));
+    on!(b, on_media_toggle, |c, i| c.pick_toggle(i as usize));
+    on!(b, on_media_select_all, |c| c.pick_select_all());
+    on!(b, on_media_add, |c| c.pick_add());
     on!(b, on_preview_resized, |c, w, h| {
         if let (Some(p), Some(a)) = (c.preview.borrow().clone(), c.app()) {
             p.resize(w as f64, h as f64, a.window.window().scale_factor() as f64);
@@ -678,5 +1043,21 @@ mod tests {
         assert_eq!(fmt_num(2.5), "2.5");
         assert_eq!(transition_str(parse_transition("circle")), "circle");
         assert_eq!(parse_transition("bogus"), SlideTransition::Fade);
+        assert_eq!(parse_secs(" 2,5 "), 2.5);
+        assert_eq!(parse_secs("3"), 3.0);
+        assert_eq!(parse_secs(""), -1.0);
+        assert_eq!(parse_secs("abc"), -1.0);
+    }
+
+    #[test]
+    fn reorder_keeps_the_selection() {
+        // [a b c d], c (2) dragged to 0 → [c a b d]
+        assert_eq!(moved_index(2, 2, 0), 0);
+        assert_eq!(moved_index(0, 2, 0), 1);
+        assert_eq!(moved_index(3, 2, 0), 3);
+        // a (0) dragged to 2 → [b c a d]
+        assert_eq!(moved_index(1, 0, 2), 0);
+        assert_eq!(moved_index(2, 0, 2), 1);
+        assert_eq!(moved_index(3, 0, 2), 3);
     }
 }

@@ -173,6 +173,39 @@ pub fn item_duration(it: &SlideItem, s: &SlideSettings) -> f64 {
     it.duration.unwrap_or(s.duration)
 }
 
+/// A photo's own duration from the editor (ItemList.tsx): under 0.5 s = the global one, max 60 s.
+pub fn photo_duration(v: Option<f64>) -> Option<f64> {
+    v.filter(|v| v.is_finite() && *v >= 0.5).map(|v| v.min(60.0))
+}
+
+/// The video's length for trimming (the clip end's upper bound).
+fn trim_full(it: &SlideItem) -> f64 {
+    it.media.duration.unwrap_or(0.0).max(0.0)
+}
+
+/// "Clip start" edited (ItemList.tsx): clamped to the video; empty keeps only a set end.
+pub fn set_clip_start(it: &mut SlideItem, v: Option<f64>) {
+    let full = trim_full(it);
+    let v = v.filter(|v| v.is_finite()).map(|v| v.clamp(0.0, (full - 0.5).max(0.0)));
+    let end = it.trim.map(|t| t.end).filter(|e| *e > 0.0);
+    it.trim = match (v, end) {
+        (None, None) => None,
+        (v, end) => Some(TimeRange { start: v.unwrap_or(0.0), end: end.unwrap_or(full) }),
+    };
+}
+
+/// "Clip end" edited: clamped to the video, at least 0.5 s after the start; empty = the full end.
+pub fn set_clip_end(it: &mut SlideItem, v: Option<f64>) {
+    let full = trim_full(it);
+    let max = if full > 0.0 { full } else { 3600.0 };
+    let start = it.trim.map(|t| t.start).unwrap_or(0.0);
+    it.trim = match v.filter(|v| v.is_finite()) {
+        None if start > 0.0 => Some(TimeRange { start, end: full }),
+        None => None,
+        Some(v) => Some(TimeRange { start, end: (start + 0.5).max(v.clamp(0.0, max)) }),
+    };
+}
+
 pub fn shuffled<T: Clone>(v: &[T], rng: &mut Rng) -> Vec<T> {
     let mut a = v.to_vec();
     for i in (1..a.len()).rev() {
@@ -364,6 +397,32 @@ mod tests {
         assert!((show_length(&pl, 1.0) - 9.0).abs() < 1e-9);
         assert_eq!(cut_length(&pl, 0, 1.0), 0.0);
         assert_eq!(cut_length(&pl, 2, 4.0), 1.5);
+    }
+
+    #[test]
+    fn item_edits() {
+        assert_eq!(photo_duration(Some(2.5)), Some(2.5));
+        assert_eq!(photo_duration(Some(0.2)), None);
+        assert_eq!(photo_duration(Some(90.0)), Some(60.0));
+        assert_eq!(photo_duration(None), None);
+
+        let mut v = item("v", MediaKind::Video, Some(10.0));
+        set_clip_start(&mut v, Some(3.0));
+        assert_eq!(v.trim, Some(TimeRange { start: 3.0, end: 10.0 }));
+        set_clip_end(&mut v, Some(2.0));
+        assert_eq!(v.trim, Some(TimeRange { start: 3.0, end: 3.5 }), "end stays after the start");
+        set_clip_end(&mut v, Some(99.0));
+        assert_eq!(v.trim, Some(TimeRange { start: 3.0, end: 10.0 }), "end clamps to the video");
+        set_clip_start(&mut v, Some(50.0));
+        assert_eq!(v.trim, Some(TimeRange { start: 9.5, end: 10.0 }), "start clamps to the video");
+        set_clip_end(&mut v, None);
+        assert_eq!(v.trim, Some(TimeRange { start: 9.5, end: 10.0 }));
+        set_clip_start(&mut v, Some(0.0));
+        set_clip_end(&mut v, None);
+        assert_eq!(v.trim, None);
+        set_clip_end(&mut v, Some(4.0));
+        set_clip_start(&mut v, None);
+        assert_eq!(v.trim, Some(TimeRange { start: 0.0, end: 4.0 }));
     }
 
     #[test]

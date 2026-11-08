@@ -37,12 +37,15 @@ export component ScrollBar inherits Rectangle {
 // a vertically scrolling page body with the overlay scrollbar
 export component ScrollPage inherits Rectangle {
     in property <length> content-height;
+    // false: drags go to the content (a card being dragged), not the scroll
+    in property <bool> interactive: true;
     in-out property <length> scroll-y <=> fl.content-y;
     out property <length> visible-height: fl.height;
     fl := Flickable {
         width: root.width;
         height: root.height;
         content-height: root.content-height;
+        interactive: root.interactive;
         @children
     }
     ScrollBar {
