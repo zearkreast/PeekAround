@@ -3,6 +3,7 @@ name: Build
 # - every push to main / pull request: typecheck + tests (fast feedback)
 # - a tag like v1.3.0 (or "Run workflow" by hand): also builds every package and, for tags,
 #   publishes a GitHub Release with the Windows, Linux and Android packages + the Docker image.
+#   A manual run with `release_tag` uploads the packages to that existing release instead.
 # No personal token is needed: everything uses the automatic GITHUB_TOKEN. Optional secrets:
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
 #   → a release APK signed with your own key (without them a debug APK is built, and its key
@@ -14,6 +15,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Upload the packages to this existing release (e.g. v1.3.2); empty = build only'
+        required: false
+        default: ''
 
 # least privilege: jobs that publish ask for more below
 permissions:
@@ -113,6 +119,9 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # the default list includes the obsolete "tools" package, which current sdkmanager can't find
+          packages: platform-tools
       - run: npm ci --no-audit --no-fund
       - run: npm run build -w @peekaround/web
       - run: npx cap sync android
@@ -193,7 +202,7 @@ jobs:
 
   release:
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     # the Docker image is published to ghcr on its own; a Docker problem must not block the release
     needs: [desktop, android]
     runs-on: ubuntu-latest
@@ -208,5 +217,7 @@ jobs:
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist/*
-          generate_release_notes: true
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          # a manual upload to an existing release keeps its hand-written notes
+          generate_release_notes: ${{ inputs.release_tag == '' }}
           fail_on_unmatched_files: true
