@@ -3,12 +3,13 @@
 //! CPU without an adapter: the preview at stage resolution, the save at full resolution, which
 //! goes to `POST /api/edits/save` as a copy next to the original.
 
-mod doc;
+pub(crate) mod doc;
 #[cfg(feature = "gpu")]
 mod gpu;
 mod layers;
-mod overlay;
+pub(crate) mod overlay;
 mod render;
+pub(crate) mod textprops;
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -126,7 +127,7 @@ fn decode_full(data: ThumbData) -> Result<RgbaImage, String> {
     }
 }
 
-fn to_image(px: Vec<u8>, w: u32, h: u32) -> Image {
+pub(crate) fn to_image(px: Vec<u8>, w: u32, h: u32) -> Image {
     let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(w, h);
     buf.make_mut_bytes().copy_from_slice(&px);
     Image::from_rgba8_premultiplied(buf)
