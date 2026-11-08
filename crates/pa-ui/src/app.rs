@@ -622,6 +622,7 @@ pub fn run_with(
     // explore pages, memory player, map, mini map
     crate::explore::install(&app);
     crate::slideshow_ui::install(&app);
+    crate::editor::install(&app);
 
     app.navigate(Page::Photos, false);
 

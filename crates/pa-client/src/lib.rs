@@ -547,6 +547,30 @@ impl Client {
         serde_json::from_slice(&bytes).map_err(|e| Error::Decode(e.to_string()))
     }
 
+    /// `POST /api/edits/save`: an edited photo (any decodable image) saved as a copy next to
+    /// `source_id` (`name_edit.jpg`, `name_edit-2.jpg` …) in `format` (jpg / png / webp).
+    pub async fn save_edit(
+        &self,
+        body: Vec<u8>,
+        source_id: &str,
+        format: &str,
+        quality: u32,
+    ) -> Result<serde_json::Value> {
+        let mut qs = Qs::new();
+        qs.str("sourceId", source_id)
+            .str("format", format)
+            .num("quality", quality as i64);
+        let rb = self
+            .request(reqwest::Method::POST, &format!("/api/edits/save{qs}"))
+            .header("Content-Type", "application/octet-stream")
+            .body(body);
+        self.send(rb)
+            .await?
+            .json()
+            .await
+            .map_err(|e| Error::Decode(e.to_string()))
+    }
+
     /// Stream `GET <path>` into a file (zip downloads); returns the bytes written.
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn download_to(&self, path: &str, dest: &std::path::Path) -> Result<u64> {
@@ -629,6 +653,11 @@ impl Client {
     /// `/api/media/:id/display?max=4096` (zoomed-in viewer)
     pub fn zoom_url(&self, id: &str) -> String {
         self.murl(&format!("/api/media/{}/display?max=4096", encode_seg(id)))
+    }
+
+    /// `/api/media/:id/display`: the full-size original, converted when it isn't web-decodable
+    pub fn full_url(&self, id: &str) -> String {
+        self.murl(&format!("/api/media/{}/display", encode_seg(id)))
     }
 
     /// `/api/media/:id/stream` (transcoded video, optionally from `start_at` seconds)

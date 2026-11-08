@@ -295,6 +295,18 @@ fn builtins() -> Vec<Rc<Action>> {
             ..Default::default()
         },
         Action {
+            id: "edit".into(),
+            icon: "square-pen",
+            label_key: "viewer.edit",
+            group: Group::Primary,
+            order: 20,
+            // photos only: the video editor isn't ported yet
+            visible: Rc::new(|items, c| {
+                c.writable && items.len() == 1 && items[0].kind == MediaKind::Image && !c.on_device(items)
+            }),
+            ..Default::default()
+        },
+        Action {
             id: "slideshow".into(),
             icon: "presentation",
             label_key: "sel.slideshow",
@@ -434,6 +446,7 @@ mod tests {
             ids(&menu),
             vec![
                 "download",
+                "edit",
                 "favorite",
                 "slideshow",
                 "add-to-album",
@@ -460,7 +473,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(!v
             .iter()
-            .any(|i| i == "delete" || i == "move" || i == "rename"));
+            .any(|i| i == "delete" || i == "move" || i == "rename" || i == "edit"));
         assert!(v.iter().any(|i| i == "favorite"));
         // phone items: view + copy only, no favourites
         let phone = Ctx {
@@ -469,7 +482,7 @@ mod tests {
         };
         let v = for_items(&one, Surface::Menu, &phone);
         assert!(!ids(&v).contains(&"favorite") && !ids(&v).contains(&"delete"));
-        assert!(ids(&v).contains(&"download"));
+        assert!(!ids(&v).contains(&"edit") && ids(&v).contains(&"download"));
         // MEGA items keep favourites
         let mega = Ctx {
             remote: ["f1".to_string()].into(),

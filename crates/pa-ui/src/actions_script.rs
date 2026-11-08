@@ -182,6 +182,17 @@ pub(crate) fn step(a: &Rc<AppInner>, cmd: &[String]) -> bool {
             let d = vs.get_duration().max(0.001);
             vs.invoke_seek(num(cmd, 1) / d);
         }
+        // photo editor on grid item N; `estate` prints its state
+        "edit" => {
+            let n = num(cmd, 1) as usize;
+            let weak = Rc::downgrade(a);
+            a.grid.0.borrow_mut().items_in_range(n, n, move |list| {
+                if let (Some(a), Some(item)) = (weak.upgrade(), list.into_iter().next()) {
+                    crate::editor::open(&a, item);
+                }
+            });
+        }
+        "estate" => crate::editor::debug_state(),
         "sel" => {
             let g = a.grid.0.borrow();
             let ids = g.ix.selection.ids();

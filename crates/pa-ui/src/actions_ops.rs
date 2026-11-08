@@ -16,6 +16,8 @@ pub enum ImageSize {
     Thumb(u32),
     /// zoomed-in display rendition (≤ 4096, never the raw original)
     Zoom,
+    /// full resolution (the original, converted when it isn't decodable here)
+    Full,
     /// video filmstrip sprite: `n` frames of height `h`
     Filmstrip(u32, u32),
 }
@@ -69,6 +71,11 @@ pub trait MediaOps: Send + Sync {
     fn source(&self, item: &MediaItem, path: Option<&str>) -> Option<MediaSource>;
     /// the original's URL (copy link)
     fn file_url(&self, id: &str) -> Option<String>;
+    /// `POST /api/edits/save`: an edited photo saved as a copy next to `source_id`; the JSON
+    /// answer (`{ item: { folderId, dir, name }, id }`)
+    fn save_edit(&self, _image: Vec<u8>, _source_id: &str, _format: &str, _quality: u32) -> BoxFut<serde_json::Value> {
+        unsupported()
+    }
 }
 
 fn unsupported<T: Send + 'static>() -> BoxFut<T> {
@@ -120,6 +127,7 @@ mod http {
             let url = match size {
                 ImageSize::Thumb(s) => c.thumb_url(id, s),
                 ImageSize::Zoom => c.zoom_url(id),
+                ImageSize::Full => c.full_url(id),
                 ImageSize::Filmstrip(n, h) => c.filmstrip_url(id, n, h),
             };
             Box::pin(async move {
@@ -217,6 +225,11 @@ mod http {
         fn file_url(&self, id: &str) -> Option<String> {
             Some(self.client().file_url(id, false))
         }
+        fn save_edit(&self, image: Vec<u8>, source_id: &str, format: &str, quality: u32) -> BoxFut<serde_json::Value> {
+            let c = self.client().clone();
+            let (id, fmt) = (source_id.to_string(), format.to_string());
+            Box::pin(async move { c.save_edit(image, &id, &fmt, quality).await.map_err(berr) })
+        }
     }
 }
 
@@ -251,7 +264,7 @@ impl MediaOps for crate::backend::DemoBackend {
         use crate::backend::Backend;
         match size {
             ImageSize::Thumb(s) => self.thumb(id.to_string(), s),
-            ImageSize::Zoom => self.thumb(id.to_string(), 2400),
+            ImageSize::Zoom | ImageSize::Full => self.thumb(id.to_string(), 2400),
             ImageSize::Filmstrip(..) => unsupported(),
         }
     }

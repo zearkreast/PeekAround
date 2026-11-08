@@ -591,6 +591,7 @@ impl Hub {
         }
         match id {
             "favorite" => self.favorite(a, items),
+            "edit" => crate::editor::open(a, items[0].clone()),
             "download" => self.download(a, items),
             "slideshow" => {
                 if let Some(v) = crate::viewer::get() {

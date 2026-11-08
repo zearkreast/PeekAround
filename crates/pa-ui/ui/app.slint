@@ -14,6 +14,7 @@ import { FontsPage } from "pages/fonts.slint";
 import { SlideBuilderPage, SlideBuilder, SlideRow, MusicRow, MediaDirRow, MediaTileRow } from "slideshow/builder.slint";
 import { SlidePlayerOverlay, SlidePlayer } from "slideshow/player.slint";
 import { StageFrame, SlideVis } from "slideshow/stage.slint";
+import { EditorOverlay, EditorState, EdSlider, EdFilter, EdAspect } from "editor/editor.slint";
 import { AlbumsPage, AlbumPage } from "pages/albums.slint";
 import { LibraryPage } from "pages/library.slint";
 import { HubState, AlbumsState, AlbumState, LibState, FontsState } from "pages/state.slint";
@@ -44,6 +45,7 @@ export { HubState, AlbumsState, AlbumState, LibState, PIcons, Dlg, JobsState, Fo
 export { FontFaceRow, FontFamilyCard, BundledFont } from "pages/state.slint";
 export { SlideBuilder, SlidePlayer, SlideRow, MusicRow, MediaDirRow, MediaTileRow, StageFrame, SlideVis }
 export { Chrome } from "globals.slint";
+export { EditorState, EdSlider, EdFilter, EdAspect }
 export { PickRowData, PathRowData, TreeRowData, KeyRowData } from "dialogs/dialogs.slint";
 export { JobRowData, UploadRowData } from "shell/jobs.slint";
 export { SetState, SetRow, SetCard, SetSection, SetNav } from "pages/settings.slint";
@@ -246,6 +248,10 @@ export component AppWindow inherits Window {
         height: root.height;
     }
     if SlidePlayer.open: SlidePlayerOverlay { }
+    if EditorState.open: EditorOverlay {
+        width: root.width;
+        height: root.height;
+    }
     ActionLayer { }
     // upload progress, dialogs of the library / albums / devices / MEGA / settings screens
     UploadPanel {
