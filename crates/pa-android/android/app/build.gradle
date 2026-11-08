@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+// versionName = the workspace version (Cargo.toml); versionCode grows with it and stays above
+// 1.3.2's 6 so the 2.0 APK installs over the 1.x app: (major·10000 + minor·100 + patch)·100 +
+// alpha N (a release = 99), e.g. 2.0.0-alpha.2 → 2000002, 2.0.0 → 2000099
+def cargoVersion = {
+    def toml = rootProject.file('../../../Cargo.toml').text
+    def m = toml =~ /(?m)^version\s*=\s*"([^"]+)"/
+    return m.find() ? m.group(1) : '0.0.0'
+}()
+def codeOf = { String v ->
+    def m = v =~ /^(\d+)\.(\d+)\.(\d+)(?:-[a-z]+\.(\d+))?/
+    if (!m.find()) return 1
+    def base = (m.group(1).toInteger() * 10000 + m.group(2).toInteger() * 100 + m.group(3).toInteger()) * 100
+    return base + (m.group(4) != null ? Math.min(m.group(4).toInteger(), 98) : 99)
+}
+
+android {
+    namespace = 'app.peekaround'
+    compileSdk = 36
+    // 1.x: applicationId app.peekaround, minSdk 24 (same id + signing key → installs as an update)
+    defaultConfig {
+        applicationId 'app.peekaround'
+        minSdk 24
+        targetSdk 36
+        versionCode codeOf(cargoVersion)
+        versionName cargoVersion
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+    packaging {
+        jniLibs {
+            // the .so is already stripped by the release profile; keeping it uncompressed lets
+            // the loader map it straight from the APK
+            useLegacyPackaging = false
+        }
+    }
+}

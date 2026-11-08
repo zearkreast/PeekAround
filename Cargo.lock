@@ -4739,6 +4739,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "pa-android"
+version = "2.0.0-alpha.2"
+dependencies = [
+ "dirs 6.0.0",
+ "jni 0.21.1",
+ "log",
+ "mdns-sd",
+ "ndk-context",
+ "pa-client",
+ "pa-core",
+ "pa-phone",
+ "pa-server",
+ "pa-ui",
+ "serde",
+ "serde_json",
+ "slint",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "pa-cli"
 version = "2.0.0-alpha.2"
 dependencies = [
@@ -4926,6 +4947,31 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "pa-phone"
+version = "2.0.0-alpha.2"
+dependencies = [
+ "bytes",
+ "chrono",
+ "futures-util",
+ "image",
+ "log",
+ "notify",
+ "pa-client",
+ "pa-core",
+ "pa-media",
+ "pa-meta",
+ "pa-server",
+ "rand 0.8.8",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite 0.29.0",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]
