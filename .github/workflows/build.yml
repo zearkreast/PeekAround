@@ -211,6 +211,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          # only the packages: the Docker job's build record (*.dockerbuild) is not a zip and fails to extract
+          pattern: '{desktop-*,android}'
           path: dist
           merge-multiple: true
       - run: ls -la dist
