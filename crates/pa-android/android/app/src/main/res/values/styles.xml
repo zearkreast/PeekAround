@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the UI's dark background until the first Slint frame (no white flash) -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/pa_bg</item>
+        <item name="android:statusBarColor">@color/pa_bg</item>
+        <item name="android:navigationBarColor">@color/pa_bg</item>
+    </style>
+    <color name="pa_bg">#09090D</color>
+</resources>

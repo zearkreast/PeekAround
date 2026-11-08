@@ -1,0 +1,38 @@
+[package]
+name = "pa-android"
+description = "PeekAround Android app: the Slint UI on android-activity, local mode (the server in-process over the phone's folders), client mode, phone folder sharing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version = "1.92"
+publish = false
+
+# libpeekaround_android.so, loaded by the NativeActivity (UI process) and by PeekService (":link" process)
+[lib]
+name = "peekaround_android"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pa-phone = { path = "../pa-phone" }
+pa-client = { path = "../pa-client" }
+pa-server = { path = "../pa-server", default-features = false }
+pa-core = { path = "../pa-core" }
+slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "net", "macros"] }
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+mdns-sd = "0.13"
+url = "2"
+dirs = "6"
+
+# one UI codebase: on Android pa-ui runs on Slint's android-activity backend (skia), on the desktop
+# (only `cargo check` / the phone-sim example) on winit
+[target.'cfg(target_os = "android")'.dependencies]
+pa-ui = { path = "../pa-ui", default-features = false, features = ["http", "android"] }
+jni = "=0.21.1"
+ndk-context = "0.1.1"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+pa-ui = { path = "../pa-ui" }
