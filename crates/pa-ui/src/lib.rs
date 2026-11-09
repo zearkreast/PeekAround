@@ -45,6 +45,7 @@ mod slideshow;
 mod slideshow_show;
 mod slideshow_ui;
 mod editor;
+mod video_editor;
 
 #[allow(missing_docs, clippy::all)]
 mod generated {

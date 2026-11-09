@@ -15,6 +15,7 @@ import { SlideBuilderPage, SlideBuilder, SlideRow, MusicRow, MediaDirRow, MediaT
 import { SlidePlayerOverlay, SlidePlayer } from "slideshow/player.slint";
 import { StageFrame, SlideVis } from "slideshow/stage.slint";
 import { EditorOverlay, EditorState, EdSlider, EdFilter, EdAspect } from "editor/editor.slint";
+import { VideoEditorOverlay, VideoEditorState, VeTick, VeBar, VeTextRow, VeOption } from "video/editor.slint";
 import { AlbumsPage, AlbumPage } from "pages/albums.slint";
 import { LibraryPage } from "pages/library.slint";
 import { HubState, AlbumsState, AlbumState, LibState, FontsState } from "pages/state.slint";
@@ -46,6 +47,7 @@ export { FontFaceRow, FontFamilyCard, BundledFont } from "pages/state.slint";
 export { SlideBuilder, SlidePlayer, SlideRow, MusicRow, MediaDirRow, MediaTileRow, StageFrame, SlideVis }
 export { Chrome } from "globals.slint";
 export { EditorState, EdSlider, EdFilter, EdAspect }
+export { VideoEditorState, VeTick, VeBar, VeTextRow, VeOption }
 export { PickRowData, PathRowData, TreeRowData, KeyRowData } from "dialogs/dialogs.slint";
 export { JobRowData, UploadRowData } from "shell/jobs.slint";
 export { SetState, SetRow, SetCard, SetSection, SetNav } from "pages/settings.slint";
@@ -249,6 +251,10 @@ export component AppWindow inherits Window {
     }
     if SlidePlayer.open: SlidePlayerOverlay { }
     if EditorState.open: EditorOverlay {
+        width: root.width;
+        height: root.height;
+    }
+    if VideoEditorState.open: VideoEditorOverlay {
         width: root.width;
         height: root.height;
     }

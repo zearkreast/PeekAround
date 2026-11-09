@@ -446,6 +446,8 @@ impl Show {
             fps: 30.0,
             duration: p.media.duration,
             audio: None,
+            vf_pre: Vec::new(),
+            vf_post: Vec::new(),
         };
         let start = p.trim.as_ref().map_or(0.0, |t| t.start);
         // slides play muted (the music is the show's sound), as in 1.x

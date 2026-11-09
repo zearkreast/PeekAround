@@ -1,0 +1,1339 @@
+// Video editor (features/video-editor): top bar (back · undo / redo / reset · export), the
+// stage (ffmpeg-decoded preview with crop / rotate / colour applied, text layers, crop box),
+// transport + timeline (filmstrip, trim handles, playhead, text layer bars) and the tool panel
+// (trim, crop, adjust, text, speed & sound, export), plus the export job card. Keys: Space / K
+// play, I / O set in / out, ← → step a frame (Shift: 1 s), Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y,
+// Delete removes the selected text, Esc deselects, leaves the crop tool, then goes back.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
+import { Spinner, ProgressBar, ProgressRing, Badge } from "../components/feedback.slint";
+import { EIcons, EdFont, EdText, EdSliderRow, ToolTab, Toggle, TextProps } from "../editor/common.slint";
+import { EdLayerVis, EdSlider } from "../editor/editor.slint";
+
+export global VIcons {
+    out property <image> scissors: @image-url("icons/scissors.svg");
+    out property <image> skip-back: @image-url("icons/skip-back.svg");
+    out property <image> skip-forward: @image-url("icons/skip-forward.svg");
+    out property <image> set-in: @image-url("icons/chevron-first.svg");
+    out property <image> set-out: @image-url("icons/chevron-last.svg");
+    out property <image> copy-plus: @image-url("icons/copy-plus.svg");
+    out property <image> contrast: @image-url("icons/contrast.svg");
+    out property <image> droplet: @image-url("icons/droplet.svg");
+    out property <image> thermometer: @image-url("icons/thermometer.svg");
+    out property <image> sun-dim: @image-url("icons/sun-dim.svg");
+    out property <image> image-play: @image-url("icons/image-play.svg");
+    out property <image> globe: @image-url("icons/globe.svg");
+    out property <image> volume: @image-url("icons/volume-2.svg");
+    out property <image> volume-x: @image-url("icons/volume-x.svg");
+    out property <image> folder-open: @image-url("icons/folder-open.svg");
+    out property <image> rotate-cw: @image-url("icons/rotate-cw.svg");
+    out property <image> rotate-ccw: @image-url("icons/rotate-ccw.svg");
+    out property <image> pause: @image-url("icons/pause-fill.svg");
+}
+
+// a ruler tick; x is the fraction of the source duration
+export struct VeTick {
+    x: float,
+    label: string,
+}
+
+// a text layer's bar on the timeline (fractions of the source duration)
+export struct VeBar {
+    id: int,
+    label: string,
+    family: string,
+    a: float,
+    b: float,
+    selected: bool,
+}
+
+export struct VeTextRow {
+    id: int,
+    label: string,
+    family: string,
+    color: color,
+    range: string,
+    selected: bool,
+}
+
+export struct VeOption {
+    value: string,
+    label: string,
+}
+
+export global VideoEditorState {
+    in property <bool> open;
+    in property <string> name;
+    in property <string> meta;
+    in property <bool> loading;
+    in property <string> error;
+    in property <bool> can-undo;
+    in property <bool> can-redo;
+    // why exporting is off (read-only server, no ffmpeg); "" = allowed
+    in property <string> disabled;
+    in property <string> tool: "trim";
+    // stage
+    in property <image> frame;
+    in property <bool> has-frame;
+    in property <length> frame-x;
+    in property <length> frame-y;
+    in property <length> frame-w;
+    in property <length> frame-h;
+    in property <bool> playing;
+    in property <bool> scrubbing;
+    in property <bool> buffering;
+    in property <[EdLayerVis]> layers;
+    in property <length> crop-x;
+    in property <length> crop-y;
+    in property <length> crop-w;
+    in property <length> crop-h;
+    in property <string> crop-label;
+    // transport + timeline
+    in property <string> time-text: "0:00.0";
+    in property <string> dur-text: "0:00.0";
+    in property <bool> has-audio;
+    in property <bool> mute;
+    in property <image> strip;
+    in property <bool> has-strip;
+    in property <float> trim-a;
+    in property <float> trim-b: 1;
+    in property <string> trim-a-text;
+    in property <string> trim-b-text;
+    in property <float> head;
+    in property <[VeTick]> ticks;
+    in property <[VeBar]> bars;
+    // trim panel
+    in property <string> trim-start;
+    in property <string> trim-end;
+    in property <string> clip-len;
+    in property <string> full-len;
+    in property <bool> trimmed;
+    // crop panel
+    in property <string> aspect: "free";
+    in property <bool> has-crop;
+    in property <bool> flip-h;
+    in property <bool> flip-v;
+    in property <string> output-size;
+    // adjust panel
+    in property <[EdSlider]> sliders;
+    in property <bool> adjusted;
+    // text panel
+    in property <[VeTextRow]> text-rows;
+    in property <bool> has-sel;
+    in property <EdText> sel;
+    in property <int> text-sync;
+    in property <int> focus-text;
+    in property <[EdFont]> fonts;
+    in property <string> sel-from;
+    in property <string> sel-to;
+    // speed & sound
+    in property <float> speed: 1;
+    in property <string> speed-hint;
+    in property <float> volume: 100;
+    // export
+    in property <string> format: "mp4";
+    in property <string> short: "0";
+    in property <[VeOption]> shorts;
+    in property <string> quality: "high";
+    in property <string> out-dur;
+    in property <bool> out-audio;
+    in property <int> text-count;
+    in property <string> file-name;
+    // export job: idle, preparing, queued, running, done, error, canceled
+    in property <string> job-status: "idle";
+    in property <float> job-progress;
+    in property <string> job-title;
+    in property <string> job-error;
+    in property <bool> busy;
+    in property <bool> can-cancel;
+
+    callback close();
+    callback undo();
+    callback redo();
+    callback reset();
+    callback set-tool(string);
+    callback resized(length, length);
+    callback toggle-play();
+    callback play();
+    callback step(int);
+    callback seek-by(float);
+    callback set-in();
+    callback set-out();
+    callback toggle-mute();
+    callback escape();
+    // stage pointer: mode "crop:<handle>" in the crop tool, else "stage"
+    callback press(string, length, length);
+    callback drag(length, length);
+    callback release();
+    callback double-click(length, length);
+    // timeline: kind scrub / in / out / text, the text id and part, x in timeline px
+    callback tl-resized(length);
+    callback tl-press(string, int, string, length);
+    callback tl-drag(length);
+    callback tl-release();
+    callback trim-num(string, string);
+    callback trim-reset();
+    callback aspect-pick(string);
+    callback crop-reset();
+    callback rotate(int);
+    callback flip(bool);
+    callback look(int);
+    callback adj(string, float);
+    callback adj-reset(string);
+    callback adj-reset-all();
+    callback add-text();
+    callback select-text(int);
+    callback dup-text(int);
+    callback delete-text(int);
+    callback delete-selected();
+    callback text-num(string, float);
+    callback text-str(string, string);
+    callback text-color(string, color);
+    callback text-toggle(string, bool);
+    callback time-num(string, string);
+    callback start-here();
+    callback end-here();
+    callback whole-clip();
+    callback set-speed(float);
+    callback set-mute(bool);
+    callback set-volume(float);
+    callback set-format(string);
+    callback set-short(string);
+    callback set-quality(string);
+    callback export();
+    callback job-cancel();
+    callback job-open();
+    callback job-close();
+}
+
+component Section inherits VerticalLayout {
+    in property <string> title;
+    in property <string> hint;
+    in property <bool> has-action;
+    callback action();
+    padding: 16px;
+    spacing: 12px;
+    HorizontalLayout {
+        spacing: 12px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 2px;
+            Text { text: root.title; font-size: 13px; font-weight: 600; color: Theme.text; }
+            if root.hint != "": Text { text: root.hint; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+        }
+        if root.has-action: VerticalLayout {
+            alignment: start;
+            Button {
+                text: I18n.t("common.reset", I18n.rev);
+                icon: EIcons.undo;
+                has-icon: true;
+                size: ButtonSize.sm;
+                variant: ButtonVariant.ghost;
+                clicked => { root.action(); }
+            }
+        }
+    }
+    @children
+}
+
+component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.border;
+}
+
+// a number box that commits on Enter / leaving it; shows `value` while not edited
+component NumField inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value;
+    callback commit(string);
+    spacing: 4px;
+    changed value => {
+        if !input.has-focus { input.text = root.value; }
+    }
+    init => { input.text = root.value; }
+    Text { text: root.label; font-size: 12px; color: Theme.text-faint; }
+    Rectangle {
+        height: 36px;
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: input.has-focus ? Theme.accent.with-alpha(0.6) : Theme.border;
+        background: Theme.surface;
+        TouchArea { mouse-cursor: MouseCursor.text; clicked => { input.focus(); } }
+        input := TextInput {
+            x: 12px;
+            width: parent.width - 24px;
+            height: parent.height;
+            vertical-alignment: center;
+            single-line: true;
+            font-size: 14px;
+            color: Theme.text;
+            selection-background-color: Theme.accent.with-alpha(0.45);
+            accepted => {
+                root.commit(self.text);
+                self.text = root.value;
+            }
+            changed has-focus => {
+                if !self.has-focus {
+                    root.commit(self.text);
+                    self.text = root.value;
+                }
+            }
+        }
+    }
+}
+
+// a row of choices driven by `value` (state from Rust)
+component Seg inherits Rectangle {
+    in property <[VeOption]> options;
+    in property <string> value;
+    callback picked(string);
+    height: 36px;
+    border-radius: 12px;
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: Theme.border;
+    HorizontalLayout {
+        padding: 3px;
+        spacing: 2px;
+        for o in root.options: Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 9px;
+            background: o.value == root.value ? Theme.surface-3 : sa.has-hover ? Theme.surface-2 : transparent;
+            animate background { duration: Motion.fast; }
+            Text {
+                text: o.label;
+                font-size: 13px;
+                font-weight: o.value == root.value ? 600 : 500;
+                color: o.value == root.value ? Theme.text : Theme.text-dim;
+            }
+            sa := TouchArea { mouse-cursor: pointer; clicked => { root.picked(o.value); } }
+        }
+    }
+}
+
+component ChipBtn inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> active;
+    callback clicked();
+    height: 62px;
+    horizontal-stretch: 1;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: root.active ? Theme.accent.with-alpha(0.6) : Theme.border;
+    background: root.active ? Theme.accent.with-alpha(0.14) : ta.has-hover ? Theme.surface-2 : transparent;
+    VerticalLayout {
+        alignment: center;
+        spacing: 6px;
+        HorizontalLayout {
+            alignment: center;
+            Image { source: root.icon; width: 20px; height: 20px; colorize: root.active || ta.has-hover ? Theme.text : Theme.text-dim; }
+        }
+        Text { text: root.text; font-size: 11px; font-weight: 500; color: root.active || ta.has-hover ? Theme.text : Theme.text-dim; horizontal-alignment: center; overflow: elide; }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component InfoRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    height: 36px;
+    border-radius: 12px;
+    background: Theme.surface;
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        Text { text: root.label; font-size: 13px; color: Theme.text-dim; vertical-alignment: center; horizontal-stretch: 1; }
+        Text { text: root.value; font-size: 13px; color: Theme.text; vertical-alignment: center; }
+    }
+}
+
+// ───────── panels ─────────
+
+component TrimPanel inherits VerticalLayout {
+    Section {
+        title: I18n.t("video.trim", I18n.rev);
+        hint: I18n.t("video.trimHint", I18n.rev);
+        has-action: VideoEditorState.trimmed;
+        action => { VideoEditorState.trim-reset(); }
+        HorizontalLayout {
+            spacing: 8px;
+            NumField { label: I18n.t("video.trimStart", I18n.rev); value: VideoEditorState.trim-start; commit(v) => { VideoEditorState.trim-num("start", v); } }
+            NumField { label: I18n.t("video.trimEnd", I18n.rev); value: VideoEditorState.trim-end; commit(v) => { VideoEditorState.trim-num("end", v); } }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Button { horizontal-stretch: 1; size: ButtonSize.sm; text: I18n.t("video.setIn", I18n.rev); clicked => { VideoEditorState.set-in(); } }
+            Button { horizontal-stretch: 1; size: ButtonSize.sm; text: I18n.t("video.setOut", I18n.rev); clicked => { VideoEditorState.set-out(); } }
+        }
+        InfoRow { label: I18n.t("video.clipLength", I18n.rev); value: VideoEditorState.clip-len + "  /  " + VideoEditorState.full-len; }
+    }
+}
+
+component CropPanel inherits VerticalLayout {
+    Section {
+        title: I18n.t("video.cropRatio", I18n.rev);
+        hint: I18n.t("video.cropHint", I18n.rev);
+        has-action: VideoEditorState.has-crop;
+        action => { VideoEditorState.crop-reset(); }
+        HorizontalLayout {
+            spacing: 6px;
+            for a in [{ key: "free", w: 0px, h: 0px }, { key: "16:9", w: 22px, h: 12.4px }, { key: "9:16", w: 12.4px, h: 22px }, { key: "1:1", w: 22px, h: 22px }, { key: "4:5", w: 17.6px, h: 22px }]: ac := Rectangle {
+                property <bool> on: VideoEditorState.aspect == a.key;
+                height: 62px;
+                horizontal-stretch: 1;
+                border-radius: 12px;
+                background: self.on ? Theme.surface-3 : ata.has-hover ? Theme.surface-2 : transparent;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 6px;
+                    Rectangle {
+                        height: 24px;
+                        if a.key == "free": Image { source: EIcons.crop; width: 20px; height: 20px; colorize: ac.on ? Theme.text : Theme.text-faint; }
+                        if a.key != "free": Rectangle {
+                            width: a.w;
+                            height: a.h;
+                            border-radius: 4px;
+                            border-width: 2px;
+                            border-color: ac.on ? Theme.accent : Theme.text-faint;
+                        }
+                    }
+                    Text {
+                        text: a.key == "free" ? I18n.t("video.free", I18n.rev) : a.key;
+                        font-size: 11px;
+                        font-weight: 500;
+                        color: ac.on ? Theme.text : Theme.text-faint;
+                        horizontal-alignment: center;
+                    }
+                }
+                ata := TouchArea { mouse-cursor: pointer; clicked => { VideoEditorState.aspect-pick(a.key); } }
+            }
+        }
+    }
+    Divider { }
+    Section {
+        title: I18n.t("video.rotateFlip", I18n.rev);
+        HorizontalLayout {
+            spacing: 6px;
+            ChipBtn { icon: VIcons.rotate-ccw; text: I18n.t("video.rotateLeft", I18n.rev); clicked => { VideoEditorState.rotate(-1); } }
+            ChipBtn { icon: VIcons.rotate-cw; text: I18n.t("video.rotateRight", I18n.rev); clicked => { VideoEditorState.rotate(1); } }
+            ChipBtn { icon: EIcons.flip-h; text: I18n.t("video.flipH", I18n.rev); active: VideoEditorState.flip-h; clicked => { VideoEditorState.flip(true); } }
+            ChipBtn { icon: EIcons.flip-v; text: I18n.t("video.flipV", I18n.rev); active: VideoEditorState.flip-v; clicked => { VideoEditorState.flip(false); } }
+        }
+        InfoRow { label: I18n.t("video.outputSize", I18n.rev); value: VideoEditorState.output-size; }
+    }
+}
+
+component AdjustPanel inherits VerticalLayout {
+    Section {
+        title: I18n.t("video.looks", I18n.rev);
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            for l[i] in [
+                { key: "video.look.vivid", c1: #f43f5e, c2: #22c55e },
+                { key: "video.look.warm", c1: #fb923c, c2: #facc15 },
+                { key: "video.look.cool", c1: #38bdf8, c2: #6366f1 },
+                { key: "video.look.cinema", c1: #0f766e, c2: #f97316 },
+                { key: "video.look.mono", c1: #111111, c2: #eeeeee },
+            ]: VerticalLayout {
+                spacing: 6px;
+                Rectangle {
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 16px;
+                    border-width: 1px;
+                    border-color: lta.has-hover ? Theme.border-strong : Theme.border;
+                    background: @linear-gradient(135deg, l.c1 0%, l.c2 100%);
+                    lta := TouchArea { mouse-cursor: pointer; clicked => { VideoEditorState.look(i); } }
+                }
+                Text { text: I18n.t(l.key, I18n.rev); font-size: 11px; color: Theme.text-dim; horizontal-alignment: center; }
+            }
+        }
+    }
+    Divider { }
+    Section {
+        title: I18n.t("video.adjust", I18n.rev);
+        hint: I18n.t("video.adjustHint", I18n.rev);
+        has-action: VideoEditorState.adjusted;
+        action => { VideoEditorState.adj-reset-all(); }
+        for s in VideoEditorState.sliders: HorizontalLayout {
+            spacing: 12px;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 12px;
+                    background: Theme.surface-2;
+                    Image {
+                        width: 16px;
+                        height: 16px;
+                        colorize: s.value != 0 ? Theme.accent : Theme.text-faint;
+                        source: s.key == "brightness" ? Icons.sun : s.key == "contrast" ? VIcons.contrast : s.key == "saturation" ? VIcons.droplet
+                            : s.key == "hue" ? Icons.palette : s.key == "warmth" ? VIcons.thermometer : VIcons.sun-dim;
+                    }
+                }
+            }
+            EdSliderRow {
+                horizontal-stretch: 1;
+                label: s.label;
+                value-text: s.text;
+                value: s.value;
+                minimum: s.min;
+                maximum: s.max;
+                changed(v) => { VideoEditorState.adj(s.key, v); }
+                reset => { VideoEditorState.adj-reset(s.key); }
+            }
+        }
+    }
+}
+
+component TextPanel inherits VerticalLayout {
+    Section {
+        title: I18n.t("video.texts", I18n.rev);
+        hint: I18n.t("video.textsHint", I18n.rev);
+        Button {
+            text: I18n.t("common.add", I18n.rev);
+            icon: Icons.plus;
+            has-icon: true;
+            variant: ButtonVariant.primary;
+            clicked => { VideoEditorState.add-text(); }
+        }
+        if VideoEditorState.text-rows.length == 0: Rectangle {
+            height: 96px;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: eta.has-hover ? Theme.accent : Theme.border-strong;
+            VerticalLayout {
+                alignment: center;
+                spacing: 8px;
+                HorizontalLayout { alignment: center; Image { source: EIcons.type; width: 24px; height: 24px; colorize: Theme.accent; } }
+                Text { text: I18n.t("video.addFirstText", I18n.rev); font-size: 13px; color: eta.has-hover ? Theme.text : Theme.text-dim; horizontal-alignment: center; }
+            }
+            eta := TouchArea { mouse-cursor: pointer; clicked => { VideoEditorState.add-text(); } }
+        }
+        for r in VideoEditorState.text-rows: Rectangle {
+            height: 52px;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: r.selected ? Theme.accent.with-alpha(0.55) : Theme.border;
+            background: r.selected ? Theme.accent.with-alpha(0.12) : rta.has-hover ? Theme.surface-2 : transparent;
+            rta := TouchArea { mouse-cursor: pointer; clicked => { VideoEditorState.select-text(r.id); } }
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 6px;
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 8px;
+                        background: Theme.surface-2;
+                        Text { text: "Aa"; font-family: r.family; font-size: 15px; color: r.color; }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text { text: r.label; font-family: r.family; font-size: 13px; font-weight: 500; color: Theme.text; overflow: elide; }
+                    Text { text: r.range; font-size: 11px; color: Theme.text-faint; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: VIcons.copy-plus; icon-size: 15px; label: I18n.t("video.duplicate", I18n.rev); clicked => { VideoEditorState.dup-text(r.id); } }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: Icons.trash-2; icon-size: 15px; label: I18n.t("common.delete", I18n.rev); clicked => { VideoEditorState.delete-text(r.id); } }
+                }
+            }
+        }
+    }
+    if VideoEditorState.has-sel: Divider { }
+    if VideoEditorState.has-sel: Section {
+        title: I18n.t("video.textTiming", I18n.rev);
+        hint: I18n.t("video.textTimingHint", I18n.rev);
+        HorizontalLayout {
+            spacing: 8px;
+            NumField { label: I18n.t("video.from", I18n.rev); value: VideoEditorState.sel-from; commit(v) => { VideoEditorState.time-num("start", v); } }
+            NumField { label: I18n.t("video.to", I18n.rev); value: VideoEditorState.sel-to; commit(v) => { VideoEditorState.time-num("end", v); } }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            Button { size: ButtonSize.sm; text: I18n.t("video.startHere", I18n.rev); clicked => { VideoEditorState.start-here(); } }
+            Button { size: ButtonSize.sm; text: I18n.t("video.endHere", I18n.rev); clicked => { VideoEditorState.end-here(); } }
+            Button { size: ButtonSize.sm; variant: ButtonVariant.ghost; text: I18n.t("video.wholeClip", I18n.rev); clicked => { VideoEditorState.whole-clip(); } }
+        }
+    }
+    if VideoEditorState.has-sel: Divider { }
+    if VideoEditorState.has-sel: Section {
+        title: I18n.t("video.typography", I18n.rev);
+        hint: I18n.t("video.fontsHint", I18n.rev);
+        TextProps {
+            t: VideoEditorState.sel;
+            sync: VideoEditorState.text-sync;
+            focus-seq: VideoEditorState.focus-text;
+            fonts: VideoEditorState.fonts;
+            set-num(k, v) => { VideoEditorState.text-num(k, v); }
+            set-str(k, v) => { VideoEditorState.text-str(k, v); }
+            set-color(k, v) => { VideoEditorState.text-color(k, v); }
+            set-toggle(k, v) => { VideoEditorState.text-toggle(k, v); }
+        }
+    }
+}
+
+component AudioPanel inherits VerticalLayout {
+    Section {
+        title: I18n.t("video.speed", I18n.rev);
+        hint: VideoEditorState.speed-hint;
+        grid := Rectangle {
+            property <length> gap: 6px;
+            property <length> cw: (self.width - 4 * self.gap) / 5;
+            height: 2 * 36px + self.gap;
+            for sp[i] in [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]: sc := Rectangle {
+                property <bool> on: Math.abs(VideoEditorState.speed - sp) < 0.000001;
+                x: Math.mod(i, 5) * (grid.cw + grid.gap);
+                y: Math.floor(i / 5) * (36px + grid.gap);
+                width: grid.cw;
+                height: 36px;
+                border-radius: 12px;
+                background: self.on ? @linear-gradient(135deg, Theme.accent 0%, Theme.accent-2 100%) : spa.has-hover ? Theme.surface-2 : transparent;
+                Text { text: sp + "×"; font-size: 13px; font-weight: 600; color: sc.on ? #ffffff : Theme.text-dim; }
+                spa := TouchArea { mouse-cursor: pointer; clicked => { VideoEditorState.set-speed(sp); } }
+            }
+        }
+        EdSliderRow {
+            label: I18n.t("video.customSpeed", I18n.rev);
+            value-text: Math.round(VideoEditorState.speed * 100) / 100 + "×";
+            value: VideoEditorState.speed * 100;
+            minimum: 25;
+            maximum: 400;
+            step: 5;
+            origin: 100;
+            changed(v) => { VideoEditorState.set-speed(v / 100); }
+            reset => { VideoEditorState.set-speed(1); }
+        }
+    }
+    Divider { }
+    Section {
+        title: I18n.t("video.sound", I18n.rev);
+        hint: VideoEditorState.has-audio ? "" : I18n.t("video.noAudio", I18n.rev);
+        if VideoEditorState.has-audio: HorizontalLayout {
+            Text { text: I18n.t("video.muteAll", I18n.rev); font-size: 14px; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+            Toggle { on: VideoEditorState.mute; toggled(v) => { VideoEditorState.set-mute(v); } }
+        }
+        if VideoEditorState.has-audio: EdSliderRow {
+            label: I18n.t("video.volume", I18n.rev);
+            value-text: VideoEditorState.volume + "%";
+            value: VideoEditorState.volume;
+            minimum: 0;
+            maximum: 200;
+            step: 5;
+            origin: 100;
+            changed(v) => { VideoEditorState.set-volume(v); }
+            reset => { VideoEditorState.set-volume(100); }
+        }
+        if VideoEditorState.has-audio && VideoEditorState.volume > 100: Text {
+            text: I18n.t("video.volumeBoostNote", I18n.rev);
+            font-size: 12px;
+            color: Theme.text-faint;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component ExportPanel inherits VerticalLayout {
+    Section {
+        title: I18n.t("video.format", I18n.rev);
+        HorizontalLayout {
+            spacing: 8px;
+            for f in [
+                { value: "mp4", title: "MP4", hint: "video.mp4Hint" },
+                { value: "webm", title: "WebM", hint: "video.webmHint" },
+                { value: "gif", title: "GIF", hint: "video.gifHint" },
+            ]: fc := Rectangle {
+                property <bool> on: VideoEditorState.format == f.value;
+                horizontal-stretch: 1;
+                height: fl.preferred-height;
+                border-radius: 16px;
+                border-width: self.on ? 2px : 1px;
+                border-color: self.on ? Theme.accent : Theme.border;
+                background: self.on ? Theme.accent.with-alpha(0.12) : fta.has-hover ? Theme.surface-2 : transparent;
+                fl := VerticalLayout {
+                    padding: 12px;
+                    spacing: 4px;
+                    HorizontalLayout {
+                        alignment: start;
+                        Image {
+                            width: 20px;
+                            height: 20px;
+                            source: f.value == "mp4" ? Icons.film : f.value == "webm" ? VIcons.globe : VIcons.image-play;
+                            colorize: fc.on ? Theme.accent : Theme.text-dim;
+                        }
+                    }
+                    Text { text: f.title; font-size: 14px; font-weight: 600; color: fc.on ? Theme.text : Theme.text-dim; }
+                    Text { text: I18n.t(f.hint, I18n.rev); font-size: 11px; color: Theme.text-faint; wrap: word-wrap; }
+                }
+                fta := TouchArea { mouse-cursor: pointer; clicked => { VideoEditorState.set-format(f.value); } }
+            }
+        }
+    }
+    Divider { }
+    Section {
+        title: I18n.t("video.resolution", I18n.rev);
+        Seg { options: VideoEditorState.shorts; value: VideoEditorState.short; picked(v) => { VideoEditorState.set-short(v); } }
+        Seg {
+            options: [
+                { value: "high", label: I18n.t("video.qHigh", I18n.rev) },
+                { value: "medium", label: I18n.t("video.qMedium", I18n.rev) },
+                { value: "low", label: I18n.t("video.qLow", I18n.rev) },
+            ];
+            value: VideoEditorState.quality;
+            picked(v) => { VideoEditorState.set-quality(v); }
+        }
+    }
+    Divider { }
+    Section {
+        title: I18n.t("video.summary", I18n.rev);
+        Rectangle {
+            height: sl.preferred-height;
+            border-radius: 16px;
+            background: Theme.surface;
+            sl := VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+                for row in [
+                    { k: I18n.t("video.outputSize", I18n.rev), v: VideoEditorState.output-size },
+                    { k: I18n.t("viewer.duration", I18n.rev), v: VideoEditorState.out-dur },
+                    { k: I18n.t("video.sound", I18n.rev), v: VideoEditorState.out-audio ? I18n.t("common.yes", I18n.rev) : I18n.t("common.no", I18n.rev) },
+                    { k: I18n.t("video.texts", I18n.rev), v: "" + VideoEditorState.text-count },
+                    { k: I18n.t("video.fileName", I18n.rev), v: VideoEditorState.file-name },
+                ]: HorizontalLayout {
+                    spacing: 12px;
+                    Text { text: row.k; font-size: 13px; color: Theme.text-faint; }
+                    Text { text: row.v; font-size: 13px; color: Theme.text; horizontal-alignment: right; horizontal-stretch: 1; overflow: elide; }
+                }
+            }
+        }
+        if VideoEditorState.format == "gif": Text { text: I18n.t("video.gifNote", I18n.rev); font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+        Button {
+            text: I18n.t("video.export", I18n.rev);
+            icon: Icons.download;
+            has-icon: true;
+            variant: ButtonVariant.primary;
+            size: ButtonSize.lg;
+            loading: VideoEditorState.busy;
+            enabled: VideoEditorState.disabled == "" && !VideoEditorState.loading && VideoEditorState.error == "";
+            clicked => { VideoEditorState.export(); }
+        }
+        Text {
+            text: VideoEditorState.disabled != "" ? VideoEditorState.disabled : I18n.t("tools.copyNote", I18n.rev);
+            font-size: 12px;
+            color: Theme.text-faint;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+}
+
+// ───────── stage ─────────
+
+component CropBox inherits Rectangle {
+    property <length> l: VideoEditorState.crop-x;
+    property <length> t: VideoEditorState.crop-y;
+    property <length> w: VideoEditorState.crop-w;
+    property <length> h: VideoEditorState.crop-h;
+    property <color> dim: #00000094;
+    Rectangle { x: 0; y: 0; width: root.width; height: Math.max(0px, root.t); background: root.dim; }
+    Rectangle { x: 0; y: root.t + root.h; width: root.width; height: Math.max(0px, root.height - root.t - root.h); background: root.dim; }
+    Rectangle { x: 0; y: root.t; width: Math.max(0px, root.l); height: root.h; background: root.dim; }
+    Rectangle { x: root.l + root.w; y: root.t; width: Math.max(0px, root.width - root.l - root.w); height: root.h; background: root.dim; }
+    Rectangle {
+        x: root.l;
+        y: root.t;
+        width: root.w;
+        height: root.h;
+        border-width: 2px;
+        border-color: #ffffffe6;
+        for i in 2: Rectangle { x: parent.width * (i + 1) / 3; width: 1px; height: parent.height; background: #ffffff59; }
+        for i in 2: Rectangle { y: parent.height * (i + 1) / 3; height: 1px; width: parent.width; background: #ffffff59; }
+        for c in 4: Rectangle {
+            x: (c == 1 || c == 3 ? parent.width : 0px) - 8px;
+            y: (c >= 2 ? parent.height : 0px) - 8px;
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            background: #ffffff;
+            drop-shadow-blur: 8px;
+            drop-shadow-color: #00000066;
+        }
+        Rectangle { x: (parent.width - 28px) / 2; y: -4px; width: 28px; height: 8px; border-radius: 4px; background: #ffffff; }
+        Rectangle { x: (parent.width - 28px) / 2; y: parent.height - 4px; width: 28px; height: 8px; border-radius: 4px; background: #ffffff; }
+        Rectangle { x: -4px; y: (parent.height - 28px) / 2; width: 8px; height: 28px; border-radius: 4px; background: #ffffff; }
+        Rectangle { x: parent.width - 4px; y: (parent.height - 28px) / 2; width: 8px; height: 28px; border-radius: 4px; background: #ffffff; }
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: -32px;
+            width: cl.preferred-width + 20px;
+            height: 24px;
+            border-radius: 12px;
+            background: #00000099;
+            cl := Text { text: VideoEditorState.crop-label; font-size: 11px; font-weight: 500; color: #ffffff; }
+        }
+    }
+}
+
+component Stage inherits Rectangle {
+    callback pressed();
+    clip: true;
+    changed width => { VideoEditorState.resized(self.width, self.height); }
+    changed height => { VideoEditorState.resized(self.width, self.height); }
+    init => { VideoEditorState.resized(self.width, self.height); }
+    property <bool> crop-mode: VideoEditorState.tool == "crop";
+    Rectangle {
+        x: VideoEditorState.frame-x;
+        y: VideoEditorState.frame-y;
+        width: VideoEditorState.frame-w;
+        height: VideoEditorState.frame-h;
+        border-radius: 12px;
+        background: #000000;
+        clip: true;
+        drop-shadow-blur: 60px;
+        drop-shadow-color: #000000aa;
+        drop-shadow-offset-y: 20px;
+        if VideoEditorState.has-frame: Image {
+            width: parent.width;
+            height: parent.height;
+            source: VideoEditorState.frame;
+            image-fit: contain;
+        }
+    }
+    if !root.crop-mode: Rectangle {
+        x: VideoEditorState.frame-x;
+        y: VideoEditorState.frame-y;
+        width: VideoEditorState.frame-w;
+        height: VideoEditorState.frame-h;
+        clip: true;
+        for l in VideoEditorState.layers: Image {
+            x: l.x - l.w / 2 - VideoEditorState.frame-x;
+            y: l.y - l.h / 2 - VideoEditorState.frame-y;
+            width: l.w;
+            height: l.h;
+            source: l.image;
+            image-fit: fill;
+            transform-rotation: l.rotation * 1deg;
+            opacity: l.opacity;
+        }
+    }
+    // selection frame with the resize handle (bottom right)
+    if !root.crop-mode: Rectangle {
+        for l in VideoEditorState.layers: Rectangle {
+            visible: l.selected;
+            x: l.x - self.width / 2;
+            y: l.y - self.height / 2;
+            width: l.bw + 12px;
+            height: l.bh + 12px;
+            transform-rotation: l.rotation * 1deg;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: #ffffffe6;
+            Rectangle {
+                x: parent.width - 8px;
+                y: parent.height - 8px;
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                background: Theme.accent;
+                border-width: 2px;
+                border-color: #ffffff;
+            }
+        }
+    }
+    if root.crop-mode && VideoEditorState.frame-w > 0: CropBox {
+        width: root.width;
+        height: root.height;
+    }
+    ta := TouchArea {
+        in-out property <string> mode;
+        pure function hit(x: length, y: length) -> string {
+            if !root.crop-mode {
+                return "stage";
+            }
+            let l = VideoEditorState.crop-x;
+            let t = VideoEditorState.crop-y;
+            let r = l + VideoEditorState.crop-w;
+            let b = t + VideoEditorState.crop-h;
+            let near-l = Math.abs(x - l) < 14px;
+            let near-r = Math.abs(x - r) < 14px;
+            let near-t = Math.abs(y - t) < 14px;
+            let near-b = Math.abs(y - b) < 14px;
+            let in-x = x > l - 14px && x < r + 14px;
+            let in-y = y > t - 14px && y < b + 14px;
+            if near-t && near-l { return "crop:nw"; }
+            if near-t && near-r { return "crop:ne"; }
+            if near-b && near-l { return "crop:sw"; }
+            if near-b && near-r { return "crop:se"; }
+            if near-t && in-x { return "crop:n"; }
+            if near-b && in-x { return "crop:s"; }
+            if near-l && in-y { return "crop:w"; }
+            if near-r && in-y { return "crop:e"; }
+            if x > l && x < r && y > t && y < b { return "crop:move"; }
+            return "";
+        }
+        pure function cursor(m: string) -> MouseCursor {
+            if m == "crop:nw" || m == "crop:se" { return MouseCursor.nwse-resize; }
+            if m == "crop:ne" || m == "crop:sw" { return MouseCursor.nesw-resize; }
+            if m == "crop:n" || m == "crop:s" { return MouseCursor.ns-resize; }
+            if m == "crop:e" || m == "crop:w" { return MouseCursor.ew-resize; }
+            if m == "crop:move" { return self.pressed ? MouseCursor.grabbing : MouseCursor.grab; }
+            return MouseCursor.default;
+        }
+        mouse-cursor: self.cursor(self.pressed ? self.mode : self.hit(self.mouse-x, self.mouse-y));
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                root.pressed();
+                self.mode = self.hit(self.mouse-x, self.mouse-y);
+                VideoEditorState.press(self.mode, self.mouse-x, self.mouse-y);
+            }
+            if e.kind == PointerEventKind.up && e.button == PointerEventButton.left {
+                VideoEditorState.release();
+            }
+        }
+        moved => { VideoEditorState.drag(self.mouse-x, self.mouse-y); }
+        double-clicked => { VideoEditorState.double-click(self.mouse-x, self.mouse-y); }
+    }
+    // big play button while paused
+    if !VideoEditorState.playing && !root.crop-mode && !VideoEditorState.scrubbing && !VideoEditorState.loading && VideoEditorState.error == "" && VideoEditorState.frame-w > 0: Rectangle {
+        width: 64px;
+        height: 64px;
+        border-radius: 32px;
+        background: pta.has-hover ? #ffffff40 : #ffffff26;
+        animate background { duration: Motion.fast; }
+        Image { x: 21px; source: Icons.play-fill; width: 26px; height: 26px; colorize: #ffffff; }
+        pta := TouchArea { mouse-cursor: pointer; clicked => { root.pressed(); VideoEditorState.play(); } }
+    }
+    if VideoEditorState.buffering && VideoEditorState.playing: Rectangle {
+        x: root.width - 48px;
+        y: 16px;
+        width: 32px;
+        height: 32px;
+        border-radius: 16px;
+        background: #00000080;
+        Spinner { size: 16px; fg: #ffffff; }
+    }
+    if VideoEditorState.loading: Spinner { size: 28px; }
+    if VideoEditorState.error != "": VerticalLayout {
+        alignment: center;
+        spacing: 12px;
+        HorizontalLayout { alignment: center; Image { source: Icons.film; width: 36px; height: 36px; colorize: Theme.text-faint; } }
+        Text { text: VideoEditorState.error; font-size: 15px; font-weight: 600; color: Theme.text; horizontal-alignment: center; }
+        HorizontalLayout {
+            alignment: center;
+            Button { text: I18n.t("common.back", I18n.rev); icon: Icons.arrow-left; has-icon: true; variant: ButtonVariant.primary; clicked => { VideoEditorState.close(); } }
+        }
+    }
+}
+
+// ───────── transport + timeline ─────────
+
+component TransportBtn inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> active;
+    callback clicked();
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: root.active ? Theme.surface-3 : ta.has-hover ? Theme.surface-2 : transparent;
+    Image { source: root.icon; width: 18px; height: 18px; colorize: root.active || ta.has-hover ? Theme.text : Theme.text-dim; }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component Transport inherits HorizontalLayout {
+    callback pressed();
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 8px;
+    spacing: 4px;
+    VerticalLayout { alignment: center; TransportBtn { icon: VIcons.skip-back; label: I18n.t("video.stepBack", I18n.rev); clicked => { root.pressed(); VideoEditorState.step(-1); } } }
+    VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: 44px;
+            height: 44px;
+            border-radius: 16px;
+            background: @linear-gradient(135deg, Theme.accent 0%, Theme.accent-2 100%);
+            drop-shadow-blur: 20px;
+            drop-shadow-color: Theme.accent.with-alpha(0.5);
+            drop-shadow-offset-y: 6px;
+            Image {
+                x: VideoEditorState.playing ? 12px : 14px;
+                source: VideoEditorState.playing ? VIcons.pause : Icons.play-fill;
+                width: 20px;
+                height: 20px;
+                colorize: #ffffff;
+            }
+            TouchArea { mouse-cursor: pointer; clicked => { root.pressed(); VideoEditorState.toggle-play(); } }
+        }
+    }
+    VerticalLayout { alignment: center; TransportBtn { icon: VIcons.skip-forward; label: I18n.t("video.stepForward", I18n.rev); clicked => { root.pressed(); VideoEditorState.step(1); } } }
+    HorizontalLayout {
+        padding-left: 8px;
+        spacing: 0px;
+        Text { text: VideoEditorState.time-text; font-size: 13px; color: Theme.text; vertical-alignment: center; }
+        Text { text: " / " + VideoEditorState.dur-text; font-size: 13px; color: Theme.text-dim; vertical-alignment: center; }
+    }
+    Rectangle { horizontal-stretch: 1; }
+    VerticalLayout { alignment: center; TransportBtn { icon: VIcons.set-in; label: I18n.t("video.setIn", I18n.rev) + " (I)"; clicked => { root.pressed(); VideoEditorState.set-in(); } } }
+    VerticalLayout { alignment: center; TransportBtn { icon: VIcons.set-out; label: I18n.t("video.setOut", I18n.rev) + " (O)"; clicked => { root.pressed(); VideoEditorState.set-out(); } } }
+    if VideoEditorState.has-audio: VerticalLayout {
+        alignment: center;
+        TransportBtn {
+            icon: VideoEditorState.mute ? VIcons.volume-x : VIcons.volume;
+            label: VideoEditorState.mute ? I18n.t("viewer.unmute", I18n.rev) : I18n.t("viewer.mute", I18n.rev);
+            active: VideoEditorState.mute;
+            clicked => { root.pressed(); VideoEditorState.toggle-mute(); }
+        }
+    }
+}
+
+component Timeline inherits VerticalLayout {
+    callback pressed();
+    padding-left: 30px;
+    padding-right: 30px;
+    padding-top: 4px;
+    padding-bottom: 12px;
+    spacing: 0px;
+    // ruler
+    Rectangle {
+        height: 20px;
+        for t in VideoEditorState.ticks: Rectangle {
+            x: t.x * parent.width;
+            width: 40px;
+            Rectangle { x: 0; y: 0; width: 1px; height: 6px; background: Theme.border-strong; }
+            Text { x: 4px; y: 0; text: t.label; font-size: 10px; color: Theme.text-faint; }
+        }
+    }
+    strip := Rectangle {
+        height: 64px;
+        changed width => { VideoEditorState.tl-resized(self.width); }
+        init => { VideoEditorState.tl-resized(self.width); }
+        property <length> left: VideoEditorState.trim-a * self.width;
+        property <length> right: VideoEditorState.trim-b * self.width;
+        Rectangle {
+            border-radius: 12px;
+            background: Theme.surface-2;
+            clip: true;
+            if VideoEditorState.has-strip: Image {
+                width: parent.width;
+                height: parent.height;
+                source: VideoEditorState.strip;
+                image-fit: fill;
+            }
+        }
+        // dimmed outside the trim range
+        Rectangle { x: 0; width: parent.left; border-top-left-radius: 12px; border-bottom-left-radius: 12px; background: #000000a6; }
+        Rectangle { x: parent.right; width: Math.max(0px, parent.width - parent.right); border-top-right-radius: 12px; border-bottom-right-radius: 12px; background: #000000a6; }
+        Rectangle { x: parent.left; y: 0; width: Math.max(0px, parent.right - parent.left); height: 3px; background: Theme.accent; }
+        Rectangle { x: parent.left; y: parent.height - 3px; width: Math.max(0px, parent.right - parent.left); height: 3px; background: Theme.accent; }
+        scrub := TouchArea {
+            mouse-cursor: pointer;
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                    root.pressed();
+                    VideoEditorState.tl-press("scrub", 0, "", self.mouse-x);
+                }
+                if e.kind == PointerEventKind.up && e.button == PointerEventButton.left { VideoEditorState.tl-release(); }
+            }
+            moved => { VideoEditorState.tl-drag(self.mouse-x); }
+        }
+        for k in 2: hd := Rectangle {
+            property <bool> is-in: k == 0;
+            x: self.is-in ? parent.left - 16px : parent.right;
+            width: 16px;
+            border-top-left-radius: self.is-in ? 12px : 0px;
+            border-bottom-left-radius: self.is-in ? 12px : 0px;
+            border-top-right-radius: self.is-in ? 0px : 12px;
+            border-bottom-right-radius: self.is-in ? 0px : 12px;
+            background: Theme.accent;
+            drop-shadow-blur: 12px;
+            drop-shadow-color: #00000066;
+            Rectangle {
+                width: 4px;
+                height: hta.has-hover || hta.pressed ? 30px : 24px;
+                animate height { duration: Motion.fast; }
+                border-radius: 2px;
+                background: #ffffffe6;
+            }
+            if hta.pressed: Rectangle {
+                y: -32px;
+                width: tl.preferred-width + 16px;
+                height: 22px;
+                border-radius: 8px;
+                background: #000000bf;
+                tl := Text { text: hd.is-in ? VideoEditorState.trim-a-text : VideoEditorState.trim-b-text; font-size: 11px; font-weight: 500; color: #ffffff; }
+            }
+            hta := TouchArea {
+                mouse-cursor: MouseCursor.ew-resize;
+                pointer-event(e) => {
+                    if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                        root.pressed();
+                        VideoEditorState.tl-press(hd.is-in ? "in" : "out", 0, "", self.absolute-position.x + self.mouse-x - strip.absolute-position.x);
+                    }
+                    if e.kind == PointerEventKind.up && e.button == PointerEventButton.left { VideoEditorState.tl-release(); }
+                }
+                moved => { VideoEditorState.tl-drag(self.absolute-position.x + self.mouse-x - strip.absolute-position.x); }
+            }
+        }
+        // playhead
+        Rectangle {
+            x: VideoEditorState.head * parent.width - 7px;
+            y: -8px;
+            width: 14px;
+            height: parent.height + 8px;
+            Rectangle { x: 0; y: 0; width: 14px; height: 12px; border-radius: 4px; background: #ffffff; drop-shadow-blur: 6px; drop-shadow-color: #00000080; }
+            Rectangle { x: 6px; y: 8px; width: 2px; height: parent.height - 8px; border-radius: 1px; background: #ffffff; drop-shadow-blur: 8px; drop-shadow-color: #00000099; }
+        }
+    }
+    // text layer lanes
+    if VideoEditorState.bars.length > 0: Flickable {
+        height: Math.min(92px, VideoEditorState.bars.length * 28px) + 8px;
+        content-height: VideoEditorState.bars.length * 28px + 8px;
+        for b[i] in VideoEditorState.bars: Rectangle {
+            x: b.a * strip.width;
+            y: 8px + i * 28px;
+            width: Math.max(14px, (b.b - b.a) * strip.width);
+            height: 24px;
+            border-radius: 8px;
+            background: b.selected ? @linear-gradient(135deg, Theme.accent 0%, Theme.accent-2 100%) : Theme.surface-3;
+            clip: true;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                VerticalLayout { alignment: center; Image { source: EIcons.type; width: 12px; height: 12px; colorize: b.selected ? #ffffff : Theme.text-dim; } }
+                Text { text: b.label; font-family: b.family; font-size: 11px; font-weight: 500; color: b.selected ? #ffffff : Theme.text-dim; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+            }
+            for part[p] in ["move", "start", "end"]: TouchArea {
+                x: part == "end" ? parent.width - 8px : 0px;
+                width: part == "move" ? parent.width : 8px;
+                mouse-cursor: part == "move" ? (self.pressed ? MouseCursor.grabbing : MouseCursor.grab) : MouseCursor.ew-resize;
+                pointer-event(e) => {
+                    if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                        root.pressed();
+                        VideoEditorState.tl-press("text", b.id, part, self.absolute-position.x + self.mouse-x - strip.absolute-position.x);
+                    }
+                    if e.kind == PointerEventKind.up && e.button == PointerEventButton.left { VideoEditorState.tl-release(); }
+                }
+                moved => { VideoEditorState.tl-drag(self.absolute-position.x + self.mouse-x - strip.absolute-position.x); }
+            }
+        }
+    }
+}
+
+// ───────── export job ─────────
+
+component JobCard inherits Rectangle {
+    property <string> st: VideoEditorState.job-status;
+    property <bool> done: self.st == "done";
+    property <bool> failed: self.st == "error" || self.st == "canceled";
+    width: 360px;
+    height: cl.preferred-height;
+    border-radius: 24px;
+    background: Theme.glass;
+    border-width: 1px;
+    border-color: Theme.border;
+    drop-shadow-blur: 40px;
+    drop-shadow-color: Theme.shadow;
+    TouchArea { }
+    cl := VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 12px;
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                if root.done: Image { source: Icons.circle-check; width: 36px; height: 36px; colorize: Theme.ok; }
+                if root.failed: Image { source: Icons.circle-alert; width: 36px; height: 36px; colorize: Theme.danger; }
+                if !root.done && !root.failed: ProgressRing { value: VideoEditorState.job-progress; size: 44px; stroke: 4px; }
+                if !root.done && !root.failed: Image { source: Icons.film; width: 16px; height: 16px; colorize: Theme.accent; }
+            }
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                spacing: 2px;
+                Text { text: VideoEditorState.job-title; font-size: 14px; font-weight: 600; color: Theme.text; overflow: elide; }
+                Text {
+                    text: (root.st == "preparing" ? I18n.t("video.preparing", I18n.rev)
+                        : root.st == "queued" ? I18n.t("jobs.queued", I18n.rev)
+                        : root.st == "running" ? I18n.t("jobs.running", I18n.rev)
+                        : root.st == "done" ? I18n.t("jobs.done", I18n.rev)
+                        : root.st == "canceled" ? I18n.t("jobs.canceled", I18n.rev)
+                        : I18n.t("jobs.error", I18n.rev))
+                        + (!root.done && !root.failed ? " · " + Math.round(VideoEditorState.job-progress * 100) + "%" : "");
+                    font-size: 12px;
+                    color: Theme.text-dim;
+                }
+            }
+            if !VideoEditorState.busy: VerticalLayout {
+                alignment: start;
+                IconButton { size: IconButtonSize.sm; icon: Icons.x; label: I18n.t("common.close", I18n.rev); clicked => { VideoEditorState.job-close(); } }
+            }
+        }
+        if !root.done && !root.failed: ProgressBar { value: VideoEditorState.job-progress; }
+        if root.failed && VideoEditorState.job-error != "": Text { text: VideoEditorState.job-error; font-size: 12px; color: Theme.danger; wrap: word-wrap; }
+        if VideoEditorState.can-cancel || root.done: HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            if VideoEditorState.can-cancel: Button { size: ButtonSize.sm; variant: ButtonVariant.ghost; text: I18n.t("jobs.cancel", I18n.rev); clicked => { VideoEditorState.job-cancel(); } }
+            if root.done: Button {
+                size: ButtonSize.sm;
+                variant: ButtonVariant.primary;
+                icon: VIcons.folder-open;
+                has-icon: true;
+                text: I18n.t("jobs.open", I18n.rev);
+                clicked => { VideoEditorState.job-open(); }
+            }
+        }
+    }
+}
+
+// ───────── screen ─────────
+
+component TopBar inherits Rectangle {
+    height: 56px;
+    background: Theme.glass;
+    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.border; }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 12px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            IconButton { icon: Icons.arrow-left; label: I18n.t("common.back", I18n.rev); clicked => { VideoEditorState.close(); } }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 1px;
+            HorizontalLayout {
+                spacing: 8px;
+                Text { text: VideoEditorState.name; font-family: Theme.font-display; font-size: 15px; font-weight: 600; color: Theme.text; overflow: elide; }
+                VerticalLayout { alignment: center; Badge { text: I18n.t("video.editsCopy", I18n.rev); } }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            Text { text: VideoEditorState.meta; font-size: 11px; color: Theme.text-faint; overflow: elide; }
+        }
+        VerticalLayout { alignment: center; IconButton { icon: EIcons.undo; label: I18n.t("common.undo", I18n.rev) + " (Ctrl+Z)"; enabled: VideoEditorState.can-undo; clicked => { VideoEditorState.undo(); } } }
+        VerticalLayout { alignment: center; IconButton { icon: EIcons.redo; label: I18n.t("common.redo", I18n.rev) + " (Ctrl+Shift+Z)"; enabled: VideoEditorState.can-redo; clicked => { VideoEditorState.redo(); } } }
+        VerticalLayout { alignment: center; IconButton { icon: EIcons.reset; label: I18n.t("common.reset", I18n.rev); clicked => { VideoEditorState.reset(); } } }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                text: I18n.t("video.export", I18n.rev);
+                icon: Icons.download;
+                has-icon: true;
+                variant: ButtonVariant.primary;
+                loading: VideoEditorState.busy;
+                enabled: VideoEditorState.disabled == "" && !VideoEditorState.loading && VideoEditorState.error == "";
+                clicked => { VideoEditorState.export(); }
+            }
+        }
+    }
+}
+
+export component VideoEditorOverlay inherits Rectangle {
+    background: Theme.bg;
+    TouchArea { }
+    fs := FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.modifiers.control && !e.modifiers.alt {
+                if e.text == "z" || e.text == "Z" {
+                    if e.modifiers.shift { VideoEditorState.redo(); } else { VideoEditorState.undo(); }
+                    return accept;
+                }
+                if e.text == "y" || e.text == "Y" { VideoEditorState.redo(); return accept; }
+                return reject;
+            }
+            if e.text == " " || e.text == "k" || e.text == "K" { VideoEditorState.toggle-play(); return accept; }
+            if e.text == "i" || e.text == "I" { VideoEditorState.set-in(); return accept; }
+            if e.text == "o" || e.text == "O" { VideoEditorState.set-out(); return accept; }
+            if e.text == Key.LeftArrow {
+                if e.modifiers.shift { VideoEditorState.seek-by(-1); } else { VideoEditorState.step(-1); }
+                return accept;
+            }
+            if e.text == Key.RightArrow {
+                if e.modifiers.shift { VideoEditorState.seek-by(1); } else { VideoEditorState.step(1); }
+                return accept;
+            }
+            if (e.text == Key.Delete || e.text == Key.Backspace) && VideoEditorState.has-sel {
+                VideoEditorState.delete-selected();
+                return accept;
+            }
+            if e.text == Key.Escape { VideoEditorState.escape(); return accept; }
+            reject
+        }
+    }
+    VerticalLayout {
+        TopBar { }
+        HorizontalLayout {
+            vertical-stretch: 1;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                Stage { vertical-stretch: 1; pressed => { fs.focus(); } }
+                Rectangle {
+                    height: bottom.preferred-height;
+                    background: Theme.bg-elev.with-alpha(0.6);
+                    Rectangle { y: 0; height: 1px; background: Theme.border; }
+                    bottom := VerticalLayout {
+                        Transport { pressed => { fs.focus(); } }
+                        Timeline { pressed => { fs.focus(); } }
+                    }
+                }
+            }
+            Rectangle {
+                width: 372px;
+                background: Theme.bg-elev;
+                Rectangle { x: 0; width: 1px; background: Theme.border; }
+                VerticalLayout {
+                    HorizontalLayout {
+                        padding: 6px;
+                        spacing: 2px;
+                        ToolTab { icon: VIcons.scissors; text: I18n.t("video.tool.trim", I18n.rev); selected: VideoEditorState.tool == "trim"; clicked => { VideoEditorState.set-tool("trim"); fs.focus(); } }
+                        ToolTab { icon: EIcons.crop; text: I18n.t("video.tool.crop", I18n.rev); selected: VideoEditorState.tool == "crop"; clicked => { VideoEditorState.set-tool("crop"); fs.focus(); } }
+                        ToolTab { icon: Icons.sliders-horizontal; text: I18n.t("video.tool.adjust", I18n.rev); selected: VideoEditorState.tool == "adjust"; clicked => { VideoEditorState.set-tool("adjust"); fs.focus(); } }
+                        ToolTab { icon: EIcons.type; text: I18n.t("video.tool.text", I18n.rev); selected: VideoEditorState.tool == "text"; clicked => { VideoEditorState.set-tool("text"); fs.focus(); } }
+                        ToolTab { icon: Icons.gauge; text: I18n.t("video.tool.audio", I18n.rev); selected: VideoEditorState.tool == "audio"; clicked => { VideoEditorState.set-tool("audio"); fs.focus(); } }
+                        ToolTab { icon: Icons.download; text: I18n.t("video.tool.export", I18n.rev); selected: VideoEditorState.tool == "export"; clicked => { VideoEditorState.set-tool("export"); fs.focus(); } }
+                    }
+                    Rectangle { height: 1px; background: Theme.border; }
+                    Flickable {
+                        vertical-stretch: 1;
+                        content-height: panel.preferred-height;
+                        panel := VerticalLayout {
+                            width: parent.width;
+                            padding-bottom: 24px;
+                            if VideoEditorState.tool == "trim": TrimPanel { }
+                            if VideoEditorState.tool == "crop": CropPanel { }
+                            if VideoEditorState.tool == "adjust": AdjustPanel { }
+                            if VideoEditorState.tool == "text": TextPanel { }
+                            if VideoEditorState.tool == "audio": AudioPanel { }
+                            if VideoEditorState.tool == "export": ExportPanel { }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if VideoEditorState.job-status != "idle": JobCard {
+        x: root.width - self.width - 16px;
+        y: root.height - self.height - 16px;
+    }
+}

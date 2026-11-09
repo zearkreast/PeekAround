@@ -591,6 +591,7 @@ impl Hub {
         }
         match id {
             "favorite" => self.favorite(a, items),
+            "edit" if items[0].kind == pa_core::MediaKind::Video => crate::video_editor::open(a, items[0].clone()),
             "edit" => crate::editor::open(a, items[0].clone()),
             "download" => self.download(a, items),
             "slideshow" => {

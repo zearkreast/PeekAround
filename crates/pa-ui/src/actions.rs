@@ -300,10 +300,7 @@ fn builtins() -> Vec<Rc<Action>> {
             label_key: "viewer.edit",
             group: Group::Primary,
             order: 20,
-            // photos only: the video editor isn't ported yet
-            visible: Rc::new(|items, c| {
-                c.writable && items.len() == 1 && items[0].kind == MediaKind::Image && !c.on_device(items)
-            }),
+            visible: Rc::new(|items, c| c.writable && items.len() == 1 && is_media(&items[0]) && !c.on_device(items)),
             ..Default::default()
         },
         Action {

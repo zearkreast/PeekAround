@@ -226,6 +226,7 @@ fn register_all(app: &Rc<AppInner>, list: &[FontInfo]) {
                     REGISTERED.with(|r| r.borrow_mut().insert(id));
                     publish(&a);
                     crate::editor::fonts_changed(&a);
+                    crate::video_editor::fonts_changed();
                 }
             },
         );

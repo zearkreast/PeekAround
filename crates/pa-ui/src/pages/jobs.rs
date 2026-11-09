@@ -164,6 +164,7 @@ pub(crate) fn load(a: &Rc<AppInner>) {
 
 /// a job event / a job started here
 pub(crate) fn on_job(a: &Rc<AppInner>, j: &Job) {
+    crate::video_editor::on_job(a, j);
     let prev = a.pages.jobs.jobs.borrow().get(&j.id).cloned();
     if let Some(b) = &j.bytes {
         let now = fmt::now_ms();
@@ -191,7 +192,8 @@ pub(crate) fn on_job(a: &Rc<AppInner>, j: &Job) {
     let was_active = prev
         .as_ref()
         .is_some_and(|p| matches!(p.status, JobStatus::Running | JobStatus::Queued));
-    if was_active {
+    // the video editor toasts its own export
+    if was_active && !crate::video_editor::owns_job(&j.id) {
         match j.status {
             JobStatus::Done => {
                 let title = a.t("jobs.done");

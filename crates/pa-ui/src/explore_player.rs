@@ -321,6 +321,8 @@ impl Player {
             fps: 30.0,
             duration: it.duration,
             audio: None,
+            vf_pre: Vec::new(),
+            vf_post: Vec::new(),
         };
         let player =
             crate::video::Player::new(source, 0.0, !self.paused.get(), 1.0, self.muted.get(), 1.0);

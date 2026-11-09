@@ -1896,6 +1896,8 @@ impl Viewer {
             fps,
             duration: item.duration,
             audio,
+            vf_pre: Vec::new(),
+            vf_post: Vec::new(),
         };
         let volume = if prefs.remember_volume {
             prefs.video_volume

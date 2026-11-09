@@ -121,6 +121,10 @@ pub struct Source {
     pub duration: Option<f64>,
     /// whether the file has an audio stream (None: unknown → try)
     pub audio: Option<bool>,
+    /// ffmpeg filters before the scale to `width`×`height` (video editor: crop, rotate, flip)
+    pub vf_pre: Vec<String>,
+    /// filters after it (video editor: colour, at display size)
+    pub vf_post: Vec<String>,
 }
 
 /// A decoded frame.
@@ -401,7 +405,11 @@ impl Player {
         let ss = format!("{:.3}", self.t0);
         if self.src.video {
             let (w, h) = (self.src.width.max(2), self.src.height.max(2));
-            let vf = format!("scale={w}:{h}:flags=bilinear,fps={:.3}", self.src.fps);
+            let mut vf = self.src.vf_pre.clone();
+            vf.push(format!("scale={w}:{h}:flags=bilinear"));
+            vf.extend(self.src.vf_post.iter().cloned());
+            vf.push(format!("fps={:.3}", self.src.fps));
+            let vf = vf.join(",");
             let mut c = command();
             c.args(["-nostdin", "-hide_banner", "-loglevel", "error"]);
             if self.t0 > 0.0 {
@@ -614,6 +622,19 @@ impl Player {
     /// mute
     pub fn set_muted(&self, m: bool) {
         self.sh.muted.store(m, Ordering::Relaxed);
+    }
+
+    /// New frame size / filters (restarts the video at the current position).
+    pub fn set_filters(&mut self, width: u32, height: u32, vf_pre: Vec<String>, vf_post: Vec<String>) {
+        if (width, height) == (self.src.width, self.src.height) && vf_pre == self.src.vf_pre && vf_post == self.src.vf_post {
+            return;
+        }
+        let at = self.clock();
+        self.src.width = width;
+        self.src.height = height;
+        self.src.vf_pre = vf_pre;
+        self.src.vf_post = vf_post;
+        self.restart(at);
     }
 
     /// what is playing
@@ -863,6 +884,8 @@ mod tests {
             fps: 30.0,
             duration: Some(3.0),
             audio: Some(true),
+            vf_pre: Vec::new(),
+            vf_post: Vec::new(),
         };
         let mut p = Player::new(src, 0.0, true, 1.0, false, 1.0);
         let t0 = Instant::now();

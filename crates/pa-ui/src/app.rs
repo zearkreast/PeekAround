@@ -623,6 +623,7 @@ pub fn run_with(
     crate::explore::install(&app);
     crate::slideshow_ui::install(&app);
     crate::editor::install(&app);
+    crate::video_editor::install(&app);
 
     app.navigate(Page::Photos, false);
 
@@ -646,6 +647,7 @@ pub fn run_with(
     crate::explore_player::shutdown();
     crate::viewer::shutdown();
     crate::slideshow_ui::shutdown();
+    crate::video_editor::shutdown();
     perf::report(&frames, &app.grid.0.borrow());
     drop(app);
     r

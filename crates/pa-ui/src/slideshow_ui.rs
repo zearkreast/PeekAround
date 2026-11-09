@@ -365,6 +365,8 @@ impl Ctl {
             fps: 30.0,
             duration: m.duration,
             audio: Some(true),
+            vf_pre: Vec::new(),
+            vf_post: Vec::new(),
         };
         *self.music.borrow_mut() = Some(video::Player::new(source, 0.0, true, 1.0, self.music_muted.get(), 1.0));
     }
