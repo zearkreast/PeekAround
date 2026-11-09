@@ -47,11 +47,11 @@ struct View {
 }
 
 impl View {
-    fn to_stage(&self, dx: f64, dy: f64) -> (f64, f64) {
+    fn to_stage(self, dx: f64, dy: f64) -> (f64, f64) {
         (self.x + dx * self.s, self.y + dy * self.s)
     }
 
-    fn to_design(&self, x: f64, y: f64) -> (f64, f64) {
+    fn to_design(self, x: f64, y: f64) -> (f64, f64) {
         ((x - self.x) / self.s, (y - self.y) / self.s)
     }
 }

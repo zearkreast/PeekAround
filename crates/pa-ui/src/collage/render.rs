@@ -461,6 +461,8 @@ mod tests {
     fn blurred_background_is_dimmed_photo() {
         let mut d = CollageDoc::new(&[]);
         d.bg = Background::Blur(40.0);
+        // wide padding: the corner pixel is background, not an empty cell
+        d.padding = 200.0;
         let m = Mips::new(solid(64, 64, [200, 200, 200, 255]));
         let mut none = |_: &str| None;
         let c = render(&d, 80, 100, 0.05, Some(&m), &mut none, None, false, &|_| {});
