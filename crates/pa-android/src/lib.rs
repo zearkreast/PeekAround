@@ -107,14 +107,21 @@ pub fn run(files: &Path) {
         },
     };
 
-    let host: Rc<dyn pa_ui::host::Host> = Rc::new(host::AndroidHost::new(
-        files.to_path_buf(),
-        mode.clone(),
-        runtime.handle().clone(),
-    ));
+    // sharing that was on comes back with the UI (1.x: resumed from the visible app only)
+    if let Mode::Server { url, .. } = &mode {
+        let link = pa_phone::LinkPrefs::load(files);
+        if link.enabled && link.url.as_deref().is_some_and(|u| config::same_server(u, url)) {
+            platform::start_link_service();
+        }
+    }
+    let host: Rc<dyn pa_ui::host::Host> =
+        Rc::new(host::AndroidHost::new(files.to_path_buf(), mode.clone()));
     let opts = pa_ui::UiOptions {
         prefs_path: Some(files.join("ui-prefs.json")),
+        #[cfg(target_os = "android")]
         script: None,
+        #[cfg(not(target_os = "android"))]
+        script: std::env::var("PA_SCRIPT").ok().filter(|s| !s.trim().is_empty()),
         autoscroll: None,
         frame_log: false,
     };

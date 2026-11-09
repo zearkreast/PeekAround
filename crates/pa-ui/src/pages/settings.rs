@@ -179,6 +179,99 @@ struct Sec {
     cards: Vec<Card>,
 }
 
+/// Settings → Network of the Android app: how it is connected, and phone folder sharing with
+/// the connected PC (1.x `AndroidConnectionCard`, `PhoneShareCard`)
+fn android_cards(c: &Ctx, an: &crate::host::AndroidState, cards: &mut Vec<Card>) {
+    let ic = &c.ic;
+    let mut r = row(
+        "buttons",
+        "an:change",
+        match &an.server {
+            Some(u) => c.tv("android.modeServer", &[("url", u)]),
+            None => c.t("android.modeLocal"),
+        },
+        String::new(),
+    );
+    r.b1_key = "an:change".into();
+    r.b1_label = c.t("android.change").into();
+    r.b1_icon = ic.get_refresh_cw();
+    cards.push(Card {
+        id: "android-mode",
+        title_key: "android.mode".into(),
+        title: c.t("android.mode"),
+        icon: ic.get_smartphone(),
+        scope: "",
+        rows: vec![R(r, format!("{} android phone telefon", both(&["android.mode"])))],
+    });
+    if an.server.is_none() {
+        return;
+    }
+    let kw = format!("{} phone telefon share paylaş", both(&["devices.share.title"]));
+    let mut rows = vec![R(
+        row("note", "", c.t("devices.share.hint"), String::new()),
+        kw.clone(),
+    )];
+    let state = match (an.share_state.as_str(), an.share_error.as_deref()) {
+        _ if !an.share_on && an.share_state != "rejected" && an.share_error.as_deref() != Some("forgotten") => {
+            c.t("devices.share.state.off")
+        }
+        ("online", _) => {
+            let mut t = c.tv("devices.share.state.online", &[("pc", &an.pc_name)]);
+            if an.share_active > 0 {
+                t.push_str(" · ");
+                t.push_str(&c.tv("devices.share.active", &[("n", &an.share_active.to_string())]));
+            }
+            t
+        }
+        ("pending", _) => format!(
+            "{}: {}",
+            c.t("devices.share.approveOnPc"),
+            an.share_code.clone().unwrap_or_default()
+        ),
+        ("rejected", _) => c.t("devices.share.state.rejected"),
+        (_, Some("forgotten")) => c.t("devices.share.state.forgotten"),
+        ("error", Some(e)) => c.tv("devices.share.state.error", &[("error", e)]),
+        (_, Some(e)) => c.tv("devices.share.state.retrying", &[("error", e)]),
+        _ => c.t("devices.share.state.connecting"),
+    };
+    let mut r = row("switch", "an:share", c.t("devices.share.title"), state);
+    r.checked = an.share_on;
+    r.enabled = an.folders.iter().any(|f| f.2) || an.share_on;
+    rows.push(R(r, kw.clone()));
+    if an.share_on && an.share_state == "pending" {
+        rows.push(R(
+            row("note", "", c.t("devices.share.approveHint"), String::new()),
+            kw.clone(),
+        ));
+    }
+    rows.push(R(
+        row("note", "", c.t("devices.share.folders"), String::new()),
+        kw.clone(),
+    ));
+    for (name, path, on) in &an.folders {
+        let mut r = row("switch", &format!("an:folder:{path}"), name.clone(), path.clone());
+        r.checked = *on;
+        rows.push(R(r, format!("{kw} {name}")));
+    }
+    rows.push(R(
+        {
+            let mut r = row("buttons", "an:reset", c.t("devices.share.reset"), String::new());
+            r.b1_key = "an:reset".into();
+            r.b1_label = c.t("devices.share.reset").into();
+            r
+        },
+        kw,
+    ));
+    cards.push(Card {
+        id: "phone-share",
+        title_key: "devices.share.title".into(),
+        title: c.t("devices.share.title"),
+        icon: ic.get_smartphone(),
+        scope: "",
+        rows,
+    });
+}
+
 fn num_label(v: f64) -> String {
     let s = format!("{v}");
     s.trim_end_matches(".0").to_string()
@@ -1117,6 +1210,9 @@ fn build(a: &Rc<AppInner>) -> Vec<Sec> {
 
     // ── network & devices ──
     let mut net_cards = vec![];
+    if let Some(an) = a.host.android() {
+        android_cards(&c, &an, &mut net_cards);
+    }
     let lan = st.lan.borrow().clone();
     let urls: Vec<String> = match (&lan, &info) {
         (Some(l), _) => l.urls.clone(),
@@ -1895,6 +1991,14 @@ fn set_busy(a: &Rc<AppInner>, k: &str, on: bool) {
 }
 
 fn changed(a: &Rc<AppInner>, key: &str, value: &str) {
+    if let Some(k) = key.strip_prefix("an:") {
+        let on = if value == "true" { "on" } else { "off" };
+        match k.strip_prefix("folder:") {
+            Some(path) => a.host.android_action(&format!("folder:{on}:{path}")),
+            None => a.host.android_action(&format!("{k}:{on}")),
+        }
+        return publish(a);
+    }
     if let Some(k) = key.strip_prefix("s:") {
         let v: serde_json::Value = match k {
             "showHidden" | "hwAccel" => (value == "true").into(),
@@ -1979,6 +2083,10 @@ fn changed(a: &Rc<AppInner>, key: &str, value: &str) {
 }
 
 fn action(a: &Rc<AppInner>, key: &str) {
+    if let Some(k) = key.strip_prefix("an:") {
+        a.host.android_action(k);
+        return publish(a);
+    }
     if let Some(u) = key.strip_prefix("open-url:") {
         a.host.open_url(u);
         return;
@@ -2437,6 +2545,27 @@ fn reset_all(a: &Rc<AppInner>) {
 }
 
 pub(crate) fn install(app: &Rc<AppInner>) {
+    // the phone sharing service runs in another process: follow its state
+    if let Some(first) = app.host.android() {
+        let last = std::cell::RefCell::new(first);
+        let w = Rc::downgrade(app);
+        let t = slint::Timer::default();
+        t.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_millis(1500),
+            move || {
+                let Some(a) = w.upgrade() else { return };
+                let now = a.host.android();
+                if now.as_ref() != Some(&*last.borrow()) {
+                    if let Some(n) = now {
+                        *last.borrow_mut() = n;
+                    }
+                    publish(&a);
+                }
+            },
+        );
+        std::mem::forget(t);
+    }
     let s = app.window.global::<SetState>();
     let w = Rc::downgrade(app);
     s.on_changed(move |k, v| {
