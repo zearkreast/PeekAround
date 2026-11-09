@@ -309,6 +309,7 @@ impl AppInner {
         // explore pages / map
         crate::explore::enter(self, &route);
         crate::slideshow_ui::enter(self, &route);
+        crate::collage::enter(self, &route);
     }
 
     /// error toast
@@ -622,7 +623,9 @@ pub fn run_with(
     // explore pages, memory player, map, mini map
     crate::explore::install(&app);
     crate::slideshow_ui::install(&app);
+    crate::media_picker::install(&app);
     crate::editor::install(&app);
+    crate::collage::install(&app);
 
     app.navigate(Page::Photos, false);
 

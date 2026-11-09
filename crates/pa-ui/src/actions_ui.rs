@@ -599,6 +599,12 @@ impl Hub {
                 }
                 crate::slideshow_ui::open_with(a, items);
             }
+            "collage" => {
+                if let Some(v) = crate::viewer::get() {
+                    v.close_now();
+                }
+                crate::collage::open_with(a, items);
+            }
             "add-to-album" => self.open_album_picker(items),
             "move" | "copy" => self.open_move(items, id == "copy"),
             "rename" => {

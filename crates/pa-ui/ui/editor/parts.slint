@@ -1,0 +1,206 @@
+// Panel controls shared by the photo editor and the collage (photo-editor/ToolTabs, components/ui
+// Slider, ColorSwatches, Switch).
+
+import { Theme, Motion } from "../theme.slint";
+
+// slider filled from `origin` (1.x Slider `center`); double-click resets
+export component EdSliderRow inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value-text;
+    in property <float> value;
+    in property <float> minimum: -100;
+    in property <float> maximum: 100;
+    in property <float> step: 1;
+    in property <float> origin: 0;
+    in property <bool> has-hint;
+    in property <brush> hint;
+    callback changed(float);
+    callback reset();
+    spacing: 2px;
+    HorizontalLayout {
+        spacing: 8px;
+        if root.has-hint: VerticalLayout {
+            alignment: center;
+            Rectangle { width: 10px; height: 10px; border-radius: 5px; background: root.hint; border-width: 1px; border-color: #ffffff26; }
+        }
+        Text { text: root.label; font-size: 13px; color: root.value != root.origin ? Theme.text : Theme.text-dim; vertical-alignment: center; }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: Theme.accent;
+                opacity: root.value != root.origin ? 1 : 0;
+                animate opacity { duration: Motion.fast; }
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Text { text: root.value-text; font-size: 12px; color: Theme.text-faint; vertical-alignment: center; }
+    }
+    Rectangle {
+        height: 22px;
+        property <float> span: Math.max(0.0001, root.maximum - root.minimum);
+        property <float> f: Math.clamp((root.value - root.minimum) / self.span, 0, 1);
+        property <float> f0: Math.clamp((root.origin - root.minimum) / self.span, 0, 1);
+        property <length> track: self.width - 16px;
+        Rectangle {
+            y: (parent.height - self.height) / 2;
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.surface-3;
+        }
+        Rectangle {
+            x: 8px + parent.track * Math.min(parent.f, parent.f0);
+            y: (parent.height - self.height) / 2;
+            width: parent.track * Math.abs(parent.f - parent.f0);
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.accent;
+        }
+        Rectangle {
+            property <length> s: ta.pressed ? 18px : 14px;
+            animate s { duration: Motion.fast; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            width: self.s;
+            height: self.s;
+            x: 8px + parent.track * parent.f - self.s / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: self.s / 2;
+            background: #ffffff;
+            drop-shadow-blur: 6px;
+            drop-shadow-color: #00000059;
+            drop-shadow-offset-y: 1px;
+        }
+        ta := TouchArea {
+            mouse-cursor: pointer;
+            function set-from(px: length) {
+                let f = Math.clamp((px - 8px) / Math.max(1px, self.width - 16px), 0, 1);
+                let raw = root.minimum + f * (root.maximum - root.minimum);
+                let v = Math.clamp(Math.round(raw / root.step) * root.step, root.minimum, root.maximum);
+                if v != root.value {
+                    root.changed(v);
+                }
+            }
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                    self.set-from(self.mouse-x);
+                }
+            }
+            moved => { self.set-from(self.mouse-x); }
+            double-clicked => { root.reset(); }
+        }
+    }
+}
+
+export component Heading inherits Text {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: Theme.text-faint;
+}
+
+export component ToolTab inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked();
+    height: 54px;
+    horizontal-stretch: 1;
+    border-radius: 12px;
+    background: root.selected ? Theme.surface-3 : ta.has-hover ? Theme.surface-2 : transparent;
+    border-width: root.selected ? 1px : 0px;
+    border-color: Theme.accent.with-alpha(0.55);
+    animate background { duration: Motion.fast; }
+    VerticalLayout {
+        alignment: center;
+        spacing: 4px;
+        HorizontalLayout {
+            alignment: center;
+            Image { source: root.icon; width: 18px; height: 18px; colorize: root.selected ? Theme.text : Theme.text-dim; }
+        }
+        Text {
+            text: root.text;
+            font-size: 11px;
+            font-weight: root.selected ? 600 : 500;
+            color: root.selected ? Theme.text : Theme.text-dim;
+            horizontal-alignment: center;
+        }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+// colour swatches that wrap (DrawPanel COLORS); the alpha of `value` is ignored
+export component Swatches inherits Rectangle {
+    in property <[color]> colors: [#ffffff, #111111, #f43f5e, #f97316, #facc15, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ec4899];
+    in property <color> value;
+    callback picked(color);
+    property <length> cell: 24px;
+    property <length> gap: 3px;
+    property <int> cols: Math.max(1, Math.floor((self.width + self.gap) / (self.cell + self.gap)));
+    height: Math.ceil(self.colors.length / self.cols) * (self.cell + self.gap) - self.gap;
+    for c[i] in root.colors: Rectangle {
+        property <bool> on: c.with-alpha(1) == root.value.with-alpha(1);
+        x: Math.mod(i, root.cols) * (root.cell + root.gap);
+        y: Math.floor(i / root.cols) * (root.cell + root.gap);
+        width: root.cell;
+        height: root.cell;
+        border-radius: root.cell / 2;
+        background: self.on ? Theme.accent : transparent;
+        Rectangle {
+            property <length> s: parent.on ? root.cell - 6px : sw.has-hover ? root.cell + 2px : root.cell;
+            animate s { duration: Motion.fast; }
+            width: self.s;
+            height: self.s;
+            border-radius: self.s / 2;
+            background: c;
+            border-width: 1px;
+            border-color: #ffffff26;
+        }
+        sw := TouchArea { mouse-cursor: pointer; clicked => { root.picked(c); } }
+    }
+}
+
+// a switch that only reports clicks; the state comes from Rust
+export component Toggle inherits Rectangle {
+    in property <bool> on;
+    callback toggled(bool);
+    width: 40px;
+    height: 22px;
+    border-radius: 11px;
+    background: root.on ? Theme.accent : Theme.surface-3;
+    animate background { duration: Motion.normal; }
+    Rectangle {
+        x: root.on ? 20px : 2px;
+        y: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: #ffffff;
+        animate x { duration: Motion.normal; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    }
+    TouchArea { mouse-cursor: pointer; clicked => { root.toggled(!root.on); } }
+}
+
+export component ToggleHeader inherits HorizontalLayout {
+    in property <string> title;
+    in property <bool> on;
+    callback toggled(bool);
+    Text { text: root.title; font-size: 13px; font-weight: 500; color: Theme.text-dim; horizontal-stretch: 1; vertical-alignment: center; }
+    Toggle { on: root.on; toggled(v) => { root.toggled(v); } }
+}
+
+export component ToolChip inherits Rectangle {
+    in property <image> icon;
+    in property <bool> on;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: Theme.border;
+    opacity: root.enabled ? 1 : 0.4;
+    background: root.on ? Theme.surface-3 : ta.has-hover ? Theme.surface-2 : transparent;
+    Image { source: root.icon; width: 16px; height: 16px; colorize: root.on ? Theme.text : Theme.text-faint; }
+    ta := TouchArea { enabled: root.enabled; mouse-cursor: pointer; clicked => { root.clicked(); } }
+}

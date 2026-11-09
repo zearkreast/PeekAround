@@ -1,0 +1,987 @@
+// Collage (features/collage): the canvas (CPU-rendered preview with the cell overlays, the text
+// layers and the selected cell's tools), the side panel (layout, style, photos, text) and the
+// "Save collage" popover. Keys: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, Delete clears the selected cell or
+// removes the selected text, Esc deselects. Rust: src/collage/mod.rs.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "../pages/icons.slint";
+import { VIcons } from "../viewer/icons.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
+import { Segmented, SegOption, Slider, TextField } from "../components/inputs.slint";
+import { ProgressBar } from "../components/feedback.slint";
+import { EIcons } from "../editor/eicons.slint";
+import { EdSliderRow, Heading, ToolTab, Swatches } from "../editor/parts.slint";
+import { TextLayersPanel, LayerImages, LayerFrames, EdLayerVis } from "../editor/text.slint";
+
+export global CIcons {
+    out property <image> image-plus: @image-url("icons/image-plus.svg");
+    out property <image> move: @image-url("icons/move.svg");
+    out property <image> crosshair: @image-url("icons/crosshair.svg");
+    out property <image> shuffle: @image-url("icons/shuffle.svg");
+}
+
+// a cell on the stage: its unrotated box (stage px), rotation around its centre, the photo window
+export struct ClCell {
+    index: int,
+    x: length,
+    y: length,
+    w: length,
+    h: length,
+    rot: float,
+    ix: length,
+    iy: length,
+    iw: length,
+    ih: length,
+    radius: length,
+    filled: bool,
+    selected: bool,
+    drop: bool,
+}
+
+// a cell of a layout card's mini preview (card px)
+export struct ClMini {
+    x: length,
+    y: length,
+    w: length,
+    h: length,
+    rot: float,
+    r: length,
+    ix: length,
+    iy: length,
+    iw: length,
+    ih: length,
+    ir: length,
+    free: bool,
+}
+
+export struct ClTemplate {
+    id: string,
+    label: string,
+    w: length,
+    h: length,
+    cells: [ClMini],
+    active: bool,
+}
+
+export struct ClAspect {
+    key: string,
+    label: string,
+    w: length,
+    h: length,
+    active: bool,
+}
+
+export struct ClGradient {
+    id: string,
+    angle: float,
+    a: color,
+    b: color,
+    c: color,
+    // position of b (0…1)
+    mid: float,
+    active: bool,
+}
+
+export struct ClPhoto {
+    thumb: image,
+    has-thumb: bool,
+    used: bool,
+}
+
+export global CollageState {
+    in property <bool> has-photos;
+    in property <image> preview;
+    // the canvas on the stage
+    in property <length> canvas-x;
+    in property <length> canvas-y;
+    in property <length> canvas-w;
+    in property <length> canvas-h;
+    in property <[ClCell]> cells;
+    in property <[EdLayerVis]> layers;
+    in property <bool> guide-x;
+    in property <bool> guide-y;
+    in property <bool> can-undo;
+    in property <bool> can-redo;
+    in property <string> tab: "layout";
+    in property <int> count: 4;
+    in property <int> photo-count;
+    in property <[ClTemplate]> templates;
+    in property <bool> free-template;
+    in property <[ClAspect]> aspects;
+    in property <float> gap: 24;
+    in property <float> padding: 24;
+    in property <float> radius: 12;
+    in property <string> bg-kind: "solid";
+    in property <color> bg-color: #ffffff;
+    in property <[ClGradient]> gradients;
+    in property <float> blur: 40;
+    in property <string> long-side: "3000";
+    in property <string> size-text;
+    in property <[ClPhoto]> photos;
+    // the selected cell's toolbar
+    in property <bool> tools;
+    in property <float> zoom: 100;
+    in property <length> tools-x;
+    in property <length> tools-y;
+    in property <bool> show-hint;
+    // photo dragged to swap / from the pool
+    in property <bool> ghost;
+    in property <image> ghost-img;
+    in property <length> ghost-x;
+    in property <length> ghost-y;
+    // save popover
+    in property <bool> filled;
+    in property <bool> export-open;
+    in property <string> default-name;
+    in property <string> target-label;
+    in property <string> format: "jpg";
+    in property <float> quality: 92;
+    in property <bool> exporting;
+    in property <float> progress;
+    in property <string> progress-label;
+
+    callback undo();
+    callback redo();
+    callback new-collage();
+    // add photos to the pool (picker); pick-for(cell) replaces one cell's photo
+    callback pick();
+    callback pick-for(int);
+    callback set-tab(string);
+    callback set-count(int);
+    callback set-template(string);
+    callback shuffle();
+    callback set-aspect(string);
+    callback set-gap(float);
+    callback set-padding(float);
+    callback set-radius(float);
+    callback set-bg-kind(string);
+    callback set-bg-color(color);
+    callback set-gradient(string);
+    callback set-blur(float);
+    callback set-long-side(string);
+    callback place(int);
+    callback remove-photo(int);
+    // a pool photo dragged over / dropped on the stage (window coordinates)
+    callback pool-drag(int, length, length);
+    callback pool-drop(int, length, length);
+    callback set-zoom(float);
+    callback recenter();
+    callback clear-cell();
+    callback delete-selected();
+    callback escape();
+    // stage pointer (stage px)
+    callback resized(length, length, length, length);
+    callback press(length, length);
+    callback drag(length, length);
+    callback release();
+    callback wheel(length, length, float);
+    callback double-click(length, length);
+    callback toggle-export();
+    callback change-target();
+    callback set-format(string);
+    callback set-quality(float);
+    callback save(string);
+}
+
+component Chip inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> danger;
+    callback clicked();
+    width: 32px;
+    height: 32px;
+    border-radius: 11px;
+    background: ta.has-hover ? Theme.surface-3 : transparent;
+    Image { source: root.icon; width: 16px; height: 16px; colorize: ta.has-hover ? (root.danger ? Theme.danger : Theme.text) : Theme.text-dim; }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+    if ta.has-hover: Rectangle {
+        y: -30px;
+        x: (parent.width - self.width) / 2;
+        width: tip.preferred-width + 16px;
+        height: 24px;
+        border-radius: 8px;
+        background: Theme.bg-elev-2;
+        border-width: 1px;
+        border-color: Theme.border;
+        tip := Text { text: root.label; font-size: 11px; color: Theme.text; }
+    }
+}
+
+// compact slider of the cell toolbar (1.x Slider, no label)
+component MiniSlider inherits Rectangle {
+    in property <float> value;
+    in property <float> minimum;
+    in property <float> maximum;
+    callback changed(float);
+    height: 24px;
+    property <float> f: Math.clamp((root.value - root.minimum) / Math.max(0.0001, root.maximum - root.minimum), 0, 1);
+    Rectangle { x: 6px; width: parent.width - 12px; height: 4px; border-radius: 2px; background: Theme.surface-3; }
+    Rectangle { x: 6px; width: (parent.width - 12px) * root.f; height: 4px; border-radius: 2px; background: Theme.accent; }
+    Rectangle {
+        x: 6px + (parent.width - 12px) * root.f - 7px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: #ffffff;
+        drop-shadow-blur: 4px;
+        drop-shadow-color: #00000059;
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        function set-from(px: length) {
+            let f = Math.clamp((px - 6px) / Math.max(1px, self.width - 12px), 0, 1);
+            root.changed(Math.round(root.minimum + f * (root.maximum - root.minimum)));
+        }
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                self.set-from(self.mouse-x);
+            }
+        }
+        moved => { self.set-from(self.mouse-x); }
+    }
+}
+
+component Stage inherits Rectangle {
+    callback pressed();
+    clip: true;
+    function report() {
+        CollageState.resized(self.width, self.height, self.absolute-position.x, self.absolute-position.y);
+    }
+    changed width => { self.report(); }
+    changed height => { self.report(); }
+    init => { self.report(); }
+    // the canvas with its shadow
+    Rectangle {
+        x: CollageState.canvas-x;
+        y: CollageState.canvas-y;
+        width: CollageState.canvas-w;
+        height: CollageState.canvas-h;
+        background: #ffffff10;
+        drop-shadow-blur: 60px;
+        drop-shadow-offset-y: 24px;
+        drop-shadow-color: #000000b0;
+        Image { width: parent.width; height: parent.height; source: CollageState.preview; image-fit: fill; }
+    }
+    // cells: selection ring, the empty-cell button, the swap grip
+    for c in CollageState.cells: Rectangle {
+        property <float> cos: Math.cos(c.rot * 1deg);
+        property <float> sin: Math.sin(c.rot * 1deg);
+        property <length> dx: ta.mouse-x - (c.x + c.w / 2);
+        property <length> dy: ta.mouse-y - (c.y + c.h / 2);
+        property <length> u: self.dx * self.cos + self.dy * self.sin + c.w / 2;
+        property <length> v: -self.dx * self.sin + self.dy * self.cos + c.h / 2;
+        property <bool> hovered: ta.has-hover && self.u >= 0 && self.v >= 0 && self.u <= c.w && self.v <= c.h;
+        x: c.x;
+        y: c.y;
+        width: c.w;
+        height: c.h;
+        transform-rotation: c.rot * 1deg;
+        Rectangle {
+            x: c.ix;
+            y: c.iy;
+            width: c.iw;
+            height: c.ih;
+            border-radius: c.radius;
+            background: c.drop ? Theme.accent.with-alpha(0.28) : !c.filled && parent.hovered ? #0000000f : transparent;
+            border-width: c.selected || c.drop ? 3px : !c.filled ? 2px : 0px;
+            border-color: c.selected || c.drop ? Theme.accent : #00000026;
+            animate background { duration: Motion.fast; }
+            if !c.filled: VerticalLayout {
+                alignment: center;
+                spacing: 6px;
+                HorizontalLayout { alignment: center; Image { source: Icons.plus; width: 24px; height: 24px; colorize: #00000073; } }
+                if c.iw > 110px: Text { text: I18n.t("collage.cell.empty", I18n.rev); font-size: 11px; font-weight: 500; color: #00000073; horizontal-alignment: center; }
+            }
+        }
+        if c.filled && (c.selected || self.hovered): Rectangle {
+            x: c.ix + 8px;
+            y: c.iy + 8px;
+            width: 32px;
+            height: 32px;
+            border-radius: 16px;
+            background: #0000008c;
+            Image { source: CIcons.move; width: 16px; height: 16px; colorize: #ffffff; }
+        }
+    }
+    // text layers, clipped to the canvas
+    Rectangle {
+        x: CollageState.canvas-x;
+        y: CollageState.canvas-y;
+        width: CollageState.canvas-w;
+        height: CollageState.canvas-h;
+        clip: true;
+        LayerImages {
+            width: parent.width;
+            height: parent.height;
+            layers: CollageState.layers;
+            ox: CollageState.canvas-x;
+            oy: CollageState.canvas-y;
+        }
+        if CollageState.guide-x: Rectangle { x: parent.width / 2; width: 1.25px; background: Theme.accent; }
+        if CollageState.guide-y: Rectangle { y: parent.height / 2; height: 1.25px; background: Theme.accent; }
+    }
+    LayerFrames { width: root.width; height: root.height; layers: CollageState.layers; }
+    ta := TouchArea {
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                root.pressed();
+                CollageState.press(self.mouse-x, self.mouse-y);
+            }
+            if e.kind == PointerEventKind.up && e.button == PointerEventButton.left {
+                CollageState.release();
+            }
+        }
+        moved => { CollageState.drag(self.mouse-x, self.mouse-y); }
+        double-clicked => { CollageState.double-click(self.mouse-x, self.mouse-y); }
+        scroll-event(e) => {
+            CollageState.wheel(self.mouse-x, self.mouse-y, e.delta-y / 1px);
+            accept
+        }
+    }
+    if CollageState.show-hint: Text {
+        x: 0;
+        y: CollageState.canvas-y + CollageState.canvas-h + 18px;
+        width: root.width;
+        text: I18n.t("collage.cell.hint", I18n.rev);
+        font-size: 11px;
+        color: Theme.text-faint;
+        horizontal-alignment: center;
+    }
+    // the selected cell's tools
+    if CollageState.tools && !CollageState.ghost: Rectangle {
+        x: CollageState.tools-x;
+        y: CollageState.tools-y;
+        width: tl.preferred-width;
+        height: 44px;
+        border-radius: 16px;
+        background: Theme.glass;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 20px;
+        drop-shadow-color: Theme.shadow;
+        TouchArea { }
+        tl := HorizontalLayout {
+            padding: 6px;
+            spacing: 4px;
+            VerticalLayout { alignment: center; Rectangle { width: 32px; height: 32px; Image { source: VIcons.zoom-in; width: 16px; height: 16px; colorize: Theme.text-faint; } } }
+            VerticalLayout { alignment: center; MiniSlider { width: 112px; value: CollageState.zoom; minimum: 100; maximum: 400; changed(v) => { CollageState.set-zoom(v); } } }
+            VerticalLayout { alignment: center; Rectangle { width: 9px; Rectangle { width: 1px; height: 20px; background: Theme.border; } } }
+            Chip { icon: CIcons.crosshair; label: I18n.t("collage.cell.reset", I18n.rev); clicked => { CollageState.recenter(); } }
+            Chip { icon: Icons.refresh-cw; label: I18n.t("collage.cell.replace", I18n.rev); clicked => { CollageState.pick-for(-1); } }
+            Chip { icon: Icons.trash-2; label: I18n.t("collage.cell.clear", I18n.rev); danger: true; clicked => { CollageState.clear-cell(); } }
+        }
+    }
+}
+
+// the swap / pool drag ghost (window coordinates)
+component Ghost inherits Rectangle {
+    width: 120px;
+    height: 120px;
+    border-radius: 16px;
+    border-width: 2px;
+    border-color: #ffffff;
+    clip: true;
+    drop-shadow-blur: 30px;
+    drop-shadow-color: #000000b3;
+    Image { width: parent.width; height: parent.height; source: CollageState.ghost-img; image-fit: cover; }
+    Rectangle { background: #00000033; }
+    Image { source: CIcons.image-plus; width: 24px; height: 24px; colorize: #ffffff; }
+}
+
+component TemplateCard inherits Rectangle {
+    in property <ClTemplate> t;
+    height: 140px;
+    border-radius: 16px;
+    border-width: root.t.active ? 2px : 1px;
+    border-color: root.t.active ? Theme.accent : Theme.border;
+    background: root.t.active ? Theme.accent.with-alpha(0.14) : ta.has-hover ? Theme.surface-2 : Theme.surface;
+    animate background { duration: Motion.fast; }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: 10px + (100px - self.height) / 2;
+        width: root.t.w;
+        height: root.t.h;
+        border-radius: 6px;
+        background: #ffffffe6;
+        clip: true;
+        for m[i] in root.t.cells: Rectangle {
+            x: m.x;
+            y: m.y;
+            width: m.w;
+            height: m.h;
+            transform-rotation: m.rot * 1deg;
+            border-radius: m.r;
+            background: m.free ? #ffffff : transparent;
+            drop-shadow-blur: m.free ? 3px : 0px;
+            drop-shadow-color: #00000059;
+            Rectangle {
+                x: m.ix;
+                y: m.iy;
+                width: m.iw;
+                height: m.ih;
+                border-radius: m.ir;
+                background: @linear-gradient(135deg, Theme.accent.mix(#ffffff, 0.85 - Math.mod(i, 4) * 0.12) 0%, Theme.accent-2.mix(#ffffff, 0.7 - Math.mod(i, 3) * 0.14) 100%);
+            }
+        }
+    }
+    Text {
+        y: parent.height - 28px;
+        width: parent.width;
+        text: root.t.label;
+        font-size: 12px;
+        font-weight: 500;
+        color: root.t.active ? Theme.text : Theme.text-dim;
+        horizontal-alignment: center;
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { CollageState.set-template(root.t.id); } }
+}
+
+component CountBtn inherits Rectangle {
+    in property <image> icon;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    opacity: root.enabled ? 1 : 0.3;
+    background: ta.has-hover && root.enabled ? Theme.surface-3 : Theme.surface-2;
+    Image { source: root.icon; width: 16px; height: 16px; colorize: Theme.text; }
+    ta := TouchArea { enabled: root.enabled; mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component LayoutPanel inherits VerticalLayout {
+    spacing: 24px;
+    Rectangle {
+        height: 64px;
+        border-radius: 16px;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.surface;
+        HorizontalLayout {
+            padding: 12px;
+            spacing: 4px;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Heading { text: I18n.t("collage.cells", I18n.rev).to-uppercase(); }
+                Text { text: I18n.t1("common.photos", "n", CollageState.photo-count, I18n.rev); font-size: 12px; color: Theme.text-dim; }
+            }
+            VerticalLayout { alignment: center; CountBtn { icon: Icons.minus; enabled: CollageState.count > 2; clicked => { CollageState.set-count(CollageState.count - 1); } } }
+            Text { width: 36px; text: CollageState.count; font-family: Theme.font-display; font-size: 24px; font-weight: 700; color: Theme.text; horizontal-alignment: center; vertical-alignment: center; }
+            VerticalLayout { alignment: center; CountBtn { icon: Icons.plus; enabled: CollageState.count < 9; clicked => { CollageState.set-count(CollageState.count + 1); } } }
+        }
+    }
+    VerticalLayout {
+        spacing: 10px;
+        HorizontalLayout {
+            height: 32px;
+            Heading { text: I18n.t1("collage.suggested", "n", CollageState.count, I18n.rev).to-uppercase(); vertical-alignment: center; horizontal-stretch: 1; }
+            if CollageState.free-template: Button {
+                text: I18n.t("collage.shuffle", I18n.rev);
+                icon: CIcons.shuffle;
+                has-icon: true;
+                size: ButtonSize.sm;
+                variant: ButtonVariant.ghost;
+                clicked => { CollageState.shuffle(); }
+            }
+        }
+        grid := Rectangle {
+            property <length> cw: (self.width - 8px) / 2;
+            height: Math.ceil(CollageState.templates.length / 2) * 148px - 8px;
+            for t[i] in CollageState.templates: TemplateCard {
+                x: Math.mod(i, 2) * (grid.cw + 8px);
+                y: Math.floor(i / 2) * 148px;
+                width: grid.cw;
+                t: t;
+            }
+        }
+    }
+    VerticalLayout {
+        spacing: 10px;
+        Heading { text: I18n.t("collage.aspect", I18n.rev).to-uppercase(); }
+        ag := Rectangle {
+            property <length> cw: (self.width - 12px) / 3;
+            height: Math.ceil(CollageState.aspects.length / 3) * 70px - 6px;
+            for a[i] in CollageState.aspects: Rectangle {
+                x: Math.mod(i, 3) * (ag.cw + 6px);
+                y: Math.floor(i / 3) * 70px;
+                width: ag.cw;
+                height: 64px;
+                border-radius: 12px;
+                background: a.active ? Theme.surface-3 : ata.has-hover ? Theme.surface-2 : transparent;
+                border-width: a.active ? 1px : 0px;
+                border-color: Theme.accent.with-alpha(0.55);
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 6px;
+                    HorizontalLayout {
+                        alignment: center;
+                        Rectangle { width: 24px; height: 24px; Rectangle { width: a.w; height: a.h; border-radius: 3px; border-width: 1.5px; border-color: a.active || ata.has-hover ? Theme.text : Theme.text-dim; } }
+                    }
+                    Text { text: a.label; font-size: 11px; font-weight: 500; color: a.active || ata.has-hover ? Theme.text : Theme.text-dim; horizontal-alignment: center; }
+                }
+                ata := TouchArea { mouse-cursor: pointer; clicked => { CollageState.set-aspect(a.key); } }
+            }
+        }
+    }
+}
+
+component StylePanel inherits VerticalLayout {
+    spacing: 24px;
+    VerticalLayout {
+        spacing: 12px;
+        EdSliderRow {
+            label: I18n.t("collage.gap", I18n.rev);
+            value-text: Math.round(CollageState.gap);
+            value: CollageState.gap;
+            minimum: 0;
+            maximum: 100;
+            origin: 24;
+            changed(v) => { CollageState.set-gap(v); }
+            reset => { CollageState.set-gap(24); }
+        }
+        EdSliderRow {
+            label: I18n.t("collage.padding", I18n.rev);
+            value-text: Math.round(CollageState.padding);
+            value: CollageState.padding;
+            minimum: 0;
+            maximum: 180;
+            origin: 24;
+            changed(v) => { CollageState.set-padding(v); }
+            reset => { CollageState.set-padding(24); }
+        }
+        EdSliderRow {
+            label: I18n.t("collage.radius", I18n.rev);
+            value-text: Math.round(CollageState.radius);
+            value: CollageState.radius;
+            minimum: 0;
+            maximum: 140;
+            origin: 12;
+            changed(v) => { CollageState.set-radius(v); }
+            reset => { CollageState.set-radius(12); }
+        }
+    }
+    VerticalLayout {
+        spacing: 10px;
+        Heading { text: I18n.t("collage.background", I18n.rev).to-uppercase(); }
+        Segmented {
+            fill: true;
+            value: CollageState.bg-kind;
+            options: [
+                { value: "solid", label: I18n.t("collage.bg.solid", I18n.rev) },
+                { value: "gradient", label: I18n.t("collage.bg.gradient", I18n.rev) },
+                { value: "blur", label: I18n.t("collage.bg.blur", I18n.rev) },
+            ];
+            changed-value(v) => { CollageState.set-bg-kind(v); }
+        }
+        if CollageState.bg-kind == "solid": Swatches {
+            colors: [#ffffff, #f5f0e8, #111114, #1f2937, #fde2e4, #dbeafe, #dcfce7, #fef9c3];
+            value: CollageState.bg-color;
+            picked(c) => { CollageState.set-bg-color(c); }
+        }
+        if CollageState.bg-kind == "gradient": gg := Rectangle {
+            property <length> cw: (self.width - 24px) / 4;
+            height: Math.ceil(CollageState.gradients.length / 4) * (self.cw + 8px) - 8px;
+            for g[i] in CollageState.gradients: Rectangle {
+                x: Math.mod(i, 4) * (gg.cw + 8px);
+                y: Math.floor(i / 4) * (gg.cw + 8px) - (gta.has-hover ? 3px : 0px);
+                animate y { duration: Motion.fast; }
+                width: gg.cw;
+                height: gg.cw;
+                border-radius: 12px;
+                background: @linear-gradient(g.angle * 1deg, g.a 0%, g.b g.mid * 100%, g.c 100%);
+                border-width: g.active ? 2px : 0px;
+                border-color: Theme.accent;
+                if g.active: Image { source: Icons.check; width: 16px; height: 16px; colorize: #ffffff; }
+                gta := TouchArea { mouse-cursor: pointer; clicked => { CollageState.set-gradient(g.id); } }
+            }
+        }
+        if CollageState.bg-kind == "blur": EdSliderRow {
+            label: I18n.t("collage.blurAmount", I18n.rev);
+            value-text: Math.round(CollageState.blur);
+            value: CollageState.blur;
+            minimum: 8;
+            maximum: 120;
+            origin: 40;
+            changed(v) => { CollageState.set-blur(v); }
+            reset => { CollageState.set-blur(40); }
+        }
+    }
+    VerticalLayout {
+        spacing: 10px;
+        Heading { text: I18n.t("collage.resolution", I18n.rev).to-uppercase(); }
+        Segmented {
+            fill: true;
+            value: CollageState.long-side;
+            options: [
+                { value: "2400", label: "2400px" },
+                { value: "3000", label: "3000px" },
+                { value: "4000", label: "4000px" },
+            ];
+            changed-value(v) => { CollageState.set-long-side(v); }
+        }
+        Text { text: CollageState.size-text; font-size: 12px; color: Theme.text-faint; }
+    }
+}
+
+component PhotoTile inherits Rectangle {
+    in property <ClPhoto> p;
+    in property <int> index;
+    property <bool> far;
+    border-radius: 12px;
+    clip: true;
+    background: Theme.surface-2;
+    if root.p.has-thumb: Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.p.thumb;
+        image-fit: cover;
+        opacity: root.p.used || ta.has-hover ? 1 : 0.8;
+    }
+    if root.p.used: Rectangle { border-radius: 12px; border-width: 2px; border-color: Theme.accent.with-alpha(0.7); }
+    if root.p.used: Rectangle {
+        x: 4px;
+        y: parent.height - 22px;
+        width: ut.preferred-width + 12px;
+        height: 18px;
+        border-radius: 6px;
+        background: #00000099;
+        ut := Text { text: I18n.t("collage.inUse", I18n.rev); font-size: 10px; font-weight: 500; color: #ffffff; }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                root.far = false;
+            }
+            if e.kind == PointerEventKind.up && e.button == PointerEventButton.left && root.far {
+                CollageState.pool-drop(root.index, root.absolute-position.x + self.mouse-x, root.absolute-position.y + self.mouse-y);
+            }
+        }
+        moved => {
+            if !self.pressed {
+                return;
+            }
+            if !root.far && (Math.abs(self.mouse-x - self.pressed-x) > 6px || Math.abs(self.mouse-y - self.pressed-y) > 6px) {
+                root.far = true;
+            }
+            if root.far {
+                CollageState.pool-drag(root.index, root.absolute-position.x + self.mouse-x, root.absolute-position.y + self.mouse-y);
+            }
+        }
+        clicked => {
+            if !root.far {
+                CollageState.place(root.index);
+            }
+        }
+    }
+    if ta.has-hover: Rectangle {
+        x: parent.width - 28px;
+        y: 4px;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        background: xta.has-hover ? Theme.danger : #00000099;
+        Image { source: Icons.x; width: 14px; height: 14px; colorize: #ffffff; }
+        xta := TouchArea { mouse-cursor: pointer; clicked => { CollageState.remove-photo(root.index); } }
+    }
+}
+
+component PhotosPanel inherits VerticalLayout {
+    spacing: 20px;
+    Button {
+        text: I18n.t("collage.add", I18n.rev);
+        icon: CIcons.image-plus;
+        has-icon: true;
+        variant: ButtonVariant.primary;
+        size: ButtonSize.lg;
+        clicked => { CollageState.pick(); }
+    }
+    VerticalLayout {
+        spacing: 10px;
+        Heading { text: I18n.t1("common.photos", "n", CollageState.photo-count, I18n.rev).to-uppercase(); }
+        pg := Rectangle {
+            property <length> cw: (self.width - 16px) / 3;
+            height: Math.ceil(CollageState.photos.length / 3) * (self.cw + 8px) - 8px;
+            for p[i] in CollageState.photos: PhotoTile {
+                x: Math.mod(i, 3) * (pg.cw + 8px);
+                y: Math.floor(i / 3) * (pg.cw + 8px);
+                width: pg.cw;
+                height: pg.cw;
+                p: p;
+                index: i;
+            }
+        }
+    }
+    Text { text: I18n.t("collage.photosHint", I18n.rev); font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+}
+
+component TextTab inherits VerticalLayout {
+    spacing: 20px;
+    TextLayersPanel { }
+    Text { text: I18n.t("collage.textHint", I18n.rev); font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+}
+
+component SavePopover inherits Rectangle {
+    width: 320px;
+    height: lay.preferred-height;
+    border-radius: 18px;
+    background: Theme.bg-elev;
+    border-width: 1px;
+    border-color: Theme.border;
+    drop-shadow-blur: 30px;
+    drop-shadow-color: Theme.shadow;
+    drop-shadow-offset-y: 10px;
+    TouchArea { }
+    lay := VerticalLayout {
+        padding: 16px;
+        spacing: 16px;
+        VerticalLayout {
+            spacing: 6px;
+            Text { text: I18n.t("collage.fileName", I18n.rev); font-size: 13px; font-weight: 500; color: Theme.text-dim; }
+            name := TextField { placeholder: CollageState.default-name; accepted => { CollageState.save(self.text); } }
+        }
+        VerticalLayout {
+            spacing: 6px;
+            Text { text: I18n.t("collage.saveTo", I18n.rev); font-size: 13px; font-weight: 500; color: Theme.text-dim; }
+            Rectangle {
+                height: 44px;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: tta.has-hover ? Theme.surface-2 : Theme.surface;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 10px;
+                    VerticalLayout { alignment: center; Image { source: PIcons.folder-open; width: 16px; height: 16px; colorize: Theme.accent; } }
+                    Text { text: CollageState.target-label != "" ? CollageState.target-label : I18n.t("collage.noTarget", I18n.rev); font-size: 14px; color: Theme.text; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                    Text { text: I18n.t("collage.change", I18n.rev); font-size: 12px; font-weight: 500; color: Theme.accent; vertical-alignment: center; }
+                }
+                tta := TouchArea { mouse-cursor: pointer; clicked => { CollageState.change-target(); } }
+            }
+        }
+        VerticalLayout {
+            spacing: 6px;
+            Text { text: I18n.t("photo.format", I18n.rev); font-size: 13px; font-weight: 500; color: Theme.text-dim; }
+            Segmented {
+                fill: true;
+                value: CollageState.format;
+                options: [
+                    { value: "jpg", label: "JPG" },
+                    { value: "png", label: "PNG" },
+                    { value: "webp", label: "WebP" },
+                ];
+                changed-value(v) => { CollageState.set-format(v); }
+            }
+        }
+        Rectangle {
+            height: ql.preferred-height;
+            opacity: CollageState.format == "png" ? 0.35 : 1;
+            ql := Slider {
+                label: I18n.t("photo.quality", I18n.rev);
+                value-text: Math.round(CollageState.quality);
+                value: CollageState.quality;
+                minimum: 40;
+                maximum: 100;
+                changed-value(v) => { CollageState.set-quality(v); }
+            }
+            if CollageState.format == "png": TouchArea { }
+        }
+        Text { text: CollageState.size-text; font-size: 12px; color: Theme.text-faint; }
+        if CollageState.exporting: VerticalLayout {
+            spacing: 8px;
+            HorizontalLayout {
+                Text { text: CollageState.progress-label; font-size: 12px; color: Theme.text-dim; horizontal-stretch: 1; }
+                Text { text: Math.round(CollageState.progress * 100) + "%"; font-size: 12px; color: Theme.text-dim; }
+            }
+            ProgressBar { value: CollageState.progress; }
+        }
+        if !CollageState.exporting: Button {
+            text: I18n.t("common.save", I18n.rev);
+            icon: Icons.download;
+            has-icon: true;
+            variant: ButtonVariant.primary;
+            clicked => { CollageState.save(name.text); }
+        }
+    }
+}
+
+// floating photo cards behind the empty state
+component EmptyCollage inherits Rectangle {
+    VerticalLayout {
+        alignment: center;
+        spacing: 0px;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 320px;
+                height: 192px;
+                for c[i] in [
+                    { x: -150px, y: -30px, r: -14, a: #8b5cf6, b: #d946ef },
+                    { x: 140px, y: -50px, r: 11, a: #fb923c, b: #ec4899 },
+                    { x: -110px, y: 90px, r: 8, a: #38bdf8, b: #6366f1 },
+                    { x: 120px, y: 80px, r: -9, a: #34d399, b: #14b8a6 },
+                ]: Rectangle {
+                    x: (parent.width - self.width) / 2 + c.x * 0.75;
+                    y: (parent.height - self.height) / 2 + c.y * 0.6;
+                    width: 96px;
+                    height: 112px;
+                    border-radius: 12px;
+                    background: #ffffff;
+                    transform-rotation: c.r * 1deg;
+                    drop-shadow-blur: 30px;
+                    drop-shadow-offset-y: 14px;
+                    drop-shadow-color: #00000099;
+                    Rectangle {
+                        x: 6px;
+                        y: 6px;
+                        width: parent.width - 12px;
+                        height: parent.height - 26px;
+                        border-radius: 8px;
+                        background: @linear-gradient(135deg, c.a 0%, c.b 100%);
+                    }
+                }
+                Rectangle {
+                    width: 80px;
+                    height: 80px;
+                    border-radius: 24px;
+                    background: @linear-gradient(135deg, Theme.accent 0%, Theme.accent-2 100%);
+                    drop-shadow-blur: 30px;
+                    drop-shadow-offset-y: 12px;
+                    drop-shadow-color: Theme.accent.with-alpha(0.6);
+                    Image { source: Icons.layout-grid; width: 36px; height: 36px; colorize: #ffffff; }
+                }
+            }
+        }
+        Rectangle { height: 40px; }
+        Text { text: I18n.t("collage.empty.title", I18n.rev); font-family: Theme.font-display; font-size: 30px; font-weight: 700; color: Theme.text; horizontal-alignment: center; }
+        Rectangle { height: 12px; }
+        HorizontalLayout {
+            alignment: center;
+            Text { width: Math.min(448px, root.width - 48px); text: I18n.t("collage.empty.body", I18n.rev); font-size: 14px; color: Theme.text-dim; wrap: word-wrap; horizontal-alignment: center; }
+        }
+        Rectangle { height: 32px; }
+        HorizontalLayout {
+            alignment: center;
+            Button {
+                text: I18n.t("collage.pick", I18n.rev);
+                icon: CIcons.image-plus;
+                has-icon: true;
+                variant: ButtonVariant.primary;
+                size: ButtonSize.lg;
+                clicked => { CollageState.pick(); }
+            }
+        }
+    }
+}
+
+export component CollagePage inherits Rectangle {
+    in property <length> window-width;
+    fs := FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.modifiers.control && !e.modifiers.alt {
+                if e.text == "z" || e.text == "Z" {
+                    if e.modifiers.shift { CollageState.redo(); } else { CollageState.undo(); }
+                    return accept;
+                }
+                if e.text == "y" || e.text == "Y" { CollageState.redo(); return accept; }
+                return reject;
+            }
+            if e.text == Key.Escape { CollageState.escape(); return accept; }
+            if e.text == Key.Delete || e.text == Key.Backspace { CollageState.delete-selected(); return accept; }
+            reject
+        }
+    }
+    if !CollageState.has-photos: EmptyCollage { }
+    if CollageState.has-photos: HorizontalLayout {
+        VerticalLayout {
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                padding-left: root.window-width >= 640px ? 24px : 16px;
+                padding-right: root.window-width >= 640px ? 24px : 16px;
+                padding-top: 12px;
+                spacing: 8px;
+                height: 52px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 38px;
+                        width: tools.preferred-width;
+                        border-radius: 12px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: Theme.surface;
+                        tools := HorizontalLayout {
+                            padding: 2px;
+                            spacing: 2px;
+                            IconButton { size: IconButtonSize.sm; icon: EIcons.undo; label: I18n.t("common.undo", I18n.rev) + " (Ctrl+Z)"; enabled: CollageState.can-undo; clicked => { CollageState.undo(); fs.focus(); } }
+                            IconButton { size: IconButtonSize.sm; icon: EIcons.redo; label: I18n.t("common.redo", I18n.rev) + " (Ctrl+Shift+Z)"; enabled: CollageState.can-redo; clicked => { CollageState.redo(); fs.focus(); } }
+                            VerticalLayout { alignment: center; Rectangle { width: 1px; height: 20px; background: Theme.border; } }
+                            IconButton { size: IconButtonSize.sm; icon: EIcons.reset; label: I18n.t("collage.new", I18n.rev); clicked => { CollageState.new-collage(); } }
+                        }
+                    }
+                }
+                Text { text: I18n.t("collage.subtitle", I18n.rev); font-size: 14px; color: Theme.text-dim; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: I18n.t("collage.export", I18n.rev);
+                        icon: Icons.download;
+                        has-icon: true;
+                        variant: ButtonVariant.primary;
+                        enabled: CollageState.filled;
+                        clicked => { CollageState.toggle-export(); }
+                    }
+                }
+            }
+            Stage { vertical-stretch: 1; pressed => { fs.focus(); } }
+        }
+        Rectangle {
+            width: 360px;
+            background: Theme.bg-elev;
+            Rectangle { x: 0; width: 1px; background: Theme.border; }
+            VerticalLayout {
+                padding-top: 12px;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 6px;
+                    ToolTab { icon: Icons.layout-grid; text: I18n.t("collage.tab.layout", I18n.rev); selected: CollageState.tab == "layout"; clicked => { CollageState.set-tab("layout"); fs.focus(); } }
+                    ToolTab { icon: Icons.palette; text: I18n.t("collage.tab.style", I18n.rev); selected: CollageState.tab == "style"; clicked => { CollageState.set-tab("style"); fs.focus(); } }
+                    ToolTab { icon: Icons.images; text: I18n.t("collage.tab.photos", I18n.rev); selected: CollageState.tab == "photos"; clicked => { CollageState.set-tab("photos"); fs.focus(); } }
+                    ToolTab { icon: EIcons.type; text: I18n.t("collage.tab.text", I18n.rev); selected: CollageState.tab == "text"; clicked => { CollageState.set-tab("text"); fs.focus(); } }
+                }
+                Flickable {
+                    vertical-stretch: 1;
+                    content-height: panel.preferred-height;
+                    panel := VerticalLayout {
+                        width: parent.width;
+                        padding: 16px;
+                        padding-top: 14px;
+                        padding-bottom: 40px;
+                        if CollageState.tab == "layout": LayoutPanel { }
+                        if CollageState.tab == "style": StylePanel { }
+                        if CollageState.tab == "photos": PhotosPanel { }
+                        if CollageState.tab == "text": TextTab { }
+                    }
+                }
+            }
+        }
+    }
+    if CollageState.export-open: TouchArea {
+        clicked => {
+            if !CollageState.exporting { CollageState.toggle-export(); }
+        }
+    }
+    if CollageState.export-open && CollageState.has-photos: SavePopover {
+        x: root.width - self.width - 384px;
+        y: 60px;
+    }
+    if CollageState.ghost: Ghost {
+        x: CollageState.ghost-x - root.absolute-position.x - self.width / 2;
+        y: CollageState.ghost-y - root.absolute-position.y - self.height / 2;
+    }
+}

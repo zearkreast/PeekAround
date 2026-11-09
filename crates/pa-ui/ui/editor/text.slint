@@ -1,0 +1,495 @@
+// Text layers shared by the photo editor and the collage: the panel (add text, stickers, layer
+// list, the selected layer's controls - TextLayerControls) on the `TextLayers` global, and the
+// layer images / selection frames drawn on a stage.
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
+import { EIcons } from "eicons.slint";
+import { EdSliderRow, Heading, Swatches, Toggle, ToggleHeader, ToolChip } from "parts.slint";
+
+// a text layer on the stage; lengths in stage px, (x, y) is the centre
+export struct EdLayerVis {
+    id: int,
+    image: image,
+    x: length,
+    y: length,
+    w: length,
+    h: length,
+    // the box (text + background padding), centred in the image
+    bw: length,
+    bh: length,
+    rotation: float,
+    opacity: float,
+    selected: bool,
+}
+
+export struct EdLayerRow {
+    id: int,
+    label: string,
+    family: string,
+    color: color,
+    selected: bool,
+}
+
+export struct EdFont {
+    family: string,
+    label: string,
+}
+
+// the selected text layer's properties (opacity in %, sizes in frame px)
+export struct EdText {
+    id: int,
+    text: string,
+    family: string,
+    weight: float,
+    wmin: float,
+    wmax: float,
+    italic: bool,
+    italic-ok: bool,
+    bold: bool,
+    size: float,
+    size-max: float,
+    color: color,
+    align: string,
+    spacing: float,
+    line: float,
+    rotation: float,
+    opacity: float,
+    stroke: bool,
+    stroke-color: color,
+    stroke-width: float,
+    stroke-max: float,
+    shadow: bool,
+    shadow-color: color,
+    shadow-blur: float,
+    shadow-x: float,
+    shadow-y: float,
+    bg: bool,
+    bg-color: color,
+    bg-padding: float,
+    bg-radius: float,
+    bg-max: float,
+}
+
+// the text-layer panel of whichever tool is open (photo editor, collage); Rust: src/editor/text.rs
+export global TextLayers {
+    in property <[EdLayerRow]> rows;
+    in property <[EdFont]> fonts;
+    in property <[string]> stickers;
+    in property <bool> has-sel;
+    in property <EdText> sel;
+    // bumps when the text box should show sel.text again / take the focus
+    in property <int> text-sync;
+    in property <int> focus-text;
+    // "" = a text layer, else the emoji of a sticker
+    callback add-text(string);
+    callback select-layer(int);
+    callback deselect();
+    callback duplicate-layer(int);
+    callback delete-layer(int);
+    callback delete-selected();
+    // layer id, +1 up / −1 down
+    callback restack(int, int);
+    callback text-num(string, float);
+    callback text-str(string, string);
+    callback text-color(string, color);
+    callback text-toggle(string, bool);
+}
+
+// layer images on a stage, offset by (ox, oy) (the parent's position on the stage)
+export component LayerImages inherits Rectangle {
+    in property <[EdLayerVis]> layers;
+    in property <length> ox;
+    in property <length> oy;
+    for l in root.layers: Image {
+        x: l.x - l.w / 2 - root.ox;
+        y: l.y - l.h / 2 - root.oy;
+        width: l.w;
+        height: l.h;
+        source: l.image;
+        image-fit: fill;
+        transform-rotation: l.rotation * 1deg;
+        opacity: l.opacity;
+    }
+}
+
+// selection frame: corner handles resize, the knob above rotates
+export component LayerFrames inherits Rectangle {
+    in property <[EdLayerVis]> layers;
+    for l in root.layers: Rectangle {
+        visible: l.selected;
+        x: l.x - self.width / 2;
+        y: l.y - self.height / 2;
+        width: l.bw + 12px;
+        height: l.bh + 12px;
+        transform-rotation: l.rotation * 1deg;
+        border-width: 1.5px;
+        border-color: Theme.accent;
+        Rectangle { x: parent.width / 2 - 0.75px; y: -26px; width: 1.5px; height: 26px; background: Theme.accent; }
+        Rectangle {
+            x: parent.width / 2 - 6px;
+            y: -32px;
+            width: 12px;
+            height: 12px;
+            border-radius: 6px;
+            background: #ffffff;
+            border-width: 2px;
+            border-color: Theme.accent;
+        }
+        for c in 4: Rectangle {
+            x: (c == 1 || c == 3 ? parent.width : 0px) - 5.5px;
+            y: (c >= 2 ? parent.height : 0px) - 5.5px;
+            width: 11px;
+            height: 11px;
+            border-radius: 5.5px;
+            background: #ffffff;
+            border-width: 2px;
+            border-color: Theme.accent;
+        }
+    }
+}
+
+// the selected layer: text, font, style, sizes, outline, shadow, background (TextLayerControls)
+component TextProps inherits Rectangle {
+    property <EdText> t: TextLayers.sel;
+    property <int> sync: TextLayers.text-sync;
+    property <int> focus-seq: TextLayers.focus-text;
+    property <bool> fonts-open;
+    changed sync => { input.text = TextLayers.sel.text; }
+    changed focus-seq => {
+        input.text = TextLayers.sel.text;
+        input.focus();
+        input.select-all();
+    }
+    init => { input.text = TextLayers.sel.text; }
+    height: lay.preferred-height;
+    border-radius: 22px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface;
+    lay := VerticalLayout {
+        padding: 14px;
+        spacing: 12px;
+        Rectangle {
+            height: Math.max(76px, input.preferred-height + 20px);
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: input.has-focus ? Theme.accent.with-alpha(0.6) : Theme.border;
+            background: Theme.bg-elev;
+            TouchArea { mouse-cursor: MouseCursor.text; clicked => { input.focus(); } }
+            input := TextInput {
+                x: 12px;
+                y: 10px;
+                width: parent.width - 24px;
+                height: parent.height - 20px;
+                single-line: false;
+                wrap: word-wrap;
+                font-size: 14px;
+                color: Theme.text;
+                selection-background-color: Theme.accent.with-alpha(0.45);
+                edited => { TextLayers.text-str("text", self.text); }
+            }
+        }
+        // font picker
+        VerticalLayout {
+            spacing: 6px;
+            Rectangle {
+                height: 40px;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: root.fonts-open ? Theme.accent.with-alpha(0.6) : Theme.border;
+                background: fta.has-hover ? Theme.surface-2 : Theme.bg-elev;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 10px;
+                    spacing: 8px;
+                    Text { text: root.t.family; font-family: root.t.family; font-size: 15px; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                    Image { source: root.fonts-open ? Icons.chevron-up : Icons.chevron-down; width: 16px; height: 16px; colorize: Theme.text-faint; y: (parent.height - self.height) / 2; }
+                }
+                fta := TouchArea { mouse-cursor: pointer; clicked => { root.fonts-open = !root.fonts-open; } }
+            }
+            if root.fonts-open: Rectangle {
+                height: Math.min(260px, TextLayers.fonts.length * 36px + 8px);
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.bg-elev;
+                clip: true;
+                Flickable {
+                    content-height: TextLayers.fonts.length * 36px + 8px;
+                    for f[i] in TextLayers.fonts: Rectangle {
+                        x: 4px;
+                        y: 4px + i * 36px;
+                        width: parent.width - 8px;
+                        height: 36px;
+                        border-radius: 8px;
+                        background: f.family == root.t.family ? Theme.surface-3 : ra.has-hover ? Theme.surface-2 : transparent;
+                        Text { x: 10px; width: parent.width - 20px; text: f.label; font-family: f.family; font-size: 16px; color: Theme.text; vertical-alignment: center; overflow: elide; }
+                        ra := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                TextLayers.text-str("family", f.family);
+                                root.fonts-open = false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            ToolChip { icon: EIcons.align-left; on: root.t.align == "left"; clicked => { TextLayers.text-str("align", "left"); } }
+            ToolChip { icon: EIcons.align-center; on: root.t.align == "center"; clicked => { TextLayers.text-str("align", "center"); } }
+            ToolChip { icon: EIcons.align-right; on: root.t.align == "right"; clicked => { TextLayers.text-str("align", "right"); } }
+            Rectangle { width: 4px; }
+            ToolChip { icon: EIcons.bold; on: root.t.bold; enabled: root.t.wmin != root.t.wmax; clicked => { TextLayers.text-toggle("bold", !root.t.bold); } }
+            ToolChip { icon: EIcons.italic; on: root.t.italic; enabled: root.t.italic-ok; clicked => { TextLayers.text-toggle("italic", !root.t.italic); } }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        VerticalLayout {
+            spacing: 6px;
+            Heading { text: I18n.t("photo.text.ctl.color", I18n.rev).to-uppercase(); }
+            Swatches { value: root.t.color; picked(c) => { TextLayers.text-color("color", c); } }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.size", I18n.rev);
+            value-text: root.t.size;
+            value: root.t.size;
+            minimum: 8;
+            maximum: root.t.size-max;
+            origin: 8;
+            changed(v) => { TextLayers.text-num("size", v); }
+        }
+        if root.t.wmin != root.t.wmax: EdSliderRow {
+            label: I18n.t("photo.text.ctl.weight", I18n.rev);
+            value-text: root.t.weight;
+            value: root.t.weight;
+            minimum: root.t.wmin;
+            maximum: root.t.wmax;
+            origin: root.t.wmin;
+            step: 100;
+            changed(v) => { TextLayers.text-num("weight", v); }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.spacing", I18n.rev);
+            value-text: root.t.spacing;
+            value: root.t.spacing;
+            minimum: -10;
+            maximum: 60;
+            changed(v) => { TextLayers.text-num("spacing", v); }
+            reset => { TextLayers.text-num("spacing", 0); }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.line", I18n.rev);
+            value-text: Math.round(root.t.line * 100) / 100;
+            value: root.t.line;
+            minimum: 0.7;
+            maximum: 2.5;
+            step: 0.05;
+            origin: 1.15;
+            changed(v) => { TextLayers.text-num("line", v); }
+            reset => { TextLayers.text-num("line", 1.15); }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.rotation", I18n.rev);
+            value-text: root.t.rotation + "°";
+            value: root.t.rotation;
+            minimum: -180;
+            maximum: 180;
+            changed(v) => { TextLayers.text-num("rotation", v); }
+            reset => { TextLayers.text-num("rotation", 0); }
+        }
+        EdSliderRow {
+            label: I18n.t("photo.text.ctl.opacity", I18n.rev);
+            value-text: root.t.opacity + "%";
+            value: root.t.opacity;
+            minimum: 0;
+            maximum: 100;
+            origin: 100;
+            changed(v) => { TextLayers.text-num("opacity", v); }
+            reset => { TextLayers.text-num("opacity", 100); }
+        }
+        Rectangle {
+            height: sl.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            sl := VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                ToggleHeader { title: I18n.t("photo.text.ctl.stroke", I18n.rev); on: root.t.stroke; toggled(v) => { TextLayers.text-toggle("stroke", v); } }
+                if root.t.stroke: Swatches { value: root.t.stroke-color; picked(c) => { TextLayers.text-color("stroke.color", c); } }
+                if root.t.stroke: EdSliderRow {
+                    label: I18n.t("photo.text.ctl.width", I18n.rev);
+                    value-text: root.t.stroke-width;
+                    value: root.t.stroke-width;
+                    minimum: 1;
+                    maximum: root.t.stroke-max;
+                    origin: 1;
+                    changed(v) => { TextLayers.text-num("stroke.width", v); }
+                }
+            }
+        }
+        Rectangle {
+            height: shl.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            shl := VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                ToggleHeader { title: I18n.t("photo.text.ctl.shadow", I18n.rev); on: root.t.shadow; toggled(v) => { TextLayers.text-toggle("shadow", v); } }
+                if root.t.shadow: Swatches { value: root.t.shadow-color; picked(c) => { TextLayers.text-color("shadow.color", c); } }
+                if root.t.shadow: EdSliderRow {
+                    label: I18n.t("photo.text.ctl.blur", I18n.rev);
+                    value-text: root.t.shadow-blur;
+                    value: root.t.shadow-blur;
+                    minimum: 0;
+                    maximum: 80;
+                    changed(v) => { TextLayers.text-num("shadow.blur", v); }
+                }
+                if root.t.shadow: EdSliderRow {
+                    label: "X";
+                    value-text: root.t.shadow-x;
+                    value: root.t.shadow-x;
+                    minimum: -40;
+                    maximum: 40;
+                    changed(v) => { TextLayers.text-num("shadow.x", v); }
+                    reset => { TextLayers.text-num("shadow.x", 0); }
+                }
+                if root.t.shadow: EdSliderRow {
+                    label: "Y";
+                    value-text: root.t.shadow-y;
+                    value: root.t.shadow-y;
+                    minimum: -40;
+                    maximum: 40;
+                    changed(v) => { TextLayers.text-num("shadow.y", v); }
+                    reset => { TextLayers.text-num("shadow.y", 0); }
+                }
+            }
+        }
+        Rectangle {
+            height: bgl.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.bg-elev;
+            bgl := VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                ToggleHeader { title: I18n.t("photo.text.ctl.background", I18n.rev); on: root.t.bg; toggled(v) => { TextLayers.text-toggle("bg", v); } }
+                if root.t.bg: Swatches { value: root.t.bg-color; picked(c) => { TextLayers.text-color("bg.color", c); } }
+                if root.t.bg: EdSliderRow {
+                    label: I18n.t("photo.text.ctl.padding", I18n.rev);
+                    value-text: root.t.bg-padding;
+                    value: root.t.bg-padding;
+                    minimum: 0;
+                    maximum: root.t.bg-max;
+                    changed(v) => { TextLayers.text-num("bg.padding", v); }
+                }
+                if root.t.bg: EdSliderRow {
+                    label: I18n.t("photo.text.ctl.radius", I18n.rev);
+                    value-text: root.t.bg-radius;
+                    value: root.t.bg-radius;
+                    minimum: 0;
+                    maximum: root.t.bg-max;
+                    changed(v) => { TextLayers.text-num("bg.radius", v); }
+                }
+            }
+        }
+    }
+}
+
+// add text / stickers, the layer list and the selected layer (panels/TextPanel TextLayersPanel)
+export component TextLayersPanel inherits VerticalLayout {
+    spacing: 20px;
+    Button {
+        text: I18n.t("photo.text.add", I18n.rev);
+        icon: Icons.plus;
+        has-icon: true;
+        variant: ButtonVariant.primary;
+        size: ButtonSize.lg;
+        clicked => { TextLayers.add-text(""); }
+    }
+    VerticalLayout {
+        spacing: 8px;
+        Heading { text: I18n.t("photo.text.stickers", I18n.rev).to-uppercase(); }
+        grid := Rectangle {
+            property <length> cell: self.width / 8;
+            height: Math.ceil(TextLayers.stickers.length / 8) * self.cell;
+            for e[i] in TextLayers.stickers: Rectangle {
+                x: Math.mod(i, 8) * grid.cell;
+                y: Math.floor(i / 8) * grid.cell;
+                width: grid.cell;
+                height: grid.cell;
+                border-radius: 12px;
+                background: sta.has-hover ? Theme.surface-2 : transparent;
+                Text { text: e; font-size: sta.has-hover ? 25px : 21px; animate font-size { duration: Motion.fast; } }
+                sta := TouchArea { mouse-cursor: pointer; clicked => { TextLayers.add-text(e); } }
+            }
+        }
+    }
+    VerticalLayout {
+        spacing: 8px;
+        Heading { text: I18n.t("photo.text.layers", I18n.rev).to-uppercase(); }
+        if TextLayers.rows.length == 0: Rectangle {
+            height: el.preferred-height;
+            border-radius: 16px;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            el := HorizontalLayout {
+                padding: 14px;
+                spacing: 10px;
+                VerticalLayout { alignment: start; Image { source: EIcons.type; width: 16px; height: 16px; colorize: Theme.accent; } }
+                Text { text: I18n.t("photo.text.empty", I18n.rev); font-size: 13px; color: Theme.text-dim; wrap: word-wrap; horizontal-stretch: 1; }
+            }
+        }
+        for r[i] in TextLayers.rows: Rectangle {
+            height: 44px;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: r.selected ? Theme.accent.with-alpha(0.55) : Theme.border;
+            background: r.selected ? Theme.accent.with-alpha(0.12) : rta.has-hover ? Theme.surface-2 : Theme.surface;
+            rta := TouchArea { mouse-cursor: pointer; clicked => { TextLayers.select-layer(r.id); } }
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 4px;
+                spacing: 2px;
+                Text {
+                    text: r.label;
+                    font-family: r.family;
+                    font-size: 15px;
+                    color: r.selected ? Theme.text : Theme.text-dim;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle { width: 14px; height: 14px; border-radius: 7px; background: r.color; border-width: 1px; border-color: #ffffff33; }
+                }
+                Rectangle { width: 4px; }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: Icons.chevron-up; icon-size: 15px; label: I18n.t("photo.text.ctl.up", I18n.rev); enabled: i > 0; clicked => { TextLayers.restack(r.id, 1); } }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: Icons.chevron-down; icon-size: 15px; label: I18n.t("photo.text.ctl.down", I18n.rev); enabled: i < TextLayers.rows.length - 1; clicked => { TextLayers.restack(r.id, -1); } }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: EIcons.copy; icon-size: 15px; label: I18n.t("photo.text.duplicate", I18n.rev); clicked => { TextLayers.duplicate-layer(r.id); } }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { size: IconButtonSize.sm; icon: Icons.trash-2; icon-size: 15px; label: I18n.t("photo.text.delete", I18n.rev); clicked => { TextLayers.delete-layer(r.id); } }
+                }
+            }
+        }
+    }
+    if TextLayers.has-sel: TextProps { }
+}

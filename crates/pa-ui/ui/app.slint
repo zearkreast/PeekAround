@@ -11,10 +11,13 @@ import { PlaceholderPage } from "pages/placeholder.slint";
 // library hub, albums, album, library / folder pages, dialogs
 import { HubPage } from "pages/hub.slint";
 import { FontsPage } from "pages/fonts.slint";
-import { SlideBuilderPage, SlideBuilder, SlideRow, MusicRow, MediaDirRow, MediaTileRow } from "slideshow/builder.slint";
+import { SlideBuilderPage, SlideBuilder, SlideRow, MusicRow } from "slideshow/builder.slint";
+import { MediaPickerDialog, MediaPickerState, MediaDirRow, MediaTileRow } from "components/media_picker.slint";
 import { SlidePlayerOverlay, SlidePlayer } from "slideshow/player.slint";
 import { StageFrame, SlideVis } from "slideshow/stage.slint";
 import { EditorOverlay, EditorState, EdSlider, EdFilter, EdAspect } from "editor/editor.slint";
+import { TextLayers } from "editor/text.slint";
+import { CollagePage, CollageState } from "collage/collage.slint";
 import { AlbumsPage, AlbumPage } from "pages/albums.slint";
 import { LibraryPage } from "pages/library.slint";
 import { HubState, AlbumsState, AlbumState, LibState, FontsState } from "pages/state.slint";
@@ -43,9 +46,9 @@ export { ToastData, ToastKind } from "components/overlays.slint";
 export { ViewerState, VIcons, ActionState, GridInput, DragState }
 export { HubState, AlbumsState, AlbumState, LibState, PIcons, Dlg, JobsState, FontsState }
 export { FontFaceRow, FontFamilyCard, BundledFont } from "pages/state.slint";
-export { SlideBuilder, SlidePlayer, SlideRow, MusicRow, MediaDirRow, MediaTileRow, StageFrame, SlideVis }
+export { SlideBuilder, SlidePlayer, SlideRow, MusicRow, MediaDirRow, MediaTileRow, StageFrame, SlideVis, MediaPickerState }
 export { Chrome } from "globals.slint";
-export { EditorState, EdSlider, EdFilter, EdAspect }
+export { EditorState, EdSlider, EdFilter, EdAspect, TextLayers, CollageState }
 export { PickRowData, PathRowData, TreeRowData, KeyRowData } from "dialogs/dialogs.slint";
 export { JobRowData, UploadRowData } from "shell/jobs.slint";
 export { SetState, SetRow, SetCard, SetSection, SetNav } from "pages/settings.slint";
@@ -102,6 +105,7 @@ export component AppWindow inherits Window {
         : Shell.page == Page.explore-map ? MapState.title
         : Shell.page == Page.fonts ? I18n.t("fonts.title", I18n.rev)
         : Shell.page == Page.slideshow ? I18n.t("nav.slideshow", I18n.rev)
+        : Shell.page == Page.collage ? I18n.t("nav.collage", I18n.rev)
         : I18n.t("settings.title", I18n.rev);
     property <bool> grid-page: Shell.page == Page.photos || Shell.page == Page.favorites || Shell.page == Page.search
         || Shell.page == Page.album || Shell.page == Page.lib || Shell.page == Page.folder;
@@ -206,6 +210,9 @@ export component AppWindow inherits Window {
                     if Shell.page == Page.slideshow: PageFrame {
                         SlideBuilderPage { window-width: root.width; }
                     }
+                    if Shell.page == Page.collage: PageFrame {
+                        CollagePage { window-width: root.width; }
+                    }
                     if Shell.page == Page.album: PageFrame {
                         AlbumPage { window-width: root.width; }
                     }
@@ -252,6 +259,7 @@ export component AppWindow inherits Window {
         width: root.width;
         height: root.height;
     }
+    if MediaPickerState.open: MediaPickerDialog { }
     ActionLayer { }
     // upload progress, dialogs of the library / albums / devices / MEGA / settings screens
     UploadPanel {

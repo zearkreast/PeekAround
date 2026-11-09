@@ -571,6 +571,34 @@ impl Client {
             .map_err(|e| Error::Decode(e.to_string()))
     }
 
+    /// `POST /api/edits/save` without a source: a new image (a collage) saved as `name.<format>`
+    /// in a library directory (a free name: `name (1).jpg` …).
+    pub async fn save_image_to(
+        &self,
+        body: Vec<u8>,
+        folder_id: &str,
+        dir: &str,
+        name: &str,
+        format: &str,
+        quality: u32,
+    ) -> Result<serde_json::Value> {
+        let mut qs = Qs::new();
+        qs.str("folderId", folder_id)
+            .str("dir", dir)
+            .str("name", name)
+            .str("format", format)
+            .num("quality", quality as i64);
+        let rb = self
+            .request(reqwest::Method::POST, &format!("/api/edits/save{qs}"))
+            .header("Content-Type", "application/octet-stream")
+            .body(body);
+        self.send(rb)
+            .await?
+            .json()
+            .await
+            .map_err(|e| Error::Decode(e.to_string()))
+    }
+
     /// Stream `GET <path>` into a file (zip downloads); returns the bytes written.
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn download_to(&self, path: &str, dest: &std::path::Path) -> Result<u64> {
