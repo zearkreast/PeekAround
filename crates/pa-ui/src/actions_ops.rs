@@ -76,6 +76,10 @@ pub trait MediaOps: Send + Sync {
     fn save_edit(&self, _image: Vec<u8>, _source_id: &str, _format: &str, _quality: u32) -> BoxFut<serde_json::Value> {
         unsupported()
     }
+    /// `POST /api/edits/save` into a directory as `name.<format>` (a collage); same answer
+    fn save_image(&self, _image: Vec<u8>, _to: DirTarget, _name: &str, _format: &str, _quality: u32) -> BoxFut<serde_json::Value> {
+        unsupported()
+    }
 }
 
 fn unsupported<T: Send + 'static>() -> BoxFut<T> {
@@ -229,6 +233,11 @@ mod http {
             let c = self.client().clone();
             let (id, fmt) = (source_id.to_string(), format.to_string());
             Box::pin(async move { c.save_edit(image, &id, &fmt, quality).await.map_err(berr) })
+        }
+        fn save_image(&self, image: Vec<u8>, to: DirTarget, name: &str, format: &str, quality: u32) -> BoxFut<serde_json::Value> {
+            let c = self.client().clone();
+            let (name, fmt) = (name.to_string(), format.to_string());
+            Box::pin(async move { c.save_image_to(image, &to.folder_id, &to.dir, &name, &fmt, quality).await.map_err(berr) })
         }
     }
 }

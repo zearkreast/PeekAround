@@ -46,6 +46,8 @@ mod slideshow_show;
 mod slideshow_ui;
 mod editor;
 mod video_editor;
+mod collage;
+mod media_picker;
 
 #[allow(missing_docs, clippy::all)]
 mod generated {

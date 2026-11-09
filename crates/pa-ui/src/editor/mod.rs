@@ -9,25 +9,27 @@ mod gpu;
 mod layers;
 pub(crate) mod overlay;
 mod render;
+pub(crate) mod text;
 pub(crate) mod textprops;
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use image::RgbaImage;
 use pa_core::MediaItem;
-use slint::{ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
+use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::actions_ops::ImageSize;
 use crate::app::AppInner;
 use crate::backend::ThumbData;
 use crate::i18n::Lang;
-use crate::{EdAspect, EdFilter, EdLayerRow, EdLayerVis, EdSlider, EditorState, ToastKind};
+use crate::{EdAspect, EdFilter, EdLayerVis, EdSlider, EditorState, ToastKind};
 use doc::{EditDoc, Handle, History, Rect, Stroke, TextLayer, View};
-use layers::{Brush, LayerOp};
+use layers::Brush;
+pub(crate) use text::to_image;
+use text::LayerOp;
 use render::{RenderParams, Renderer};
 
 /// filter thumbnail size (device px)
@@ -74,15 +76,13 @@ struct Ctl {
     aspects: Rc<VecModel<EdAspect>>,
     /// language of the labels in the models
     lang: Cell<Lang>,
-    /// text shaping and glyph rasterizing on the UI thread (the stage previews)
-    fonts: RefCell<Option<overlay::Fonts>>,
-    rasters: RefCell<HashMap<u32, layers::Cached>>,
+    /// the layer images on the stage
+    rasters: RefCell<text::Rasters>,
     selected: Cell<Option<u32>>,
     next_id: Cell<u32>,
     /// the stroke being drawn
     live: RefCell<Option<Stroke>>,
     brush: RefCell<Brush>,
-    layer_rows: Rc<VecModel<EdLayerRow>>,
     layer_vis: Rc<VecModel<EdLayerVis>>,
 }
 
@@ -109,7 +109,7 @@ fn has_hint(key: &str) -> bool {
 }
 
 /// Decode the original with its EXIF orientation applied.
-fn decode_full(data: ThumbData) -> Result<RgbaImage, String> {
+pub(crate) fn decode_full(data: ThumbData) -> Result<RgbaImage, String> {
     use image::ImageDecoder;
     match data {
         ThumbData::Encoded(bytes) => {
@@ -125,12 +125,6 @@ fn decode_full(data: ThumbData) -> Result<RgbaImage, String> {
         }
         ThumbData::Rgba { width, height, pixels } => RgbaImage::from_raw(width, height, pixels).ok_or_else(|| "bad pixels".into()),
     }
-}
-
-pub(crate) fn to_image(px: Vec<u8>, w: u32, h: u32) -> Image {
-    let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(w, h);
-    buf.make_mut_bytes().copy_from_slice(&px);
-    Image::from_rgba8_premultiplied(buf)
 }
 
 impl Ctl {
@@ -535,7 +529,12 @@ impl Ctl {
         self.set_guides((false, false));
         self.relabel(a.lang());
         crate::pages::fonts::load(a);
-        self.publish_fonts();
+        text::publish_fonts(a);
+        text::attach(|cmd| {
+            if let Some(c) = ctl() {
+                text::run(&*c, cmd);
+            }
+        });
         let base = match item.name.rfind('.') {
             Some(i) if i > 0 => item.name[..i].to_string(),
             _ => item.name.clone(),
@@ -715,8 +714,7 @@ impl Ctl {
         self.start_layer_drag(id, LayerOp::Move, x, y);
         *self.drag.borrow_mut() = None;
         if let Some(a) = self.app() {
-            let s = a.window.global::<EditorState>();
-            s.set_focus_text(s.get_focus_text() + 1);
+            text::focus_text(&a);
         }
     }
 
@@ -872,9 +870,10 @@ pub(crate) fn open(a: &Rc<AppInner>, item: MediaItem) {
 }
 
 /// A font was registered: text drawn with a fallback is drawn again, the picker lists it.
-pub(crate) fn fonts_changed(_a: &Rc<AppInner>) {
+pub(crate) fn fonts_changed(a: &Rc<AppInner>) {
+    text::publish_fonts(a);
+    crate::collage::fonts_changed();
     let Some(c) = ctl() else { return };
-    c.publish_fonts();
     if c.src.get().is_some() {
         c.rasters.borrow_mut().clear();
         c.publish_layers();
@@ -969,13 +968,11 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         filters: Rc::new(VecModel::from(filters)),
         aspects: Rc::new(VecModel::from(aspects)),
         lang: Cell::new(lang),
-        fonts: RefCell::new(None),
-        rasters: RefCell::new(HashMap::new()),
+        rasters: RefCell::new(text::Rasters::default()),
         selected: Cell::new(None),
         next_id: Cell::new(1),
         live: RefCell::new(None),
         brush: RefCell::new(Brush::default()),
-        layer_rows: Rc::new(VecModel::default()),
         layer_vis: Rc::new(VecModel::default()),
     });
     CTL.with(|x| *x.borrow_mut() = Some(c.clone()));
@@ -983,9 +980,8 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     s.set_sliders(ModelRc::from(c.sliders.clone()));
     s.set_filters(ModelRc::from(c.filters.clone()));
     s.set_aspects(ModelRc::from(c.aspects.clone()));
-    s.set_layer_rows(ModelRc::from(c.layer_rows.clone()));
     s.set_layers(ModelRc::from(c.layer_vis.clone()));
-    s.set_stickers(layers::stickers());
+    text::install(app);
     c.set_brush(|_| {});
     macro_rules! on {
         ($cb:ident, |$c:ident $(, $arg:ident)*| $body:expr) => {{
@@ -1099,21 +1095,6 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     });
     on!(on_press, |c, mode, x, y| c.press(&mode, x as f64, y as f64));
     on!(on_double_click, |c, x, y| c.double_click(x as f64, y as f64));
-    on!(on_add_text, |c, sticker| c.add_text(&sticker));
-    on!(on_select_layer, |c, id| c.select(Some(id as u32)));
-    on!(on_deselect, |c| c.select(None));
-    on!(on_duplicate_layer, |c, id| c.duplicate(id as u32));
-    on!(on_delete_layer, |c, id| c.delete_layer(id as u32));
-    on!(on_delete_selected, |c| {
-        if let Some(id) = c.selected.get() {
-            c.delete_layer(id);
-        }
-    });
-    on!(on_restack, |c, id, dir| c.restack(id as u32, dir));
-    on!(on_text_num, |c, key, v| c.set_num(&key, v));
-    on!(on_text_str, |c, key, v| c.set_str(&key, &v));
-    on!(on_text_color, |c, key, v| c.set_color(&key, v));
-    on!(on_text_toggle, |c, key, v| c.toggle(&key, v));
     on!(on_pick_brush_color, |c, v| c.set_brush(|b| b.color = [v.red(), v.green(), v.blue(), 255]));
     on!(on_set_brush_size, |c, v| c.set_brush(|b| b.size = (v as f64).clamp(2.0, 100.0)));
     on!(on_set_brush_opacity, |c, v| c.set_brush(|b| b.opacity = (v as f64 / 100.0).clamp(0.1, 1.0)));

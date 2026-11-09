@@ -422,7 +422,7 @@ fn premul(c: Rgba, opacity: f32) -> [f32; 4] {
 }
 
 /// Gaussian blur approximated by three box blurs (separable, running sums).
-fn blur(a: &mut [f32], w: usize, h: usize, sigma: f64) {
+pub fn blur(a: &mut [f32], w: usize, h: usize, sigma: f64) {
     if sigma < 0.5 || w == 0 || h == 0 {
         return;
     }

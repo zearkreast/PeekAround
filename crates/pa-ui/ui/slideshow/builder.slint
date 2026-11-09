@@ -33,23 +33,6 @@ export struct SlideRow {
     of-full: string,
 }
 
-// media picker: a library folder or a sub folder
-export struct MediaDirRow {
-    label: string,
-    lib: bool,
-    color: color,
-    icon: string,
-}
-
-// media picker: a photo / video of the open folder
-export struct MediaTileRow {
-    thumb: image,
-    has-thumb: bool,
-    is-video: bool,
-    dur: string,
-    on: bool,
-}
-
 export struct MusicRow {
     id: string,
     name: string,
@@ -85,14 +68,6 @@ export global SlideBuilder {
     in property <[MusicRow]> music;
     // the slide being edited (-1 = none)
     in-out property <int> sel: -1;
-    // media picker
-    in property <bool> media-open;
-    in property <bool> media-loading;
-    in property <string> media-path;
-    in property <bool> media-can-back;
-    in property <[MediaDirRow]> media-dirs;
-    in property <[MediaTileRow]> media-items;
-    in property <int> media-selected;
     callback play();
     callback remove(int);
     callback move(int, int);
@@ -113,14 +88,6 @@ export global SlideBuilder {
     callback export();
     callback go-timeline();
     callback add-media();
-    callback media-open-dir(int);
-    callback media-back();
-    callback media-toggle(int);
-    callback media-select-all();
-    callback media-add();
-    callback media-close();
-    // a tile scrolled into view: load its thumbnail
-    callback media-need(int);
 }
 
 component Section inherits Rectangle {
@@ -343,199 +310,6 @@ component SlideEditor inherits Rectangle {
         VerticalLayout {
             alignment: center;
             IconButton { icon: VIcons.x; size: IconButtonSize.sm; label: I18n.t("common.close", I18n.rev); clicked => { SlideBuilder.sel = -1; } }
-        }
-    }
-}
-
-// "Medya ekle" picker (MediaPicker.tsx): libraries → folders, multi-select photos and videos
-component MediaPicker inherits Rectangle {
-    background: Theme.overlay;
-    TouchArea { clicked => { SlideBuilder.media-close(); } }
-    FocusScope {
-        init => { self.focus(); }
-        key-pressed(e) => {
-            if e.text == Key.Escape {
-                SlideBuilder.media-close();
-                return accept;
-            }
-            reject
-        }
-    }
-    panel := Rectangle {
-        width: Math.min(root.width - 32px, 780px);
-        height: Math.min(root.height - 48px, 680px);
-        border-radius: 24px;
-        border-width: 1px;
-        border-color: Theme.border;
-        background: Theme.bg-elev;
-        drop-shadow-blur: 40px;
-        drop-shadow-offset-y: 10px;
-        drop-shadow-color: Theme.shadow;
-        clip: true;
-        TouchArea {}
-        VerticalLayout {
-            HorizontalLayout {
-                padding-left: 24px;
-                padding-right: 20px;
-                padding-top: 20px;
-                padding-bottom: 8px;
-                Text { text: I18n.t("slide.addMedia", I18n.rev); horizontal-stretch: 1; font-family: Theme.font-display; font-size: 18px; font-weight: 600; color: Theme.text; vertical-alignment: center; }
-                IconButton { icon: Icons.x; size: IconButtonSize.sm; label: I18n.t("common.close", I18n.rev); clicked => { SlideBuilder.media-close(); } }
-            }
-            VerticalLayout {
-                vertical-stretch: 1;
-                padding-left: 24px;
-                padding-right: 24px;
-                padding-top: 8px;
-                padding-bottom: 12px;
-                spacing: 12px;
-                HorizontalLayout {
-                    spacing: 8px;
-                    IconButton {
-                        icon: Icons.arrow-left;
-                        label: I18n.t("common.back", I18n.rev);
-                        size: IconButtonSize.sm;
-                        enabled: SlideBuilder.media-can-back;
-                        clicked => { SlideBuilder.media-back(); }
-                    }
-                    Text { text: SlideBuilder.media-path; horizontal-stretch: 1; font-size: 14px; font-weight: 500; color: Theme.text; vertical-alignment: center; overflow: elide; }
-                }
-                body := Rectangle {
-                    vertical-stretch: 1;
-                    border-radius: 16px;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    background: Theme.surface;
-                    clip: true;
-                    property <int> cols: self.width >= 560px ? 5 : 3;
-                    property <length> tw: (self.width - 12px - (self.cols - 1) * 6px) / self.cols;
-                    if SlideBuilder.media-loading: Spinner { size: 24px; }
-                    fl := Flickable {
-                        visible: !SlideBuilder.media-loading;
-                        content-height: list.preferred-height;
-                        list := VerticalLayout {
-                            width: fl.width;
-                            padding: 6px;
-                            spacing: 2px;
-                            alignment: start;
-                            for d[i] in SlideBuilder.media-dirs: Rectangle {
-                                height: 42px;
-                                border-radius: 12px;
-                                background: dta.has-hover ? Theme.surface-2 : transparent;
-                                HorizontalLayout {
-                                    padding-left: 12px;
-                                    padding-right: 12px;
-                                    spacing: 10px;
-                                    if d.lib: VerticalLayout {
-                                        alignment: center;
-                                        Rectangle {
-                                            width: 24px;
-                                            height: 24px;
-                                            border-radius: 6px;
-                                            background: d.color;
-                                            Image { source: LibIcons.get(d.icon); colorize: #ffffff; width: 14px; height: 14px; }
-                                        }
-                                    }
-                                    if !d.lib: VerticalLayout { alignment: center; Image { source: PIcons.folder; colorize: Theme.accent; width: 16px; height: 16px; } }
-                                    Text { text: d.label; horizontal-stretch: 1; font-size: 14px; color: Theme.text; vertical-alignment: center; overflow: elide; }
-                                    VerticalLayout { alignment: center; Image { source: Icons.chevron-right; colorize: Theme.text-faint; width: 16px; height: 16px; } }
-                                }
-                                dta := TouchArea { mouse-cursor: pointer; clicked => { SlideBuilder.media-open-dir(i); } }
-                            }
-                            if SlideBuilder.media-items.length > 0: grid := Rectangle {
-                                height: Math.ceil(SlideBuilder.media-items.length / body.cols) * (body.tw + 6px);
-                                for t[i] in SlideBuilder.media-items: Rectangle {
-                                    x: Math.mod(i, body.cols) * (body.tw + 6px);
-                                    y: Math.floor(i / body.cols) * (body.tw + 6px);
-                                    width: body.tw;
-                                    height: body.tw;
-                                    border-radius: 12px;
-                                    clip: true;
-                                    background: Theme.tile-bg;
-                                    border-width: t.on ? 2px : 0px;
-                                    border-color: Theme.accent;
-                                    property <bool> seen: grid.y + self.y + fl.content-y < fl.height + 300px
-                                        && grid.y + self.y + self.height + fl.content-y > -300px;
-                                    init => {
-                                        if self.seen {
-                                            SlideBuilder.media-need(i);
-                                        }
-                                    }
-                                    changed seen => {
-                                        if self.seen {
-                                            SlideBuilder.media-need(i);
-                                        }
-                                    }
-                                    if t.has-thumb: Rectangle {
-                                        property <length> inset: t.on ? 8px : 0px;
-                                        animate inset { duration: Motion.fast; }
-                                        x: self.inset;
-                                        y: self.inset;
-                                        width: parent.width - 2 * self.inset;
-                                        height: parent.height - 2 * self.inset;
-                                        border-radius: t.on ? 8px : 0px;
-                                        clip: true;
-                                        Image { width: parent.width; height: parent.height; source: t.thumb; image-fit: cover; }
-                                    }
-                                    if t.is-video: Rectangle {
-                                        x: 6px;
-                                        y: parent.height - self.height - 6px;
-                                        width: vl.preferred-width;
-                                        height: 18px;
-                                        border-radius: 6px;
-                                        background: #00000099;
-                                        vl := HorizontalLayout {
-                                            padding-left: 5px;
-                                            padding-right: 6px;
-                                            spacing: 3px;
-                                            VerticalLayout { alignment: center; Image { source: VIcons.play-fill; colorize: #ffffff; width: 10px; height: 10px; } }
-                                            Text { text: t.dur; font-size: 10px; font-weight: 500; color: #ffffff; vertical-alignment: center; }
-                                        }
-                                    }
-                                    Rectangle {
-                                        x: parent.width - 26px;
-                                        y: 6px;
-                                        width: 20px;
-                                        height: 20px;
-                                        border-radius: 10px;
-                                        border-width: t.on ? 0px : 2px;
-                                        border-color: #ffffffcc;
-                                        background: t.on ? Theme.accent : #00000033;
-                                        if t.on: Image { source: Icons.check; colorize: #ffffff; width: 12px; height: 12px; }
-                                    }
-                                    TouchArea { mouse-cursor: pointer; clicked => { SlideBuilder.media-toggle(i); } }
-                                }
-                            }
-                            if !SlideBuilder.media-loading && SlideBuilder.media-can-back && SlideBuilder.media-dirs.length == 0 && SlideBuilder.media-items.length == 0: VerticalLayout {
-                                padding-top: 48px;
-                                padding-bottom: 48px;
-                                spacing: 8px;
-                                HorizontalLayout { alignment: center; Image { source: PIcons.folder; colorize: Theme.text-faint; width: 24px; height: 24px; } }
-                                Text { text: I18n.t("slide.nothingHere", I18n.rev); font-size: 13px; color: Theme.text-faint; horizontal-alignment: center; }
-                            }
-                        }
-                    }
-                }
-            }
-            Rectangle { height: 1px; background: Theme.border; }
-            HorizontalLayout {
-                padding: 16px;
-                padding-left: 24px;
-                padding-right: 24px;
-                spacing: 8px;
-                Text { text: I18n.t1("slide.selectedN", "n", SlideBuilder.media-selected, I18n.rev); horizontal-stretch: 1; font-size: 13px; color: Theme.text-faint; vertical-alignment: center; }
-                if SlideBuilder.media-items.length > 0: Button {
-                    text: I18n.t("slide.selectAll", I18n.rev);
-                    variant: ButtonVariant.ghost;
-                    clicked => { SlideBuilder.media-select-all(); }
-                }
-                Button {
-                    text: I18n.t1("slide.addN", "n", SlideBuilder.media-selected, I18n.rev);
-                    variant: ButtonVariant.primary;
-                    enabled: SlideBuilder.media-selected > 0;
-                    clicked => { SlideBuilder.media-add(); }
-                }
-            }
         }
     }
 }
@@ -955,5 +729,4 @@ export component SlideBuilderPage inherits Rectangle {
         }
     }
 
-    if SlideBuilder.media-open: MediaPicker { }
 }

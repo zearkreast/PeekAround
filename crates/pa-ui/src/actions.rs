@@ -313,6 +313,17 @@ fn builtins() -> Vec<Rc<Action>> {
             ..Default::default()
         },
         Action {
+            id: "collage".into(),
+            icon: "layout-grid",
+            label_key: "sel.collage",
+            group: Group::Create,
+            order: 20,
+            visible: Rc::new(|items, c| {
+                c.writable && items.iter().any(|i| i.kind == MediaKind::Image) && !c.on_device(items)
+            }),
+            ..Default::default()
+        },
+        Action {
             id: "add-to-album".into(),
             icon: "book-image",
             label_key: "album.addTo",
@@ -446,6 +457,7 @@ mod tests {
                 "edit",
                 "favorite",
                 "slideshow",
+                "collage",
                 "add-to-album",
                 "move",
                 "copy",

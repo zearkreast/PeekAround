@@ -198,6 +198,17 @@ pub(crate) fn step(a: &Rc<AppInner>, cmd: &[String]) -> bool {
         }
         "estate" => crate::editor::debug_state(),
         "vestate" => crate::video_editor::debug_state(),
+        // collage from the first N grid items; `cstate` prints its state
+        "collage" => {
+            let n = (num(cmd, 1) as usize).max(1);
+            let weak = Rc::downgrade(a);
+            a.grid.0.borrow_mut().items_in_range(0, n - 1, move |list| {
+                if let Some(a) = weak.upgrade() {
+                    crate::collage::open_with(&a, list);
+                }
+            });
+        }
+        "cstate" => crate::collage::debug_state(),
         "sel" => {
             let g = a.grid.0.borrow();
             let ids = g.ix.selection.ids();

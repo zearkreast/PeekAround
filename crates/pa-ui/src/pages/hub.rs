@@ -400,7 +400,7 @@ pub(crate) fn install(app: &Rc<AppInner>) {
             match tool.as_str() {
                 "fonts" => a.go(Route::Fonts, true),
                 "slideshow" => a.go(Route::Slideshow, true),
-                // collage: not built yet
+                "collage" => a.go(Route::Collage, true),
                 _ => a.toast(ToastKind::Info, &a.t("native.soon.title"), ""),
             }
         }

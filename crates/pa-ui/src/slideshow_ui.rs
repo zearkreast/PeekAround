@@ -3,46 +3,20 @@
 //! music picker, the media picker and the video export (`POST /api/jobs/slideshow`).
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
 use std::rc::{Rc, Weak};
 
-use pa_core::{BrowseQuery, DirTarget, KindFilter, LibrariesResponse, Library, MediaItem, MediaKind, SlideTransition};
-use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use pa_core::{BrowseQuery, DirTarget, KindFilter, LibrariesResponse, MediaItem, MediaKind, SlideTransition};
+use slint::{Color, ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::app::AppInner;
 use crate::router::Route;
 use crate::slideshow::{self as model, Aspect, Rng, SlideItem, SlideSettings};
 use crate::slideshow_show::{Show, ShowStatus};
 use crate::video;
-use crate::{MediaDirRow, MediaTileRow, MusicRow, SlideBuilder, SlidePlayer, SlideRow, ToastKind};
+use crate::{MusicRow, SlideBuilder, SlidePlayer, SlideRow, ToastKind};
 
 /// slides in the builder's preview
 const PREVIEW_SLIDES: usize = 12;
-
-/// a place of the media picker
-#[derive(Clone)]
-struct Loc {
-    folder_id: String,
-    dir: String,
-    label: String,
-}
-
-/// The "Medya ekle" picker (MediaPicker.tsx); the selection survives folder changes.
-#[derive(Default)]
-struct MediaPick {
-    libs: Vec<Library>,
-    stack: Vec<Loc>,
-    /// where each row of `media-dirs` leads
-    dirs: Vec<Loc>,
-    /// the open folder's photos and videos
-    items: Vec<MediaItem>,
-    selected: Vec<MediaItem>,
-    tiles: Option<Rc<VecModel<MediaTileRow>>>,
-    /// tiles whose thumbnail was requested
-    asked: HashSet<usize>,
-    /// bumps on every navigation (late browse results are dropped)
-    epoch: u64,
-}
 
 struct Ctl {
     app: Weak<AppInner>,
@@ -56,7 +30,6 @@ struct Ctl {
     /// the player made the window full screen (undo on close)
     went_full: Cell<bool>,
     hide_timer: slint::Timer,
-    pick: RefCell<MediaPick>,
 }
 
 thread_local! {
@@ -496,232 +469,24 @@ impl Ctl {
 
     fn open_media(&self) {
         let Some(a) = self.app() else { return };
-        *self.pick.borrow_mut() = MediaPick::default();
-        let b = a.window.global::<SlideBuilder>();
-        b.set_media_open(true);
-        b.set_media_loading(true);
-        self.publish_pick();
-        crate::api::call::<LibrariesResponse>(&a, "GET", "/api/libraries", None, |a, r| {
-            let Some(c) = ctl() else { return };
-            c.pick.borrow_mut().libs = r.map(|r| r.libraries).unwrap_or_default();
-            a.window.global::<SlideBuilder>().set_media_loading(false);
-            c.publish_pick();
-        });
-    }
-
-    fn close_media(&self) {
-        *self.pick.borrow_mut() = MediaPick::default();
-        if let Some(a) = self.app() {
-            let b = a.window.global::<SlideBuilder>();
-            b.set_media_open(false);
-            b.set_media_dirs(ModelRc::default());
-            b.set_media_items(ModelRc::default());
-        }
-    }
-
-    /// The breadcrumb, the selection count and, at the top, the library folders.
-    fn publish_pick(&self) {
-        let Some(a) = self.app() else { return };
-        let b = a.window.global::<SlideBuilder>();
-        let mut p = self.pick.borrow_mut();
-        let path = p.stack.iter().map(|s| s.label.as_str()).collect::<Vec<_>>().join(" / ");
-        b.set_media_path(if path.is_empty() { a.t("nav.libraries") } else { path }.into());
-        b.set_media_can_back(!p.stack.is_empty());
-        b.set_media_selected(p.selected.len() as i32);
-        if !p.stack.is_empty() {
-            return;
-        }
-        let mut rows = vec![];
-        let mut dirs = vec![];
-        for l in &p.libs {
-            for f in &l.folders {
-                let multi = l.folders.len() > 1;
-                rows.push(MediaDirRow {
-                    label: if multi { format!("{} · {}", l.name, f.name) } else { l.name.clone() }.into(),
-                    lib: true,
-                    color: crate::theme::color(&l.color),
-                    icon: l.icon.clone().into(),
-                });
-                dirs.push(Loc {
-                    folder_id: f.id.clone(),
-                    dir: String::new(),
-                    label: if multi { f.name.clone() } else { l.name.clone() },
-                });
-            }
-        }
-        p.dirs = dirs;
-        p.items.clear();
-        p.tiles = None;
-        drop(p);
-        b.set_media_dirs(ModelRc::new(VecModel::from(rows)));
-        b.set_media_items(ModelRc::default());
-    }
-
-    /// Browse the picker's current folder: sub folders + its photos and videos.
-    fn load_pick(&self) {
-        let Some(a) = self.app() else { return };
-        let (q, epoch) = {
-            let mut p = self.pick.borrow_mut();
-            let Some(cur) = p.stack.last().cloned() else { return };
-            p.epoch += 1;
-            p.dirs.clear();
-            p.items.clear();
-            p.tiles = None;
-            p.asked.clear();
-            let q = BrowseQuery {
-                folder_id: Some(cur.folder_id),
-                dir: Some(cur.dir),
-                kind: Some(KindFilter::All),
-                limit: Some(1000),
-                ..Default::default()
-            };
-            (q, p.epoch)
+        let opts = crate::media_picker::Opts {
+            title: a.t("slide.addMedia"),
+            images_only: false,
+            single: false,
+            select_all: true,
+            start: None,
+            selected_key: "slide.selectedN",
+            add_key: "slide.addN",
+            empty_key: "slide.nothingHere",
         };
-        let b = a.window.global::<SlideBuilder>();
-        b.set_media_loading(true);
-        b.set_media_dirs(ModelRc::default());
-        b.set_media_items(ModelRc::default());
-        self.publish_pick();
-        let fut = a.backend.browse(q);
-        let w = Rc::downgrade(&a);
-        a.rt.spawn_then(fut, move |r| {
-            let (Some(a), Some(c)) = (w.upgrade(), ctl()) else { return };
-            let b = a.window.global::<SlideBuilder>();
-            let mut p = c.pick.borrow_mut();
-            if p.epoch != epoch {
-                return;
-            }
-            let Some(cur) = p.stack.last().cloned() else { return };
-            let Ok(r) = r else {
-                drop(p);
-                b.set_media_loading(false);
-                return;
-            };
-            p.dirs = r
-                .folders
-                .iter()
-                .map(|f| Loc { folder_id: cur.folder_id.clone(), dir: f.dir.clone(), label: f.name.clone() })
-                .collect();
-            let rows: Vec<MediaDirRow> = r
-                .folders
-                .iter()
-                .map(|f| MediaDirRow { label: f.name.clone().into(), ..Default::default() })
-                .collect();
-            p.items = r.items.into_iter().filter(visual).collect();
-            let tiles: Vec<MediaTileRow> = p
-                .items
-                .iter()
-                .map(|m| MediaTileRow {
-                    is_video: m.kind == MediaKind::Video,
-                    dur: crate::i18n::format_duration(m.duration).into(),
-                    on: p.selected.iter().any(|s| s.id == m.id),
-                    ..Default::default()
-                })
-                .collect();
-            let tiles = Rc::new(VecModel::from(tiles));
-            p.tiles = Some(tiles.clone());
-            drop(p);
-            b.set_media_loading(false);
-            b.set_media_dirs(ModelRc::new(VecModel::from(rows)));
-            b.set_media_items(ModelRc::from(tiles));
-        });
-    }
-
-    fn pick_open_dir(&self, i: usize) {
-        let next = self.pick.borrow().dirs.get(i).cloned();
-        if let Some(l) = next {
-            self.pick.borrow_mut().stack.push(l);
-            self.load_pick();
-        }
-    }
-
-    fn pick_back(&self) {
-        let empty = {
-            let mut p = self.pick.borrow_mut();
-            p.stack.pop();
-            p.epoch += 1;
-            p.stack.is_empty()
-        };
-        if empty {
-            if let Some(a) = self.app() {
-                a.window.global::<SlideBuilder>().set_media_loading(false);
-            }
-            self.publish_pick();
-        } else {
-            self.load_pick();
-        }
-    }
-
-    /// a tile became visible: fetch its thumbnail once
-    fn pick_need(&self, i: usize) {
-        let Some(a) = self.app() else { return };
-        let (id, tiles, epoch) = {
-            let mut p = self.pick.borrow_mut();
-            let (Some(m), Some(t)) = (p.items.get(i), p.tiles.clone()) else { return };
-            let id = m.id.clone();
-            if !p.asked.insert(i) {
-                return;
-            }
-            (id, t, p.epoch)
-        };
-        let w = Rc::downgrade(&tiles);
-        crate::pages::cover(&a, &id, 320, move |img| {
-            let still = ctl().is_some_and(|c| c.pick.borrow().epoch == epoch);
-            if let (true, Some(m)) = (still, w.upgrade()) {
-                if let Some(mut r) = m.row_data(i) {
-                    r.thumb = img;
-                    r.has_thumb = true;
-                    m.set_row_data(i, r);
-                }
+        crate::media_picker::open(&a, opts, |_, picked| {
+            if let Some(c) = ctl() {
+                c.pick_add(picked);
             }
         });
     }
 
-    fn pick_toggle(&self, i: usize) {
-        {
-            let mut p = self.pick.borrow_mut();
-            let Some(m) = p.items.get(i).cloned() else { return };
-            let on = match p.selected.iter().position(|s| s.id == m.id) {
-                Some(k) => {
-                    p.selected.remove(k);
-                    false
-                }
-                None => {
-                    p.selected.push(m);
-                    true
-                }
-            };
-            if let Some(t) = &p.tiles {
-                if let Some(mut r) = t.row_data(i) {
-                    r.on = on;
-                    t.set_row_data(i, r);
-                }
-            }
-        }
-        self.publish_pick();
-    }
-
-    fn pick_select_all(&self) {
-        {
-            let mut p = self.pick.borrow_mut();
-            let p = &mut *p;
-            for (i, m) in p.items.iter().enumerate() {
-                if !p.selected.iter().any(|s| s.id == m.id) {
-                    p.selected.push(m.clone());
-                }
-                if let Some(t) = &p.tiles {
-                    if let Some(mut r) = t.row_data(i) {
-                        r.on = true;
-                        t.set_row_data(i, r);
-                    }
-                }
-            }
-        }
-        self.publish_pick();
-    }
-
-    fn pick_add(&self) {
-        let picked = std::mem::take(&mut self.pick.borrow_mut().selected);
+    fn pick_add(&self, picked: Vec<MediaItem>) {
         if picked.is_empty() {
             return;
         }
@@ -733,7 +498,6 @@ impl Ctl {
                 .map(|i| DirTarget { folder_id: i.media.folder_id.clone(), dir: i.media.dir.clone() });
         }
         self.items.borrow_mut().extend(new);
-        self.close_media();
         self.publish();
     }
 
@@ -868,7 +632,6 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         music_muted: Cell::new(false),
         went_full: Cell::new(false),
         hide_timer: slint::Timer::default(),
-        pick: RefCell::new(MediaPick::default()),
     });
     CTL.with(|x| *x.borrow_mut() = Some(c.clone()));
     let b = app.window.global::<SlideBuilder>();
@@ -932,13 +695,6 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         c.publish();
     });
     on!(b, on_add_media, |c| c.open_media());
-    on!(b, on_media_close, |c| c.close_media());
-    on!(b, on_media_open_dir, |c, i| c.pick_open_dir(i as usize));
-    on!(b, on_media_back, |c| c.pick_back());
-    on!(b, on_media_need, |c, i| c.pick_need(i as usize));
-    on!(b, on_media_toggle, |c, i| c.pick_toggle(i as usize));
-    on!(b, on_media_select_all, |c| c.pick_select_all());
-    on!(b, on_media_add, |c| c.pick_add());
     on!(b, on_preview_resized, |c, w, h| {
         if let (Some(p), Some(a)) = (c.preview.borrow().clone(), c.app()) {
             p.resize(w as f64, h as f64, a.window.window().scale_factor() as f64);
