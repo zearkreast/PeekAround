@@ -14,8 +14,11 @@ pub fn storage_root() -> PathBuf {
     }
     #[cfg(target_os = "android")]
     return PathBuf::from("/storage/emulated/0");
+    // the desktop stand-in never scans the real home folder unless told to
     #[cfg(not(target_os = "android"))]
-    dirs::home_dir().unwrap_or_default()
+    std::env::var_os("PA_PHONE_STORAGE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("pa-phone-storage"))
 }
 
 /// "tr" | "en" from the system language
@@ -89,6 +92,12 @@ pub fn start_link_service() -> bool {
     return jni_impl::call_bool("startLinkService").unwrap_or(false);
     #[cfg(not(target_os = "android"))]
     false
+}
+
+/// link.json's folders changed (a running PeekService re-reads them)
+pub fn link_folders_changed() {
+    #[cfg(target_os = "android")]
+    jni_impl::call_void("linkFoldersChanged");
 }
 
 /// stop PeekService

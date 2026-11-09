@@ -39,9 +39,8 @@ android {
     }
     packaging {
         jniLibs {
-            // the .so is already stripped by the release profile; keeping it uncompressed lets
-            // the loader map it straight from the APK
-            useLegacyPackaging = false
+            // compressed in the APK (75 MB → ~30 MB download), extracted on install
+            useLegacyPackaging = true
         }
     }
 }

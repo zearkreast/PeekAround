@@ -95,6 +95,28 @@ pub struct FileFilter {
     pub extensions: Vec<String>,
 }
 
+/// Settings → Connection and Phone sharing of the Android app (1.x `AndroidConnectionCard`,
+/// `PhoneShareCard`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AndroidState {
+    /// None = local mode (the phone's own folders), else the server URL
+    pub server: Option<String>,
+    /// phone folder sharing is switched on
+    pub share_on: bool,
+    /// "off" | "connecting" | "pending" | "online" | "rejected" | "error"
+    pub share_state: String,
+    /// pairing code while pending
+    pub share_code: Option<String>,
+    /// last error ("forgotten", "HTTP 403", …)
+    pub share_error: Option<String>,
+    /// requests being served
+    pub share_active: usize,
+    /// the PC's host name
+    pub pc_name: String,
+    /// folders that can be shared: (name, path, shared)
+    pub folders: Vec<(String, String, bool)>,
+}
+
 /// The desktop shell. Every method has a "not available" default.
 pub trait Host {
     /// "win32" | "linux" | "darwin" | "android" | "" (no desktop shell)
@@ -170,6 +192,13 @@ pub trait Host {
     fn notify(&self, _title: &str, _body: &str) {}
     /// taskbar progress (None = off)
     fn progress(&self, _value: Option<f32>) {}
+    /// Android app state for Settings (None elsewhere)
+    fn android(&self) -> Option<AndroidState> {
+        None
+    }
+    /// Android Settings actions: "change" (connection), "share:on" / "share:off",
+    /// "folder:on:<path>" / "folder:off:<path>", "reset" (pairing)
+    fn android_action(&self, _action: &str) {}
 }
 
 /// No desktop shell.

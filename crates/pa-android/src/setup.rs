@@ -19,7 +19,7 @@ slint::slint! {
     component Choice inherits Rectangle {
         in property <string> title;
         in property <string> hint;
-        in property <string> glyph;
+        in property <image> icon;
         in property <bool> primary;
         callback clicked;
         border-radius: 24px;
@@ -35,7 +35,7 @@ slint::slint! {
                 height: 48px;
                 border-radius: 16px;
                 background: primary ? @linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%) : #ffffff1f;
-                Text { text: glyph; color: white; font-size: 22px; }
+                Image { source: icon; width: 24px; height: 24px; colorize: white; }
             }
             VerticalLayout {
                 alignment: center;
@@ -43,7 +43,7 @@ slint::slint! {
                 Text { text: title; color: #f5f5f7; font-size: 17px; font-weight: 600; wrap: word-wrap; }
                 Text { text: hint; color: #a3a3b0; font-size: 13px; wrap: word-wrap; }
             }
-            Text { text: "›"; color: #6c6c7a; font-size: 24px; vertical-alignment: center; }
+            Image { source: @image-url("../pa-ui/ui/icons/chevron-right.svg"); width: 20px; colorize: #6c6c7a; }
         }
         TouchArea { clicked => { root.clicked(); } }
     }
@@ -110,8 +110,8 @@ slint::slint! {
 
                 if step == 0: VerticalLayout {
                     spacing: 12px;
-                    Choice { title: s-local; hint: s-local-hint; glyph: "▣"; primary: true; clicked => { choose(1); } }
-                    Choice { title: s-server; hint: s-server-hint; glyph: "⌂"; clicked => { choose(2); } }
+                    Choice { title: s-local; hint: s-local-hint; icon: @image-url("../pa-ui/ui/pages/icons/smartphone.svg"); primary: true; clicked => { choose(1); } }
+                    Choice { title: s-server; hint: s-server-hint; icon: @image-url("../pa-ui/ui/pages/icons/server.svg"); clicked => { choose(2); } }
                 }
 
                 if step == 1: Rectangle {
@@ -149,8 +149,11 @@ slint::slint! {
                         }
                         HorizontalLayout {
                             Text { text: s-found; color: #f5f5f7; font-size: 16px; font-weight: 600; }
-                            Text {
-                                text: scanning ? "…" : "↻"; color: #a3a3b0; font-size: 18px; horizontal-alignment: right;
+                            Image {
+                                source: @image-url("../pa-ui/ui/icons/refresh-cw.svg");
+                                width: 20px;
+                                height: 20px;
+                                colorize: scanning ? #6c6c7a : #a3a3b0;
                                 TouchArea { clicked => { rescan(); } }
                             }
                         }
@@ -445,6 +448,12 @@ pub fn run(files: &Path, rt: tokio::runtime::Handle) -> Option<Mode> {
         });
     }
 
+    // desktop checks (phone-sim example): a phone-sized window and a pa-ui automation script
+    #[cfg(not(target_os = "android"))]
+    if let Ok(script) = std::env::var("PA_SETUP_SCRIPT") {
+        w.window().set_size(slint::LogicalSize::new(412.0, 900.0));
+        pa_ui::perf::run_window_script(w.as_weak(), &script);
+    }
     if let Err(e) = w.run() {
         log::error!("setup: {e}");
     }
