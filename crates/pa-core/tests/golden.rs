@@ -394,7 +394,7 @@ pub fn same(a: &Value, b: &Value, path: &str, diffs: &mut Vec<String>) {
 #[test]
 fn golden_parity() {
     let raw = std::fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/web/public/geo/cities.bin"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/geo/cities.bin"),
     )
     .expect("geo asset");
     let geo = c::decode_geo_asset(&raw).expect("geo index");

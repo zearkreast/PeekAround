@@ -1,7 +1,7 @@
 //! Offline reverse geocoding (mirrors `geo.ts`).
 //!
 //! Data: GeoNames (<https://www.geonames.org>), CC BY 4.0 — built by `scripts/build-geo.mjs` into
-//! `packages/web/public/geo/cities.bin` (gzip). Load it with [`decode_geo_asset`] (gzip or raw bytes) or
+//! `assets/geo/cities.bin` (gzip). Load it with [`decode_geo_asset`] (gzip or raw bytes) or
 //! [`GeoIndex::from_bytes`] (raw "PKG1" bytes).
 //!
 //! Binary layout (little endian):

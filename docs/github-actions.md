@@ -4,19 +4,21 @@
 
 | Ne zaman | Ne yapar |
 |---|---|
-| `main`'e her push ve her pull request | Tip kontrolü ve testler (~10 dk) |
-| `main`'e push | Docker imajı (yalnızca amd64) → `ghcr.io/<kullanıcı>/peekaround:main` |
-| `v1.3.0` gibi bir etiket | Testler, Windows (`Setup.exe` + taşınabilir), Linux (AppImage, `.deb`, `.pacman`), Android APK, Docker imajı (amd64 + arm64), ardından **GitHub Release** |
-| Actions sekmesi → Build → **Run workflow** | Etiketsiz deneme derlemesi; paketler çalıştırmanın "Artifacts" bölümüne eklenir |
+| `main`'e her push ve her pull request | Rust testleri (`cargo test --workspace`) |
+| `v2.0.0` gibi bir etiket | Testler, Windows (`Setup.exe` + taşınabilir zip), Linux (`tar.gz`), Android APK, ardından **GitHub Release**. Etikette `-` varsa (`v2.1.0-beta.1`) ön sürüm olarak yayınlanır |
+| `build-deneme` gibi bir etiket (`build-` ile başlayan) | Aynı paketler, Release olmadan; paketler çalıştırmanın "Artifacts" bölümüne eklenir |
+| Actions sekmesi → Build → **Run workflow** | Etiketsiz deneme derlemesi; `release_tag` yazılırsa paketler o mevcut sürüme yüklenir |
+
+Docker imajı bu iş akışında derlenmiyor; `ghcr.io/<kullanıcı>/peekaround` altındaki son imaj 1.3.2.
 
 ## 1. Hangi token gerekli?
 
-**Workflow için hiçbir kişisel token gerekmez.** GitHub her çalıştırmaya otomatik olarak `GITHUB_TOKEN` verir. Release oluşturma ve ghcr'ye Docker imajı gönderme bununla yapılır; izinler workflow dosyasında yazılı.
+**Workflow için hiçbir kişisel token gerekmez.** GitHub her çalıştırmaya otomatik olarak `GITHUB_TOKEN` verir. Release oluşturma bununla yapılır; izinler workflow dosyasında yazılı.
 
 Bir kez kontrol et: repo → **Settings → Actions → General**
 
 - *Actions permissions*: "Allow all actions and reusable workflows" seçili olmalı.
-- *Workflow permissions*: varsayılan "Read repository contents" kalabilir. Yazma izni gereken işler (release, Docker) bu izni kendileri istiyor.
+- *Workflow permissions*: varsayılan "Read repository contents" kalabilir. Yazma izni gereken iş (release) bu izni kendisi istiyor.
 
 ## 2. Bilgisayardan GitHub'a push için token (gerekirse)
 
@@ -93,45 +95,35 @@ Uyarıyı kaldırmanın yolları:
 | **Azure Trusted Signing** (Microsoft) | Aylık birkaç dolar | Bireysel kimlik doğrulaması her ülkede açık değil; Türkiye'den bireysel kayıt mümkün olmayabilir. |
 | **OV/EV kod imzalama sertifikası** (Sectigo, DigiCert, Certum…) | Yılda yaklaşık 100–400 $ | Yeni sertifikalarda bile SmartScreen uyarısı, uygulama yeterince indirilene kadar bir süre görünebilir. |
 
-Bir `.pfx` sertifikan olursa iki secret eklemen yeter; workflow imzalamayı kendisi yapar:
-
-| Ad | Değer |
-|---|---|
-| `WIN_CSC_LINK` | `.pfx` dosyasının base64 hâli (Android'deki PowerShell komutuyla aynı şekilde) |
-| `WIN_CSC_KEY_PASSWORD` | `.pfx` şifresi |
-
-Not: 2023'ten beri birçok sertifika sağlayıcı anahtarı yalnızca donanım token'ında veya bulutta veriyor. Bu durumda `.pfx` dosyası olmaz; sağlayıcının kendi imzalama aracı ya da Action'ı kullanılır.
-
-Linux paketleri (AppImage, deb, pacman) için imza gerekmez.
+İş akışında şu an imzalama adımı yok; sertifikan olursa Windows işine eklenmesi gerekir.
 
 ## 5. Sürüm yayınlama
 
 ```bash
-git tag v1.3.0
+git tag v2.0.0
 ```
 
 ```bash
-git push origin v1.3.0
+git push origin v2.0.0
 ```
 
 Actions sekmesinde **Build** çalışır. Bitince **Releases** sayfasında paketler görünür.
 
-- Docker imajı ilk gönderimde **gizli** oluşur. Herkese açmak için: profil → **Packages → peekaround → Package settings → Change visibility → Public**.
+- Etiketin sürümü `Cargo.toml` içindeki `version` ile aynı olmalı (`v2.0.0` ↔ `2.0.0`); değilse Release işi durur.
 - Bir etiketi baştan derletmek istersen:
 
 ```bash
-git push origin :refs/tags/v1.3.0
+git push origin :refs/tags/v2.0.0
 ```
 
 ```bash
-git tag -f v1.3.0
+git tag -f v2.0.0
 ```
 
 ```bash
-git push origin v1.3.0
+git push origin v2.0.0
 ```
 
 ## Sorun giderme
-- **Testler düşüyor:** Actions'ta kırmızı adıma tıkla, `FAIL` satırını bul. Testlerin kullandığı örnek kütüphane `npm run fixtures` adımında üretilir; bu adım silinmemeli.
-- **Windows/Linux derlemesi `Cannot find module`:** `npm ci` adımı lock dosyasıyla çalışır. `package.json` değiştiyse yerelde `npm install` çalıştırıp `package-lock.json` dosyasını da commit'le.
-- **Release oluşmadı:** Release yalnızca `v` ile başlayan etiketlerde oluşur. Ayrıca Desktop ve Android işlerinin ikisi de başarılı olmalı; Docker'daki bir hata Release'i engellemez.
+- **Testler düşüyor:** Actions'ta kırmızı adıma tıkla, `FAILED` veya `panicked` satırını bul.
+- **Release oluşmadı:** Release yalnızca `v` ile başlayan etiketlerde oluşur. Ayrıca testler ile Windows, Linux ve Android işlerinin hepsi başarılı olmalı.

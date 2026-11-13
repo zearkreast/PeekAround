@@ -555,7 +555,7 @@ mod tests {
 
     #[test]
     fn list_lines_match_the_golden_transcript() {
-        // packages/shared/fixtures/link/list-and-thumb.json
+        // crates/pa-link/tests/fixtures/link/list-and-thumb.json
         let a = list_line(
             "IMG_1.jpg",
             "image",

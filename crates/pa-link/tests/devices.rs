@@ -1,6 +1,6 @@
 //! Mirrors packages/server/test/devices.integration.test.ts (the hub / tunnel / transfer parts),
 //! driving a Rust port of test/helpers/fake-phone.ts against a real axum server, and replaying
-//! the golden transcripts of packages/shared/fixtures/link.
+//! the golden transcripts of crates/pa-link/tests/fixtures/link.
 
 mod common;
 
@@ -19,7 +19,7 @@ use std::time::Duration;
 
 const FX: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../packages/shared/fixtures/link"
+    "/tests/fixtures/link"
 );
 
 fn fixture(n: &str) -> Vec<Value> {

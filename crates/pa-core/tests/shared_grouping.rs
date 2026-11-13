@@ -156,7 +156,7 @@ mod geo {
     fn index() -> GeoIndex {
         let raw = std::fs::read(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../packages/web/public/geo/cities.bin"
+            "/../../assets/geo/cities.bin"
         ))
         .expect("asset");
         decode_geo_asset(&raw).expect("index")
@@ -205,7 +205,7 @@ mod geo {
         assert!(GeoIndex::from_bytes(
             &std::fs::read(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../packages/web/public/geo/cities.bin"
+                "/../../assets/geo/cities.bin"
             ))
             .unwrap()
         )

@@ -2,10 +2,8 @@
 #   docker compose -f docker/docker-compose.yml up -d     → http://<server-ip>:8080
 services:
   peekaround:
-    image: peekaround:latest
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    # the 1.3.2 server image: 2.0 has no Docker image yet
+    image: ghcr.io/zearkreast/peekaround:1.3.2
     container_name: peekaround
     restart: unless-stopped
     ports:

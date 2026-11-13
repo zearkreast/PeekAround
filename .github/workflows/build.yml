@@ -1,21 +1,28 @@
 name: Build
 
-# - every push to main / pull request: typecheck + tests (fast feedback)
-# - a tag like v1.3.0 (or "Run workflow" by hand): also builds every package and, for tags,
-#   publishes a GitHub Release with the Windows, Linux and Android packages + the Docker image.
+# - every push to main / pull request: the tests of the Rust workspace
+# - a tag like v2.0.0 (or "Run workflow" by hand): also builds the packages (Windows zip + installer,
+#   Linux tarball, Android APK) and, for v* tags, publishes a GitHub Release with them
+#   (a tag with a "-", like v2.1.0-beta.1, becomes a pre-release).
+#   A `build-<anything>` tag builds the packages without a release (they stay run artifacts).
+#   A manual run with `release_tag` uploads the packages to that existing release instead.
 # No personal token is needed: everything uses the automatic GITHUB_TOKEN. Optional secrets:
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
 #   → a release APK signed with your own key (without them a debug APK is built, and its key
 #     changes on every run, so phones can't update over a previous install).
-#   WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD → signed Windows .exe files (see docs/github-actions.md).
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['v*', 'build-*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Upload the packages to this existing release (e.g. v2.0.0); empty = build only'
+        required: false
+        default: ''
 
-# least privilege: jobs that publish ask for more below
+# least privilege: the release job asks for more below
 permissions:
   contents: read
 
@@ -24,101 +31,181 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
-env:
-  NODE_VERSION: 22
-  # the test/web jobs don't need the Electron binary
-  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-  CI: 'true'
-
 jobs:
   test:
-    name: Typecheck & tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - name: ffmpeg (video tests)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - run: npm ci --no-audit --no-fund
-      - run: npm run typecheck
-      # the sample library the tests read (fixtures/ is git-ignored, it is generated)
-      - run: npm run fixtures
-      - run: npm test
-
-  desktop:
-    name: Desktop (${{ matrix.name }})
-    needs: test
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows
-            os: windows-latest
-            target: --win
-          - name: Linux
-            os: ubuntu-latest
-            target: --linux
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    name: Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
     env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: ''
+      # no debug info: the test binaries of the whole workspace fit on the runner's disk
+      CARGO_PROFILE_DEV_DEBUG: '0'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - name: Toolchain and packages
+        run: |
+          rustup toolchain install stable --profile minimal
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config ffmpeg libasound2-dev libfontconfig1-dev \
+            libxkbcommon-dev libheif-dev libheif-plugin-libde265 libheif-plugin-aomdec libheif-plugin-aomenc \
+            libheif-plugin-x265
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - name: Linux packaging tools (pacman needs bsdtar, deb/rpm need fpm deps)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libarchive-tools rpm
-      - run: npm ci --no-audit --no-fund
-      - run: npm run build -w @peekaround/web
-      # self-contained app folder with the native modules for this OS
-      - run: node packages/desktop/scripts/stage.mjs
-      - run: node packages/desktop/scripts/dist.mjs ${{ matrix.target }}
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: rust-test-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: rust-test-
+      - run: cargo test --workspace
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: always()
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: rust-test-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+
+  # Windows desktop app, cross-built with mingw-w64: static libheif (HEIC / AVIF), the zip and the
+  # NSIS installer
+  windows:
+    name: Windows
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Toolchain and packages
+        run: |
+          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-gnu
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64-win32 g++-mingw-w64-x86-64-win32 \
+            cmake ninja-build meson nasm nsis zip pkg-config
+      - name: Static libheif
+        run: |
+          cargo fetch --target x86_64-pc-windows-gnu
+          sh crates/pa-desktop/packaging/win-libheif.sh "$RUNNER_TEMP/heif"
+      - name: Build
+        run: |
+          . "$RUNNER_TEMP/heif/env.sh"
+          cargo build -p pa-desktop --release --target x86_64-pc-windows-gnu
+      # the same ffmpeg.exe as the alpha.1 package (6.1.1 essentials, gyan.dev)
+      - name: ffmpeg.exe
         env:
-          # optional Windows code signing: WIN_CSC_LINK = the .pfx certificate as base64,
-          # WIN_CSC_KEY_PASSWORD = its password. Without them the .exe files are unsigned.
-          CSC_LINK: ${{ matrix.name == 'Windows' && secrets.WIN_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.name == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v2.0.0-alpha.1 -p '*-win-x64.zip' -D "$RUNNER_TEMP/a1"
+          unzip -j "$RUNNER_TEMP/a1/"*.zip '*/ffmpeg.exe' -d "$RUNNER_TEMP/a1"
+      - name: Package
+        run: sh crates/pa-desktop/packaging/win-dist.sh dist "$RUNNER_TEMP/a1/ffmpeg.exe"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: desktop-${{ matrix.name }}
+          name: peekaround-windows
           path: |
-            packages/desktop/release/*.exe
-            packages/desktop/release/*.AppImage
-            packages/desktop/release/*.pacman
-            packages/desktop/release/*.deb
+            dist/*.zip
+            dist/*.exe
           if-no-files-found: error
 
+  # Android app (crates/pa-android): the Rust library for arm64-v8a with the NDK of the runner, then
+  # the small Gradle project around it (NativeActivity + the sharing service)
   android:
     name: Android APK
-    needs: test
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      TARGET: aarch64-linux-android
+      API: 24
+      FFMPEG_TAG: n7.1.5
+      FFMPEG_COMMIT: 3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
-      - run: npm ci --no-audit --no-fund
-      - run: npm run build -w @peekaround/web
-      - run: npx cap sync android
-        working-directory: packages/android
-      - name: Build APK
-        working-directory: packages/android/android
+      - name: Toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --target "$TARGET"
+          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" || true
+          echo "NDK: $ANDROID_NDK_LATEST_HOME"
+      # restore + save (also after a failed build: the next attempt starts warm)
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: rust-android-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: rust-android-
+      - name: Build the Rust library
+        run: |
+          tc="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC_aarch64_linux_android="$tc/aarch64-linux-android$API-clang"
+          export CXX_aarch64_linux_android="$tc/aarch64-linux-android$API-clang++"
+          export AR_aarch64_linux_android="$tc/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$tc/aarch64-linux-android$API-clang"
+          cargo build -p pa-android --lib --release --target "$TARGET"
+          so="target/$TARGET/release/libpeekaround_android.so"
+          ls -la "$so"
+          "$tc/llvm-readelf" -d "$so" | grep NEEDED
+          libs=crates/pa-android/android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$libs"
+          cp "$so" "$libs/"
+          # C++ dependencies (skia) link against the shared libc++ of the NDK when they need it
+          if "$tc/llvm-readelf" -d "$so" | grep -q 'libc++_shared'; then
+            cp "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$libs/"
+          fi
+      # ffmpeg as an executable inside the APK (libffmpeg.so: Android runs programs only from the
+      # native library folder). LGPL build, decoders for playback and thumbnails; no libx264.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: ffmpeg
+        with:
+          path: ffmpeg-out
+          key: ffmpeg-android-arm64-${{ env.FFMPEG_TAG }}-api${{ env.API }}-1
+      - name: Build ffmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          tc="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          git clone --depth 1 --branch "$FFMPEG_TAG" https://github.com/FFmpeg/FFmpeg.git "$RUNNER_TEMP/ffmpeg"
+          cd "$RUNNER_TEMP/ffmpeg"
+          test "$(git rev-parse HEAD)" = "$FFMPEG_COMMIT"
+          ./configure \
+            --target-os=android --arch=aarch64 --cpu=armv8-a --enable-cross-compile \
+            --cc="$tc/aarch64-linux-android$API-clang" \
+            --cxx="$tc/aarch64-linux-android$API-clang++" \
+            --ar="$tc/llvm-ar" --nm="$tc/llvm-nm" --ranlib="$tc/llvm-ranlib" --strip="$tc/llvm-strip" \
+            --enable-pic --extra-ldflags="-pie -Wl,-z,max-page-size=16384" \
+            --disable-doc --disable-ffplay --disable-ffprobe --disable-avdevice --disable-debug \
+            --disable-shared --enable-static
+          make -j"$(nproc)" ffmpeg
+          "$tc/llvm-strip" ffmpeg
+          mkdir -p "$GITHUB_WORKSPACE/ffmpeg-out"
+          cp ffmpeg "$GITHUB_WORKSPACE/ffmpeg-out/libffmpeg.so"
+          cp COPYING.LGPLv2.1 "$GITHUB_WORKSPACE/ffmpeg-out/"
+      - name: Add ffmpeg to the APK
+        run: |
+          tc="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          ls -la ffmpeg-out
+          "$tc/llvm-readelf" -h ffmpeg-out/libffmpeg.so | grep -E 'Type|Machine'
+          "$tc/llvm-readelf" -d ffmpeg-out/libffmpeg.so | grep NEEDED
+          cp ffmpeg-out/libffmpeg.so crates/pa-android/android/app/src/main/jniLibs/arm64-v8a/
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: always()
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: rust-android-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+      - name: Build the APK
+        working-directory: crates/pa-android/android
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -139,74 +226,75 @@ jobs:
           fi
       - name: Collect APK
         run: |
-          mkdir -p out
-          version=$(node -p "require('./package.json').version")
-          find packages/android/android/app/build/outputs/apk -name '*.apk' | while read -r f; do
-            kind=$(basename "$(dirname "$f")")   # debug | release
-            cp "$f" "out/PeekAround-${version}-android-${kind}.apk"
+          mkdir -p dist
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          find crates/pa-android/android/app/build/outputs/apk -name '*.apk' | while read -r f; do
+            kind=$(basename "$(dirname "$f")")
+            # the signed release APK has the plain name, a debug build says so
+            if [ "$kind" = release ]; then kind=; else kind="-$kind"; fi
+            cp "$f" "dist/PeekAround-${version}-android-arm64${kind}.apk"
           done
-          ls -la out
+          ls -la dist
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: android
-          path: out/*.apk
+          name: peekaround-android
+          path: dist/*.apk
           if-no-files-found: error
 
-  docker:
-    name: Docker image
-    needs: test
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+  # Linux desktop app as a tarball; libheif and ffmpeg come from the system it runs on
+  linux:
+    name: Linux
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - name: Toolchain and packages
+        run: |
+          rustup toolchain install stable --profile minimal
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libasound2-dev libfontconfig1-dev \
+            libxkbcommon-dev libheif-dev
+      - name: Build
+        run: cargo build -p pa-desktop --release
+      - name: Package
+        run: sh crates/pa-desktop/packaging/linux-dist.sh dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          # ghcr names must be lower case
-          images: ghcr.io/${{ github.repository_owner }}/peekaround
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          file: docker/Dockerfile
-          # arm64 (Raspberry Pi, ARM NAS) is emulated and slow: only for releases
-          platforms: ${{ startsWith(github.ref, 'refs/tags/v') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: peekaround-linux
+          path: dist/*.tar.gz
+          if-no-files-found: error
 
   release:
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
-    # the Docker image is published to ghcr on its own; a Docker problem must not block the release
-    needs: [desktop, android]
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+    needs: [test, windows, android, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          pattern: 'peekaround-*'
           path: dist
           merge-multiple: true
-      - run: ls -la dist
+      # the packages carry the version of Cargo.toml: it has to be the one of the tag
+      - name: Check the version
+        run: |
+          ls -la dist
+          for f in dist/*; do
+            case "$f" in
+              *"-${TAG#v}-"*|*"-${TAG#v}.exe") ;;
+              *) echo "::error::$f is not version ${TAG#v}"; exit 1 ;;
+            esac
+          done
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist/*
-          generate_release_notes: true
+          tag_name: ${{ env.TAG }}
+          prerelease: ${{ contains(env.TAG, '-') }}
+          # a manual upload to an existing release keeps its hand-written notes
+          generate_release_notes: ${{ inputs.release_tag == '' }}
           fail_on_unmatched_files: true

@@ -71,7 +71,7 @@ fn root_dir(root: &str) -> PathBuf {
 fn extract_meta_matches_typescript() {
     let g = golden();
     let geo = pa_core::decode_geo_asset(
-        &std::fs::read(here().join("../../packages/web/public/geo/cities.bin")).expect("geo"),
+        &std::fs::read(here().join("../../assets/geo/cities.bin")).expect("geo"),
     )
     .expect("geo index");
     let zones: Vec<String> = serde_json::from_value(g["zones"].clone()).expect("zones");

@@ -3,7 +3,7 @@
 //! memories, trips, search parsing, Takeout sidecars, sun position, colours, insights, tiles, albums.
 //!
 //! No IO: everything takes values / bytes, so the crate builds for wasm32, Android and Windows.
-//! Load the GeoNames asset (`packages/web/public/geo/cities.bin`) with [`decode_geo_asset`] from bytes.
+//! Load the GeoNames asset (`assets/geo/cities.bin`) with [`decode_geo_asset`] from bytes.
 //!
 //! Parity with the TypeScript reference is checked by `tests/golden.rs` (12k generated cases from
 //! `tests/tools/gen-core.ts`), `tests/api.rs` (141 real TS server responses must round-trip byte for

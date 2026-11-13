@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 
 const FX: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../packages/shared/fixtures/link"
+    "/../pa-link/tests/fixtures/link"
 );
 
 fn fixture(n: &str) -> Vec<Value> {

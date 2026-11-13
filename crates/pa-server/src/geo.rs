@@ -1,6 +1,6 @@
 //! Offline reverse geocoder backed by the GeoNames asset of the web UI (mirrors `geo.ts`).
 //! Looked up in `$PEEK_GEO_FILE`, `<webDir>/geo/cities.bin`, then the repository's
-//! `packages/web/public/geo/cities.bin` (development / tests).
+//! `assets/geo/cities.bin` (development / tests).
 
 use pa_core::{GeoIndex, GeoMatch, PlaceInfo};
 use parking_lot::Mutex;
@@ -52,7 +52,7 @@ impl GeoService {
         }
         c.push(
             Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../packages/web/public")
+                .join("../../assets")
                 .join(pa_core::GEO_ASSET_PATH),
         );
         c.into_iter().find(|f| f.is_file())

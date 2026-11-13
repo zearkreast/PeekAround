@@ -15,7 +15,7 @@ name="PeekAround-$version-linux-x64"
 dir="$out/$name"
 rm -rf "$dir" && mkdir -p "$dir/web/geo" "$dir/licenses"
 cp "$exe" "$dir/peekaround-desktop"
-cp "$root/packages/web/public/geo/cities.bin" "$dir/web/geo/"
+cp "$root/assets/geo/cities.bin" "$dir/web/geo/"
 cp "$root/LICENSE" "$dir/LICENSE"
 cp "$root"/crates/pa-ui/fonts/OFL-*.txt "$root/crates/pa-ui/ui/icons/LICENSE-lucide.txt" "$dir/licenses/"
 cat > "$dir/README.txt" <<TXT
