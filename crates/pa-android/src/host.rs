@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use pa_phone::{LinkPrefs, LinkStatus};
-use pa_ui::host::{AndroidState, Host};
+use pa_ui::host::{AndroidState, Host, Shared};
 
 use crate::config::{self, Mode};
 use crate::platform;
@@ -27,6 +27,17 @@ impl AndroidHost {
             Mode::Local => None,
         }
     }
+}
+
+/// the JSON of `MainActivity.takeShared`
+pub fn parse_shared(json: &str) -> Option<Shared> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    let files: Vec<PathBuf> = v["files"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|f| f.as_str()).map(PathBuf::from).collect())
+        .unwrap_or_default();
+    let text = v["text"].as_str().map(str::to_string).filter(|t| !t.trim().is_empty());
+    (!files.is_empty() || text.is_some()).then_some(Shared { files, text })
 }
 
 /// folders offered for sharing (the usual choices of the 1.x folder picker), shared ones first
@@ -160,6 +171,31 @@ impl Host for AndroidHost {
     fn copy_text(&self, text: &str) {
         platform::copy_text(text);
     }
+    fn take_shared(&self) -> Option<Shared> {
+        parse_shared(&platform::take_shared()?)
+    }
+    fn download_dir(&self) -> Option<PathBuf> {
+        let dir = platform::storage_root().join("Download").join("PeekAround");
+        // no storage permission (server mode on Android 10 and older): the app's own folder
+        if std::fs::create_dir_all(&dir).is_ok() {
+            Some(dir)
+        } else {
+            Some(self.files.join("downloads"))
+        }
+    }
+    fn file_saved(&self, path: &Path) {
+        platform::scan_file(&path.to_string_lossy());
+    }
+    fn share_dir(&self) -> Option<PathBuf> {
+        // Context.getCacheDir(), where ShareProvider serves from
+        Some(self.files.parent()?.join("cache").join("share"))
+    }
+    fn share_files(&self, paths: Vec<PathBuf>) {
+        let list: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        if let Ok(json) = serde_json::to_string(&list) {
+            platform::share_files(&json);
+        }
+    }
     fn android(&self) -> Option<AndroidState> {
         let prefs = LinkPrefs::load(&self.files);
         let st = LinkStatus::load(&self.files);
@@ -216,6 +252,15 @@ impl Host for AndroidHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_json() {
+        let s = parse_shared(r#"{"files":["/c/incoming/1/a.jpg"],"text":"https://mega.nz/x"}"#).unwrap();
+        assert_eq!(s.files, vec![PathBuf::from("/c/incoming/1/a.jpg")]);
+        assert_eq!(s.text.as_deref(), Some("https://mega.nz/x"));
+        assert_eq!(parse_shared(r#"{"files":[]}"#), None);
+        assert_eq!(parse_shared(""), None);
+    }
 
     #[test]
     fn share_actions_edit_link_json() {

@@ -381,6 +381,7 @@ impl Hub {
                 .as_ref()
                 .is_some_and(|i| i.mode == pa_core::RunMode::Desktop),
             zip_download: info.as_ref().is_some_and(|i| i.caps.zip_download),
+            share: self.app().is_some_and(|a| a.host.share_dir().is_some()),
             trash: info.as_ref().map(|i| i.caps.trash),
             albums: self.app().is_some_and(|a| a.backend.ops().is_some()) && info.is_some(),
             album: self.album.borrow().clone(),
@@ -594,6 +595,7 @@ impl Hub {
             "edit" if items[0].kind == pa_core::MediaKind::Video => crate::video_editor::open(a, items[0].clone()),
             "edit" => crate::editor::open(a, items[0].clone()),
             "download" => self.download(a, items),
+            "share" => self.share(a, items),
             "slideshow" => {
                 if let Some(v) = crate::viewer::get() {
                     v.close_now();
@@ -673,9 +675,13 @@ impl Hub {
 
     fn download(&self, a: &Rc<AppInner>, items: Vec<MediaItem>) {
         let Some(ops) = a.backend.ops() else { return };
-        let dir = dirs::download_dir()
+        let dir = a
+            .host
+            .download_dir()
+            .or_else(dirs::download_dir)
             .or_else(dirs::home_dir)
             .unwrap_or_else(std::env::temp_dir);
+        let _ = std::fs::create_dir_all(&dir);
         let name = if items.len() == 1 {
             items[0].name.clone()
         } else {
@@ -689,6 +695,7 @@ impl Hub {
             let Some(a) = w.upgrade() else { return };
             match r {
                 Ok(p) => {
+                    a.host.file_saved(&p);
                     let l = a.lang();
                     a.toast(
                         ToastKind::Success,
@@ -710,6 +717,52 @@ impl Hub {
                 Err(e) => a.toast(ToastKind::Error, &a.t("common.error"), &e.message),
             }
         });
+    }
+
+    /// copies the originals into the host's share folder, then opens the share sheet
+    fn share(&self, a: &Rc<AppInner>, items: Vec<MediaItem>) {
+        let (Some(ops), Some(dir)) = (a.backend.ops(), a.host.share_dir()) else {
+            return;
+        };
+        // what the previous share left behind
+        let _ = std::fs::remove_dir_all(&dir);
+        if std::fs::create_dir_all(&dir).is_err() {
+            a.toast(ToastKind::Error, &a.t("common.error"), "");
+            return;
+        }
+        a.toast(ToastKind::Info, &a.t("mobile.action.share"), "");
+        let mut jobs = Vec::with_capacity(items.len());
+        let mut taken = std::collections::HashSet::new();
+        for it in &items {
+            // nothing is on disk yet, so unique_path cannot tell two equal names apart
+            let mut dest = dir.join(&it.name);
+            let mut n = 1;
+            while !taken.insert(dest.clone()) {
+                dest = dir.join(format!("{n}-{}", it.name));
+                n += 1;
+            }
+            jobs.push(ops.download(vec![it.id.clone()], dest));
+        }
+        let w = Rc::downgrade(a);
+        a.rt.spawn_then(
+            async move {
+                let mut out = Vec::with_capacity(jobs.len());
+                for j in jobs {
+                    out.push(j.await?);
+                }
+                Ok(out)
+            },
+            move |r: Result<Vec<std::path::PathBuf>, _>| {
+                let Some(a) = w.upgrade() else { return };
+                match r {
+                    Ok(paths) => a.host.share_files(paths),
+                    Err(e) => {
+                        let e: crate::backend::BackendError = e;
+                        a.toast(ToastKind::Error, &a.t("common.error"), &e.message)
+                    }
+                }
+            },
+        );
     }
 
     fn with_path(
@@ -1799,7 +1852,7 @@ impl Hub {
             }
             return false;
         }
-        if t == k(Key::Escape) {
+        if t == k(Key::Escape) || t == k(Key::Back) {
             if !a.grid.0.borrow().ix.selection.is_empty() {
                 self.clear_selection();
                 return true;

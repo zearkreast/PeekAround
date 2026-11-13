@@ -137,6 +137,78 @@ component RowButton inherits Button {
     clicked => { SetState.action(self.key); }
 }
 
+// the control part of a generic row: beside the label on a wide window, under it on a phone
+component RowControls inherits HorizontalLayout {
+    in property <SetRow> r;
+    spacing: 8px;
+    alignment: end;
+    if root.r.kind == "switch": Switch {
+        checked: root.r.checked;
+        enabled: root.r.enabled;
+        toggled(v) => { SetState.changed(root.r.key, v ? "true" : "false"); }
+    }
+    if root.r.kind == "seg": Segmented {
+        small: true;
+        options: root.r.options;
+        value: root.r.value;
+        changed-value(v) => { SetState.changed(root.r.key, v); }
+    }
+    if root.r.kind == "select": Select {
+        width: 180px;
+        small: true;
+        options: root.r.sel-options;
+        value: root.r.value;
+        changed-value(v) => { SetState.changed(root.r.key, v); }
+    }
+    if root.r.kind == "accent": ColorSwatches {
+        colors: PrefsState.accents;
+        value: PrefsState.accent;
+        picked(c) => { PrefsState.set-accent(c); }
+    }
+    if root.r.kind == "slider": Slider {
+        width: 200px;
+        minimum: root.r.min;
+        maximum: root.r.max;
+        step: root.r.step;
+        value: root.r.num;
+        value-text: Math.round(self.value) + root.r.unit;
+        committed(v) => { SetState.changed(root.r.key, Math.round(v)); }
+        changed-value(v) => { SetState.changed(root.r.key, Math.round(v)); }
+    }
+    if root.r.kind == "text" || root.r.kind == "number": TextField {
+        width: root.r.kind == "number" ? 96px : 140px;
+        text: root.r.value;
+        enabled: root.r.enabled;
+        accepted(v) => { SetState.changed(root.r.key, v); }
+        changed focused => { if !self.focused { SetState.changed(root.r.key, self.text); } }
+    }
+    if root.r.kind == "lan": TextField {
+        width: 96px;
+        text: root.r.value;
+        enabled: !root.r.checked;
+        accepted(v) => { SetState.changed("lanPort", v); }
+        changed focused => { if !self.focused { SetState.changed("lanPort", self.text); } }
+    }
+    if root.r.kind == "lan": Switch {
+        checked: root.r.checked;
+        enabled: root.r.enabled;
+        toggled(v) => { SetState.changed(root.r.key, v ? "true" : "false"); }
+    }
+    if root.r.kind == "status": Badge { text: root.r.value; fg: root.r.online ? Theme.ok : Theme.danger; }
+    if root.r.kind == "status" && root.r.sub != "": Badge { text: root.r.sub; }
+    if root.r.b3-key != "": RowButton { key: root.r.b3-key; text: root.r.b3-label; icon: root.r.b3-icon; has-icon: true; variant: ButtonVariant.primary; }
+    if root.r.b2-key != "" && !root.r.stack: RowButton { key: root.r.b2-key; text: root.r.b2-label; icon: root.r.b2-icon; has-icon: true; }
+    if root.r.b1-key != "" && !root.r.stack: RowButton {
+        key: root.r.b1-key;
+        text: root.r.b1-label;
+        icon: root.r.b1-icon;
+        has-icon: true;
+        variant: root.r.b1-primary ? ButtonVariant.primary : ButtonVariant.secondary;
+        loading: root.r.b1-busy;
+        enabled: root.r.enabled;
+    }
+}
+
 // one row of a card
 component RowView inherits Rectangle {
     in property <SetRow> r;
@@ -144,6 +216,8 @@ component RowView inherits Rectangle {
     in property <bool> last;
     min-height: lay.preferred-height;
     property <bool> wide-control: r.stack || r.kind == "lan-urls";
+    // a phone puts the control under its label, a switch still fits beside it
+    property <bool> stacked: Shell.compact && !(r.kind == "switch" && r.b1-key == "" && r.b2-key == "" && r.b3-key == "");
     lay := VerticalLayout {
         padding-top: root.first ? 0px : 14px;
         padding-bottom: root.last ? 0px : 14px;
@@ -211,9 +285,10 @@ component RowView inherits Rectangle {
                 horizontal-stretch: 1;
                 alignment: center;
                 spacing: 2px;
-                Text { text: root.r.label; font-size: 12px; color: Theme.text-faint; }
+                Text { text: root.r.label; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
                 for u in root.r.urls: Text {
                     text: u;
+                    overflow: elide;
                     font-size: 14px;
                     font-family: "monospace";
                     color: Theme.accent;
@@ -233,7 +308,7 @@ component RowView inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 Text { text: "PeekAround"; font-family: Theme.font-display; font-size: 24px; font-weight: 700; color: Theme.text; }
-                Text { text: root.r.sub; font-size: 12px; color: Theme.text-faint; }
+                Text { text: root.r.sub; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
             }
         }
         // a shortcut group
@@ -242,7 +317,7 @@ component RowView inherits Rectangle {
         }
         if root.r.kind == "key": HorizontalLayout {
             spacing: 8px;
-            Text { text: root.r.label; font-size: 14px; color: Theme.text-dim; vertical-alignment: center; horizontal-stretch: 1; }
+            Text { text: root.r.label; font-size: 14px; color: Theme.text-dim; vertical-alignment: center; horizontal-stretch: 1; wrap: word-wrap; }
             for k in root.r.keys: VerticalLayout { alignment: center; Kbd { text: k; } }
         }
         // metadata diagnostics of a library
@@ -277,7 +352,7 @@ component RowView inherits Rectangle {
         // the generic "label + hint | control" row
         if root.r.kind != "lib" && root.r.kind != "device" && root.r.kind != "lan-urls" && root.r.kind != "about" && root.r.kind != "keys" && root.r.kind != "key" && root.r.kind != "meta-lib" && root.r.kind != "note" && root.r.kind != "mega-form": VerticalLayout {
             spacing: 8px;
-            HorizontalLayout {
+            if !Shell.compact: HorizontalLayout {
                 spacing: 24px;
                 VerticalLayout {
                     horizontal-stretch: 1;
@@ -293,76 +368,36 @@ component RowView inherits Rectangle {
                 }
                 if !root.wide-control: VerticalLayout {
                     alignment: center;
+                    RowControls { r: root.r; alignment: end; }
+                }
+            }
+            if root.stacked: VerticalLayout {
+                spacing: 10px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 2px;
                     HorizontalLayout {
                         spacing: 8px;
-                        alignment: end;
-                        if root.r.kind == "switch": Switch {
-                            checked: root.r.checked;
-                            enabled: root.r.enabled;
-                            toggled(v) => { SetState.changed(root.r.key, v ? "true" : "false"); }
-                        }
-                        if root.r.kind == "seg": Segmented {
-                            small: true;
-                            options: root.r.options;
-                            value: root.r.value;
-                            changed-value(v) => { SetState.changed(root.r.key, v); }
-                        }
-                        if root.r.kind == "select": Select {
-                            width: 180px;
-                            small: true;
-                            options: root.r.sel-options;
-                            value: root.r.value;
-                            changed-value(v) => { SetState.changed(root.r.key, v); }
-                        }
-                        if root.r.kind == "accent": ColorSwatches {
-                            colors: PrefsState.accents;
-                            value: PrefsState.accent;
-                            picked(c) => { PrefsState.set-accent(c); }
-                        }
-                        if root.r.kind == "slider": Slider {
-                            width: 200px;
-                            minimum: root.r.min;
-                            maximum: root.r.max;
-                            step: root.r.step;
-                            value: root.r.num;
-                            value-text: Math.round(self.value) + root.r.unit;
-                            committed(v) => { SetState.changed(root.r.key, Math.round(v)); }
-                            changed-value(v) => { SetState.changed(root.r.key, Math.round(v)); }
-                        }
-                        if root.r.kind == "text" || root.r.kind == "number": TextField {
-                            width: root.r.kind == "number" ? 96px : 140px;
-                            text: root.r.value;
-                            enabled: root.r.enabled;
-                            accepted(v) => { SetState.changed(root.r.key, v); }
-                            changed focused => { if !self.focused { SetState.changed(root.r.key, self.text); } }
-                        }
-                        if root.r.kind == "lan": TextField {
-                            width: 96px;
-                            text: root.r.value;
-                            enabled: !root.r.checked;
-                            accepted(v) => { SetState.changed("lanPort", v); }
-                            changed focused => { if !self.focused { SetState.changed("lanPort", self.text); } }
-                        }
-                        if root.r.kind == "lan": Switch {
-                            checked: root.r.checked;
-                            enabled: root.r.enabled;
-                            toggled(v) => { SetState.changed(root.r.key, v ? "true" : "false"); }
-                        }
-                        if root.r.kind == "status": Badge { text: root.r.value; fg: root.r.online ? Theme.ok : Theme.danger; }
-                        if root.r.kind == "status" && root.r.sub != "": Badge { text: root.r.sub; }
-                        if root.r.b3-key != "": RowButton { key: root.r.b3-key; text: root.r.b3-label; icon: root.r.b3-icon; has-icon: true; variant: ButtonVariant.primary; }
-                        if root.r.b2-key != "" && !root.r.stack: RowButton { key: root.r.b2-key; text: root.r.b2-label; icon: root.r.b2-icon; has-icon: true; }
-                        if root.r.b1-key != "" && !root.r.stack: RowButton {
-                            key: root.r.b1-key;
-                            text: root.r.b1-label;
-                            icon: root.r.b1-icon;
-                            has-icon: true;
-                            variant: root.r.b1-primary ? ButtonVariant.primary : ButtonVariant.secondary;
-                            loading: root.r.b1-busy;
-                            enabled: root.r.enabled;
-                        }
+                        alignment: start;
+                        Text { text: root.r.label; font-size: 14px; font-weight: 500; color: Theme.text; wrap: word-wrap; }
+                        if root.r.badge != "": Badge { text: root.r.badge; fg: Theme.warn; }
                     }
+                    if root.r.hint != "": Text { text: root.r.hint; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
                 }
+                if !root.wide-control: RowControls { r: root.r; alignment: start; }
+            }
+            // a phone's switch row: the switch beside the label, the hint under both at full width
+            // (a wrapped hint beside the switch gets a wrong height)
+            if Shell.compact && !root.stacked: VerticalLayout {
+                spacing: 2px;
+                HorizontalLayout {
+                    spacing: 12px;
+                    Text { text: root.r.label; font-size: 14px; font-weight: 500; color: Theme.text; wrap: word-wrap; vertical-alignment: center; horizontal-stretch: 1; }
+                    if root.r.badge != "": VerticalLayout { alignment: center; Badge { text: root.r.badge; fg: Theme.warn; } }
+                    if !root.wide-control: VerticalLayout { alignment: center; RowControls { r: root.r; alignment: end; } }
+                }
+                if root.r.hint != "": Text { text: root.r.hint; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
             }
             // stacked controls (wide: close action, backup buttons)
             if root.r.stack: HorizontalLayout {
@@ -376,7 +411,12 @@ component RowView inherits Rectangle {
                 }
                 if root.r.b1-key != "": RowButton { key: root.r.b1-key; text: root.r.b1-label; icon: root.r.b1-icon; has-icon: true; }
                 if root.r.b2-key != "": RowButton { key: root.r.b2-key; text: root.r.b2-label; icon: root.r.b2-icon; has-icon: true; }
-                if root.r.b3-key != "": RowButton { key: root.r.b3-key; text: root.r.b3-label; icon: root.r.b3-icon; has-icon: true; variant: ButtonVariant.ghost; }
+                if root.r.b3-key != "" && !Shell.compact: RowButton { key: root.r.b3-key; text: root.r.b3-label; icon: root.r.b3-icon; has-icon: true; variant: ButtonVariant.ghost; }
+            }
+            // three buttons do not fit a phone's width
+            if root.r.stack && Shell.compact && root.r.b3-key != "": HorizontalLayout {
+                alignment: start;
+                RowButton { key: root.r.b3-key; text: root.r.b3-label; icon: root.r.b3-icon; has-icon: true; variant: ButtonVariant.ghost; }
             }
         }
     }
@@ -389,13 +429,15 @@ component RowView inherits Rectangle {
 
 component CardView inherits Rectangle {
     in property <SetCard> c;
+    // a row that cannot shrink must not widen the whole page past a phone's screen
+    min-width: 0px;
     border-radius: 24px;
     border-width: 1px;
     border-color: Theme.border;
     background: Theme.bg-elev;
     height: lay.preferred-height;
     lay := VerticalLayout {
-        padding: 24px;
+        padding: Shell.compact ? 16px : 24px;
         spacing: 16px;
         HorizontalLayout {
             spacing: 10px;
@@ -414,6 +456,7 @@ component CardView inherits Rectangle {
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
+                overflow: elide;
             }
             if root.c.scope != "": VerticalLayout {
                 alignment: center;
@@ -452,8 +495,8 @@ component CardView inherits Rectangle {
 
 export component SettingsPage inherits Rectangle {
     property <bool> wide: root.width >= 860px;
-    property <length> cw: Math.min(root.width - 56px - 12px, 1100px);
-    property <length> cx: (root.width - 12px - cw) / 2;
+    property <length> cw: Shell.compact ? root.width - 32px : Math.min(root.width - 56px - 12px, 1100px);
+    property <length> cx: Shell.compact ? 16px : (root.width - 12px - cw) / 2;
 
     fl := Flickable {
         width: root.width;
@@ -542,7 +585,7 @@ export component SettingsPage inherits Rectangle {
                         spacing: 12px;
                         alignment: center;
                         HorizontalLayout { alignment: center; Image { source: PIcons.search-x; colorize: Theme.text-faint; width: 40px; height: 40px; } }
-                        Text { text: I18n.t1("pref.searchEmpty", "q", SetState.query, I18n.rev); font-size: 14px; color: Theme.text-dim; horizontal-alignment: center; }
+                        Text { text: I18n.t1("pref.searchEmpty", "q", SetState.query, I18n.rev); font-size: 14px; color: Theme.text-dim; horizontal-alignment: center; wrap: word-wrap; }
                     }
                 }
             }

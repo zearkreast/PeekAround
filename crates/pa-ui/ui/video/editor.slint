@@ -5,6 +5,7 @@
 // play, I / O set in / out, ← → step a frame (Shift: 1 s), Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y,
 // Delete removes the selected text, Esc deselects, leaves the crop tool, then goes back.
 
+import { Shell } from "../globals.slint";
 import { Theme, Motion, I18n } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
@@ -1278,16 +1279,22 @@ export component VideoEditorOverlay inherits Rectangle {
                 VideoEditorState.delete-selected();
                 return accept;
             }
-            if e.text == Key.Escape { VideoEditorState.escape(); return accept; }
+            if (e.text == Key.Escape || e.text == Key.Back) { VideoEditorState.escape(); return accept; }
             reject
         }
     }
     VerticalLayout {
         TopBar { }
-        HorizontalLayout {
+        body := Rectangle {
             vertical-stretch: 1;
+            // on a phone the tool panel sits under the stage
+            property <length> pw: Shell.compact ? self.width : 372px;
+            property <length> ph: Shell.compact ? Math.min(360px, self.height * 0.48) : self.height;
             VerticalLayout {
-                horizontal-stretch: 1;
+                x: 0;
+                y: 0;
+                width: Shell.compact ? body.width : body.width - body.pw;
+                height: Shell.compact ? body.height - body.ph : body.height;
                 Stage { vertical-stretch: 1; pressed => { fs.focus(); } }
                 Rectangle {
                     height: bottom.preferred-height;
@@ -1300,7 +1307,10 @@ export component VideoEditorOverlay inherits Rectangle {
                 }
             }
             Rectangle {
-                width: 372px;
+                x: body.width - body.pw;
+                y: body.height - body.ph;
+                width: body.pw;
+                height: body.ph;
                 background: Theme.bg-elev;
                 Rectangle { x: 0; width: 1px; background: Theme.border; }
                 VerticalLayout {

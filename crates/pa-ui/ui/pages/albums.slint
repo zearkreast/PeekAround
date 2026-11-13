@@ -153,7 +153,7 @@ component AlbumTitle inherits Rectangle {
                 if self.text != root.name && self.text != "" { root.save(self.text); }
             }
             key-pressed(e) => {
-                if e.text == Key.Escape { root.editing = false; return accept; }
+                if (e.text == Key.Escape || e.text == Key.Back) { root.editing = false; return accept; }
                 reject
             }
             changed has-focus => {

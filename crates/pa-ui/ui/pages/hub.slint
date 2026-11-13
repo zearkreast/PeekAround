@@ -95,6 +95,7 @@ export component HubPage inherits Rectangle {
                     x: 4px;
                     text: I18n.t("lib2.hub.noAlbums", I18n.rev);
                     font-size: 14px;
+                    wrap: word-wrap;
                     color: Theme.text-dim;
                 }
                 if HubState.albums.length > 0: Rectangle {

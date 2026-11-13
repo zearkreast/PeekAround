@@ -269,7 +269,7 @@ export component ActionLayer inherits Rectangle {
         FocusScope {
             init => { self.focus(); }
             key-pressed(e) => {
-                if e.text == Key.Escape { ActionState.menu-close(); return accept; }
+                if (e.text == Key.Escape || e.text == Key.Back) { ActionState.menu-close(); return accept; }
                 reject
             }
         }
@@ -327,7 +327,7 @@ export component ActionLayer inherits Rectangle {
             init => { self.focus(); }
             key-pressed(e) => {
                 if e.text == Key.Return { ActionState.dialog-confirm(); return accept; }
-                if e.text == Key.Escape { ActionState.dialog-close(); return accept; }
+                if (e.text == Key.Escape || e.text == Key.Back) { ActionState.dialog-close(); return accept; }
                 reject
             }
         }

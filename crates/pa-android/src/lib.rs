@@ -60,6 +60,11 @@ pub fn run(files: &Path) {
         .build()
         .expect("tokio runtime");
     let _ = std::fs::create_dir_all(files);
+    let ffmpeg = bundled_ffmpeg();
+    match &ffmpeg {
+        Some(p) => pa_ui::video::set_ffmpeg_path(p.clone()),
+        None => log::warn!("no ffmpeg in this build: videos do not play"),
+    }
     let mode = match config::load_mode(files) {
         Some(m) => m,
         None => match setup::run(files, runtime.handle().clone()) {
@@ -69,7 +74,7 @@ pub fn run(files: &Path) {
     };
     let mut server: Option<Arc<pa_server::Server>> = None;
     let backend: Arc<dyn Backend> = match &mode {
-        Mode::Local => match runtime.block_on(start_local_server(files)) {
+        Mode::Local => match runtime.block_on(start_local_server(files, ffmpeg.as_deref())) {
             Ok(s) => {
                 let s = Arc::new(s);
                 let c = pa_client::Client::new(&s.url).expect("local url");
@@ -174,9 +179,19 @@ pub fn default_roots(storage: &Path) -> Vec<pa_server::RootSpec> {
     out
 }
 
+/// ffmpeg ships in the APK as `libffmpeg.so` (Android only runs executables from the native
+/// library folder). It has decoders only: no ffprobe (the server reads `ffmpeg -i` instead) and no
+/// H.264 encoder, so video exports stay unavailable on the phone.
+fn bundled_ffmpeg() -> Option<std::path::PathBuf> {
+    let p = platform::native_lib_dir()?.join("libffmpeg.so");
+    p.is_file().then_some(p)
+}
+
 /// Local mode: the server of the desktop app, on 127.0.0.1 only, data in the app's private files.
-/// No ffmpeg on the phone: video thumbnails / transcoding / exports are unavailable there.
-async fn start_local_server(files: &Path) -> Result<pa_server::Server, pa_server::StartError> {
+async fn start_local_server(
+    files: &Path,
+    ffmpeg: Option<&Path>,
+) -> Result<pa_server::Server, pa_server::StartError> {
     let data = files.join("data");
     let first = !data.join("peekaround.db").exists();
     let mut o = pa_server::ServerOptions::new(data);
@@ -188,7 +203,10 @@ async fn start_local_server(files: &Path) -> Result<pa_server::Server, pa_server
     }
     o.mdns = false;
     o.version = VERSION.to_string();
-    o.ffmpeg_path = Some("/system/bin/peekaround-no-ffmpeg".into());
+    o.ffmpeg_path = Some(match ffmpeg {
+        Some(p) => p.to_string_lossy().into_owned(),
+        None => "/system/bin/peekaround-no-ffmpeg".into(),
+    });
     o.ffprobe_path = Some("/system/bin/peekaround-no-ffprobe".into());
     log::info!("local server: {} roots", o.roots.len());
     pa_server::Server::start(o).await

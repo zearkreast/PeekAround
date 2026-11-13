@@ -3,6 +3,7 @@
 // "Save collage" popover. Keys: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, Delete clears the selected cell or
 // removes the selected text, Esc deselects. Rust: src/collage/mod.rs.
 
+import { Shell } from "../globals.slint";
 import { Theme, Motion, I18n } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { PIcons } from "../pages/icons.slint";
@@ -889,15 +890,21 @@ export component CollagePage inherits Rectangle {
                 if e.text == "y" || e.text == "Y" { CollageState.redo(); return accept; }
                 return reject;
             }
-            if e.text == Key.Escape { CollageState.escape(); return accept; }
+            if (e.text == Key.Escape || e.text == Key.Back) { CollageState.escape(); return accept; }
             if e.text == Key.Delete || e.text == Key.Backspace { CollageState.delete-selected(); return accept; }
             reject
         }
     }
     if !CollageState.has-photos: EmptyCollage { }
-    if CollageState.has-photos: HorizontalLayout {
+    if CollageState.has-photos: body := Rectangle {
+        // on a phone the tool panel sits under the stage
+        property <length> pw: Shell.compact ? self.width : 360px;
+        property <length> ph: Shell.compact ? Math.min(360px, self.height * 0.48) : self.height;
         VerticalLayout {
-            horizontal-stretch: 1;
+            x: 0;
+            y: 0;
+            width: Shell.compact ? body.width : body.width - body.pw;
+            height: Shell.compact ? body.height - body.ph : body.height;
             HorizontalLayout {
                 padding-left: root.window-width >= 640px ? 24px : 16px;
                 padding-right: root.window-width >= 640px ? 24px : 16px;
@@ -939,7 +946,10 @@ export component CollagePage inherits Rectangle {
             Stage { vertical-stretch: 1; pressed => { fs.focus(); } }
         }
         Rectangle {
-            width: 360px;
+            x: body.width - body.pw;
+            y: body.height - body.ph;
+            width: body.pw;
+            height: body.ph;
             background: Theme.bg-elev;
             Rectangle { x: 0; width: 1px; background: Theme.border; }
             VerticalLayout {

@@ -474,6 +474,7 @@ pub fn run_with(
     let shell = window.global::<Shell>();
     shell.set_toasts(ModelRc::from(toasts.clone()));
     shell.set_server_label(backend.label().into());
+    shell.set_phone(integ.host.platform() == "android" || std::env::var_os("PA_PHONE").is_some());
     let app = Rc::new(AppInner {
         window: window.clone_strong(),
         backend: backend.clone(),
@@ -494,6 +495,22 @@ pub fn run_with(
     app.apply_prefs();
     window.global::<I18n>().set_rev(1);
 
+    if app.host.platform() == "android" {
+        let w = Rc::downgrade(&app);
+        let t = slint::Timer::default();
+        t.start(slint::TimerMode::Repeated, Duration::from_millis(700), move || {
+            let Some(a) = w.upgrade() else { return };
+            let Some(s) = a.host.take_shared() else { return };
+            if !s.files.is_empty() {
+                crate::pages::dialogs::add_files(&a, s.files, None, true);
+            } else if let Some(url) = s.text.as_deref().and_then(crate::pages::dialogs::find_mega_url) {
+                crate::pages::dialogs::open_mega(&a, &url, "");
+            }
+        });
+        // runs for the life of the app
+        std::mem::forget(t);
+    }
+
     // ── callbacks ──
     let w = Rc::downgrade(&app);
     shell.on_navigate(move |p| {
@@ -508,6 +525,25 @@ pub fn run_with(
             if let Some(p) = prev {
                 a.go(p, false);
             }
+        }
+    });
+    let w = Rc::downgrade(&app);
+    shell.on_back_key(move || {
+        let Some(a) = w.upgrade() else { return false };
+        // touch leaves the focus anywhere, so the viewer and the selection are asked directly
+        let back = slint::SharedString::from(slint::platform::Key::Back);
+        if a.window.global::<crate::ViewerState>().invoke_key(back.clone(), false, false, false)
+            || a.window.global::<crate::GridInput>().invoke_key(back, false, false, false)
+        {
+            return true;
+        }
+        let prev = a.history.borrow_mut().pop();
+        match prev {
+            Some(p) => {
+                a.go(p, false);
+                true
+            }
+            None => false,
         }
     });
     let w = Rc::downgrade(&app);

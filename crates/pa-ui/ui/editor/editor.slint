@@ -4,6 +4,7 @@
 // Ctrl+Y, Ctrl+S, hold \ to compare, 0 fit, 1 actual size, Delete removes the selected layer,
 // Esc deselects, then goes back.
 
+import { Shell } from "../globals.slint";
 import { Theme, Motion, I18n } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
@@ -788,7 +789,9 @@ component TopBar inherits Rectangle {
             alignment: center;
             IconButton { icon: Icons.arrow-left; label: I18n.t("common.back", I18n.rev); clicked => { EditorState.close(); } }
         }
-        VerticalLayout {
+        // a phone keeps only the tools and the save button
+        if Shell.compact: Rectangle { horizontal-stretch: 1; }
+        if !Shell.compact: VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
             spacing: 1px;
@@ -847,16 +850,16 @@ component TopBar inherits Rectangle {
                             }
                         }
                     }
-                    VerticalLayout { alignment: center; Rectangle { width: 1px; height: 20px; background: Theme.border; } }
-                    IconButton { size: IconButtonSize.sm; icon: EIcons.fit; label: I18n.t("photo.zoomFit", I18n.rev); active: EditorState.zoom-fit; enabled: EditorState.tab != "crop"; clicked => { EditorState.zoom("fit"); } }
-                    IconButton { size: IconButtonSize.sm; icon: EIcons.zoom-100; label: I18n.t("photo.zoom100", I18n.rev); active: EditorState.zoom-100; enabled: EditorState.tab != "crop"; clicked => { EditorState.zoom("100"); } }
+                    if !Shell.compact: VerticalLayout { alignment: center; Rectangle { width: 1px; height: 20px; background: Theme.border; } }
+                    if !Shell.compact: IconButton { size: IconButtonSize.sm; icon: EIcons.fit; label: I18n.t("photo.zoomFit", I18n.rev); active: EditorState.zoom-fit; enabled: EditorState.tab != "crop"; clicked => { EditorState.zoom("fit"); } }
+                    if !Shell.compact: IconButton { size: IconButtonSize.sm; icon: EIcons.zoom-100; label: I18n.t("photo.zoom100", I18n.rev); active: EditorState.zoom-100; enabled: EditorState.tab != "crop"; clicked => { EditorState.zoom("100"); } }
                 }
             }
         }
         VerticalLayout {
             alignment: center;
             Button {
-                text: I18n.t("photo.save", I18n.rev);
+                text: Shell.compact ? I18n.t("common.save", I18n.rev) : I18n.t("photo.save", I18n.rev);
                 icon: Icons.download;
                 has-icon: true;
                 variant: ButtonVariant.primary;
@@ -884,7 +887,7 @@ export component EditorOverlay inherits Rectangle {
                 return reject;
             }
             if e.text == "\\" { if !e.repeat { EditorState.set-compare(true); } return accept; }
-            if e.text == Key.Escape {
+            if (e.text == Key.Escape || e.text == Key.Back) {
                 if EditorState.confirm-leave { EditorState.stay(); }
                 else if EditorState.save-open && !EditorState.saving { EditorState.toggle-save(); }
                 else if TextLayers.has-sel { TextLayers.deselect(); }
@@ -906,11 +909,23 @@ export component EditorOverlay inherits Rectangle {
     }
     VerticalLayout {
         TopBar { }
-        HorizontalLayout {
+        body := Rectangle {
             vertical-stretch: 1;
-            Stage { horizontal-stretch: 1; pressed => { fs.focus(); } }
+            // on a phone the tool panel sits under the stage
+            property <length> pw: Shell.compact ? self.width : 356px;
+            property <length> ph: Shell.compact ? Math.min(360px, self.height * 0.48) : self.height;
+            Stage {
+                x: 0;
+                y: 0;
+                width: Shell.compact ? body.width : body.width - body.pw;
+                height: Shell.compact ? body.height - body.ph : body.height;
+                pressed => { fs.focus(); }
+            }
             Rectangle {
-                width: 356px;
+                x: body.width - body.pw;
+                y: body.height - body.ph;
+                width: body.pw;
+                height: body.ph;
                 background: Theme.bg-elev;
                 Rectangle { x: 0; width: 1px; background: Theme.border; }
                 VerticalLayout {
@@ -958,7 +973,7 @@ export component EditorOverlay inherits Rectangle {
         background: Theme.overlay;
         TouchArea { clicked => { EditorState.stay(); } }
         Rectangle {
-            width: 400px;
+            width: Math.min(400px, root.width - 32px);
             height: cl.preferred-height;
             border-radius: 20px;
             background: Theme.bg-elev;

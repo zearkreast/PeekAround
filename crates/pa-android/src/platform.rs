@@ -86,6 +86,32 @@ pub fn scan_file(path: &str) {
     let _ = path;
 }
 
+/// what other apps shared into this one since the last call: `{"files":[path…],"text":…}`
+pub fn take_shared() -> Option<String> {
+    #[cfg(target_os = "android")]
+    return jni_impl::call_string("takeShared").filter(|s| !s.is_empty());
+    #[cfg(not(target_os = "android"))]
+    None
+}
+
+/// the system share sheet for files in the cache's "share" folder (a JSON array of paths)
+pub fn share_files(json: &str) {
+    #[cfg(target_os = "android")]
+    jni_impl::call_str_void("shareFiles", json);
+    #[cfg(not(target_os = "android"))]
+    let _ = json;
+}
+
+/// where the APK's native libraries are extracted
+pub fn native_lib_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "android")]
+    return jni_impl::call_string("nativeLibDir")
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from);
+    #[cfg(not(target_os = "android"))]
+    None
+}
+
 /// start PeekService (phone folder sharing; it reads link.json)
 pub fn start_link_service() -> bool {
     #[cfg(target_os = "android")]

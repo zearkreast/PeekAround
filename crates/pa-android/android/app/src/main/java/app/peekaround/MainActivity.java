@@ -7,6 +7,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.Cursor;
 import android.content.pm.PackageManager;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
@@ -17,8 +18,10 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
+import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.Log;
+import android.webkit.MimeTypeMap;
 import android.widget.Toast;
 
 import org.json.JSONArray;
@@ -26,7 +29,9 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Locale;
 
 /**
@@ -36,6 +41,9 @@ import java.util.Locale;
 public class MainActivity extends NativeActivity {
     private static final String TAG = "PeekAround";
     private WifiManager.MulticastLock multicast;
+    private final Object sharedLock = new Object();
+    /** what other apps shared and Rust has not taken yet: {"files":[path…],"text":…} */
+    private JSONObject shared;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,6 +57,100 @@ public class MainActivity extends NativeActivity {
             multicast.acquire();
         } catch (Exception e) {
             multicast = null;
+        }
+        new Thread(() -> dropOld(new File(getCacheDir(), "incoming"))).start();
+        handleShare(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleShare(intent);
+    }
+
+    /** "Share → PeekAround": copy the content into the cache (the grant ends with this activity). */
+    private void handleShare(Intent intent) {
+        if (intent == null) return;
+        String action = intent.getAction();
+        boolean many = Intent.ACTION_SEND_MULTIPLE.equals(action);
+        if (!many && !Intent.ACTION_SEND.equals(action)) return;
+        // reopened from Recents: that share was handled already
+        if ((intent.getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return;
+        final ArrayList<Uri> uris = new ArrayList<>();
+        try {
+            if (many) {
+                ArrayList<Uri> l = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+                if (l != null) uris.addAll(l);
+            } else {
+                Uri u = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (u != null) uris.add(u);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "share intent", e);
+        }
+        final CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+        if (uris.isEmpty() && text == null) return;
+        new Thread(() -> {
+            try {
+                File dir = new File(getCacheDir(), "incoming/" + System.currentTimeMillis());
+                JSONArray files = new JSONArray();
+                for (Uri u : uris) {
+                    File f = copyIn(u, dir);
+                    if (f != null) files.put(f.getAbsolutePath());
+                }
+                if (files.length() == 0 && text == null) return;
+                synchronized (sharedLock) {
+                    if (shared == null) shared = new JSONObject().put("files", new JSONArray());
+                    JSONArray all = shared.getJSONArray("files");
+                    for (int i = 0; i < files.length(); i++) all.put(files.get(i));
+                    if (text != null) shared.put("text", text.toString());
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "share", e);
+            }
+        }).start();
+    }
+
+    private File copyIn(Uri uri, File dir) {
+        try {
+            String name = null;
+            try (Cursor c = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                if (c != null && c.moveToFirst()) name = c.getString(0);
+            } catch (Exception ignored) {
+            }
+            if (name == null || name.trim().isEmpty()) name = uri.getLastPathSegment();
+            if (name == null || name.trim().isEmpty()) name = "shared";
+            name = name.replaceAll("[\\\\/:*?\"<>|\\x00-\\x1f]", "_");
+            if (name.lastIndexOf('.') <= 0) {
+                String ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(getContentResolver().getType(uri));
+                if (ext != null) name = name + "." + ext;
+            }
+            if (!dir.isDirectory() && !dir.mkdirs()) return null;
+            File out = new File(dir, name);
+            for (int n = 1; out.exists(); n++) out = new File(dir, n + "-" + name);
+            try (InputStream in = getContentResolver().openInputStream(uri); FileOutputStream o = new FileOutputStream(out)) {
+                if (in == null) return null;
+                byte[] buf = new byte[1 << 16];
+                for (int r; (r = in.read(buf)) > 0; ) o.write(buf, 0, r);
+            }
+            return out;
+        } catch (Exception e) {
+            Log.w(TAG, "shared file " + uri, e);
+            return null;
+        }
+    }
+
+    /** shared files are uploaded right after they arrive: a day later they are leftovers */
+    private static void dropOld(File dir) {
+        File[] list = dir.listFiles();
+        if (list == null) return;
+        long limit = System.currentTimeMillis() - 24L * 3600 * 1000;
+        for (File d : list) {
+            if (d.lastModified() > limit) continue;
+            File[] inner = d.listFiles();
+            if (inner != null) for (File f : inner) f.delete();
+            d.delete();
         }
     }
 
@@ -160,6 +262,58 @@ public class MainActivity extends NativeActivity {
 
     public void scanFile(String path) {
         MediaScannerConnection.scanFile(getApplicationContext(), new String[]{path}, null, null);
+    }
+
+    /** JSON of what was shared into the app since the last call, "" when nothing */
+    public String takeShared() {
+        synchronized (sharedLock) {
+            if (shared == null) return "";
+            String s = shared.toString();
+            shared = null;
+            return s;
+        }
+    }
+
+    /** the share sheet for files in cache/share (a JSON array of paths) */
+    public void shareFiles(String json) {
+        try {
+            JSONArray a = new JSONArray(json);
+            ArrayList<Uri> uris = new ArrayList<>();
+            String kind = null;
+            for (int i = 0; i < a.length(); i++) {
+                File f = new File(a.getString(i));
+                uris.add(ShareProvider.uriOf(f));
+                String mime = ShareProvider.mimeOf(f.getName());
+                String k = mime.substring(0, mime.indexOf('/') + 1) + "*";
+                kind = kind == null ? (a.length() == 1 ? mime : k) : (kind.equals(k) ? k : "*/*");
+            }
+            if (uris.isEmpty()) return;
+            Intent i;
+            if (uris.size() == 1) {
+                i = new Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris.get(0));
+            } else {
+                i = new Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+            }
+            i.setType(kind).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            ClipData clip = ClipData.newRawUri("", uris.get(0));
+            for (int n = 1; n < uris.size(); n++) clip.addItem(new ClipData.Item(uris.get(n)));
+            i.setClipData(clip);
+            final Intent chooser = Intent.createChooser(i, null);
+            runOnUiThread(() -> {
+                try {
+                    startActivity(chooser);
+                } catch (Exception e) {
+                    Log.w(TAG, "share", e);
+                }
+            });
+        } catch (Exception e) {
+            Log.w(TAG, "share", e);
+        }
+    }
+
+    /** where the APK's native libraries were extracted (ffmpeg lives there as libffmpeg.so) */
+    public String nativeLibDir() {
+        return getApplicationInfo().nativeLibraryDir;
     }
 
     public boolean startLinkService() {

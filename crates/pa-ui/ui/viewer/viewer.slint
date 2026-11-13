@@ -3,6 +3,7 @@
 // pan of the current picture, top bar actions, prev / next buttons, filmstrip, details panel,
 // video / audio player. Every gesture and animation is driven from src/viewer.rs.
 
+import { Shell } from "../globals.slint";
 import { MiniMap } from "../map/mini.slint";
 import { MiniMapState } from "../map/state.slint";
 import { Theme, Motion, I18n } from "../theme.slint";
@@ -415,11 +416,13 @@ component MenuRow inherits Rectangle {
 
 export component ViewerOverlay inherits Rectangle {
     // the stage (`top-16 bottom-20 left-16 right-16 | right-[356px]`)
-    property <length> stage-x: 64px;
+    // a phone gives the picture the whole width; the details panel then lies over it
+    property <length> side: Shell.compact ? 0px : 64px;
+    property <length> stage-x: self.side;
     property <length> stage-y: 64px;
-    property <length> info-w: ViewerState.info-open ? 340px : 0px;
+    property <length> info-w: ViewerState.info-open && !Shell.compact ? 340px : 0px;
     animate info-w { duration: 300ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
-    property <length> stage-w: Math.max(100px, root.width - 64px - 64px - (ViewerState.info-open ? 292px : 0px));
+    property <length> stage-w: Math.max(100px, root.width - 2 * self.side - (ViewerState.info-open && !Shell.compact ? 292px : 0px));
     property <length> stage-h: Math.max(100px, root.height - 64px - 80px);
     animate stage-w { duration: 300ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
     property <float> chrome-k: ViewerState.chrome && !ViewerState.closing && ViewerState.appear > 0.5 ? 1 : 0;
@@ -594,7 +597,7 @@ export component ViewerOverlay inherits Rectangle {
 
     // ── details panel ──
     if ViewerState.info-open: InfoPanel {
-        x: root.width - root.info-w;
+        x: root.width - (Shell.compact ? self.width : root.info-w);
         y: 0;
         height: root.height;
         close => { ViewerState.toggle-info(); }

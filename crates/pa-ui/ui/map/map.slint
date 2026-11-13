@@ -5,6 +5,7 @@
 import { Theme, Motion, I18n } from "../theme.slint";
 import { EIcons } from "../pages/explore/icons.slint";
 import { MapState, MapTile, MapMarker, MapPanelTile } from "state.slint";
+import { Shell } from "../globals.slint";
 import { IconButton } from "../components/button.slint";
 import { Spinner } from "../components/feedback.slint";
 import { ScrollBar } from "../pages/scroll.slint";
@@ -211,6 +212,9 @@ export component MapPage inherits Rectangle {
     in property <length> window-width;
     property <length> panel-w: root.window-width >= 1280px ? 440px : 380px;
     property <bool> panel: MapState.panel-open && MapState.has-points;
+    // a phone has no room beside the map: the list becomes a sheet along the bottom
+    property <bool> sheet: Shell.compact;
+    property <length> sheet-h: root.height * 0.42;
     background: Theme.bg;
 
     fs := FocusScope {
@@ -222,7 +226,7 @@ export component MapPage inherits Rectangle {
             if e.text == Key.RightArrow { MapState.key("right"); return accept; }
             if e.text == Key.UpArrow { MapState.key("up"); return accept; }
             if e.text == Key.DownArrow { MapState.key("down"); return accept; }
-            if e.text == Key.Escape && MapState.fullscreen { MapState.toggle-fullscreen(); return accept; }
+            if (e.text == Key.Escape || e.text == Key.Back) && MapState.fullscreen { MapState.toggle-fullscreen(); return accept; }
             reject
         }
     }
@@ -230,8 +234,8 @@ export component MapPage inherits Rectangle {
     map := MapView {
         x: 0;
         y: 0;
-        width: root.width - (root.panel ? root.panel-w : 0px);
-        height: root.height;
+        width: root.width - (root.panel && !root.sheet ? root.panel-w : 0px);
+        height: root.height - (root.panel && root.sheet ? root.sheet-h : 0px);
     }
 
     // header card
@@ -458,11 +462,13 @@ export component MapPage inherits Rectangle {
 
     // side panel
     if root.panel: Rectangle {
-        x: root.width - root.panel-w;
-        width: root.panel-w;
-        height: root.height;
+        x: root.sheet ? 0px : root.width - root.panel-w;
+        y: root.sheet ? root.height - root.sheet-h : 0px;
+        width: root.sheet ? root.width : root.panel-w;
+        height: root.sheet ? root.sheet-h : root.height;
         background: Theme.bg-elev;
-        Rectangle { x: 0; width: 1px; background: Theme.border; }
+        if !root.sheet: Rectangle { x: 0; width: 1px; background: Theme.border; }
+        if root.sheet: Rectangle { y: 0; height: 1px; background: Theme.border; }
         HorizontalLayout {
             y: 0;
             height: 48px;

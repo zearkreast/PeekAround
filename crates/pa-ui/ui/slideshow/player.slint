@@ -57,7 +57,7 @@ export component SlidePlayerOverlay inherits Rectangle {
             if e.text == " " || e.text == "k" { SlidePlayer.toggle(); }
             else if e.text == Key.RightArrow { SlidePlayer.next(); }
             else if e.text == Key.LeftArrow { SlidePlayer.prev(); }
-            else if e.text == Key.Escape { SlidePlayer.close(); }
+            else if (e.text == Key.Escape || e.text == Key.Back) { SlidePlayer.close(); }
             else if e.text == "f" || e.text == "F" { SlidePlayer.toggle-full(); }
             else if e.text == "c" || e.text == "C" { SlidePlayer.toggle-captions(); }
             else if e.text == "m" || e.text == "M" { SlidePlayer.toggle-mute(); }

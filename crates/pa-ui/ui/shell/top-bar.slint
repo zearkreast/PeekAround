@@ -99,6 +99,7 @@ export component TopBar inherits Rectangle {
 
     // title / breadcrumb (once the page's own title scrolled away)
     HorizontalLayout {
+        visible: !Shell.compact;
         x: 20px;
         width: (root.width - root.search-w) / 2 - 36px;
         height: parent.height;
@@ -132,8 +133,8 @@ export component TopBar inherits Rectangle {
     }
 
     search := TextField {
-        x: (root.width - self.width) / 2;
-        width: root.search-w;
+        x: Shell.compact ? 12px : (root.width - self.width) / 2;
+        width: Shell.compact ? root.width - right.width - 36px : root.search-w;
         placeholder: I18n.t("nav.search", I18n.rev);
         icon: Icons.search;
         has-icon: true;
@@ -141,8 +142,8 @@ export component TopBar inherits Rectangle {
         accepted(q) => { Shell.search(q); }
     }
 
-    HorizontalLayout {
-        x: root.width - self.width - 16px;
+    right := HorizontalLayout {
+        x: root.width - self.width - (Shell.compact ? 12px : 16px);
         width: self.preferred-width;
         alignment: end;
         spacing: 6px;

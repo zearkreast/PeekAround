@@ -190,7 +190,7 @@ export component Dialog inherits Rectangle {
     FocusScope {
         enabled: root.open;
         key-pressed(e) => {
-            if e.text == Key.Escape { root.close(); return accept; }
+            if (e.text == Key.Escape || e.text == Key.Back) { root.close(); return accept; }
             reject
         }
     }

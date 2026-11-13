@@ -241,6 +241,10 @@ pub(crate) fn run_script(app: &Rc<AppInner>, script: &str) {
                 "section" => a.window.global::<Shell>().set_settings_section(arg.into()),
                 "toast" => a.toast(crate::ToastKind::Success, &cmd[1..].join(" "), ""),
                 "click" | "move" | "down" | "up" => pointer(a.window.window(), cmd),
+                "size" => {
+                    let n = |i: usize| cmd.get(i).and_then(|v| v.parse::<f32>().ok()).unwrap_or(400.0);
+                    a.window.window().set_size(slint::LogicalSize::new(n(1), n(2)));
+                }
                 "type" => type_text(a.window.window(), &cmd[1..].join(" ")),
                 "quit" => {
                     let _ = slint::quit_event_loop();

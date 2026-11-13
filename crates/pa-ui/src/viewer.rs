@@ -519,11 +519,13 @@ impl Viewer {
         let sz = a.window.window().size();
         let sc = a.window.window().scale_factor() as f64;
         let (w, h) = (sz.width as f64 / sc, sz.height as f64 / sc);
-        let right = if info { 356.0 } else { 64.0 };
+        let compact = a.window.global::<crate::Shell>().get_compact();
+        let side = if compact { 0.0 } else { 64.0 };
+        let right = if info && !compact { 356.0 } else { side };
         (
+            side,
             64.0,
-            64.0,
-            (w - 64.0 - right).max(100.0),
+            (w - side - right).max(100.0),
             (h - 144.0).max(100.0),
         )
     }
@@ -1397,7 +1399,7 @@ impl Viewer {
         let is = |k: Key| t == key(k);
         let lower = text.to_lowercase();
         let zstep = a.prefs.borrow().zoom_step;
-        if is(Key::Escape) {
+        if is(Key::Escape) || is(Key::Back) {
             if a.window.global::<ViewerState>().get_fullscreen() {
                 self.toggle_fullscreen();
             } else {

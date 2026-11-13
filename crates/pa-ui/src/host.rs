@@ -4,7 +4,7 @@
 //! implements it; [`NoHost`] is the default (remote server / demo / Android client mode).
 
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use serde::{Deserialize, Serialize};
@@ -117,6 +117,15 @@ pub struct AndroidState {
     pub folders: Vec<(String, String, bool)>,
 }
 
+/// What another app handed to this one (Android "Share").
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Shared {
+    /// local copies of the shared files
+    pub files: Vec<PathBuf>,
+    /// shared text (a link)
+    pub text: Option<String>,
+}
+
 /// The desktop shell. Every method has a "not available" default.
 pub trait Host {
     /// "win32" | "linux" | "darwin" | "android" | "" (no desktop shell)
@@ -199,6 +208,22 @@ pub trait Host {
     /// Android Settings actions: "change" (connection), "share:on" / "share:off",
     /// "folder:on:<path>" / "folder:off:<path>", "reset" (pairing)
     fn android_action(&self, _action: &str) {}
+    /// files / text shared into the app since the last call
+    fn take_shared(&self) -> Option<Shared> {
+        None
+    }
+    /// where downloads are saved (None = the user's Downloads folder)
+    fn download_dir(&self) -> Option<PathBuf> {
+        None
+    }
+    /// a file was saved for the user (Android: makes it show up in the gallery apps)
+    fn file_saved(&self, _path: &Path) {}
+    /// Some = files can be handed to other apps: they have to be put into this folder first
+    fn share_dir(&self) -> Option<PathBuf> {
+        None
+    }
+    /// open the system share sheet for files inside [`Host::share_dir`]
+    fn share_files(&self, _paths: Vec<PathBuf>) {}
 }
 
 /// No desktop shell.

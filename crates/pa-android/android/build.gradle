@@ -1,5 +1,5 @@
 // The Rust library (libpeekaround_android.so) is built by cargo-ndk into app/src/main/jniLibs
-// before Gradle runs (.github/workflows/rust-android.yml); Gradle only adds the Java glue and packages.
+// before Gradle runs (.github/workflows/build.yml); Gradle only adds the Java glue and packages.
 plugins {
     id 'com.android.application' version '8.13.0' apply false
 }

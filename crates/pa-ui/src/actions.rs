@@ -65,6 +65,8 @@ pub struct Ctx {
     pub desktop: bool,
     /// zip download of several items
     pub zip_download: bool,
+    /// the system share sheet is available (Android)
+    pub share: bool,
     /// trash behaviour
     pub trash: Option<TrashMode>,
     /// albums are available
@@ -256,6 +258,9 @@ pub fn reveal_label(lang: Lang) -> String {
     }
 }
 
+/// most items one share may carry (each is copied to the phone first)
+const SHARE_MAX: usize = 30;
+
 const MENU_VIEWER: &[Surface] = &[Surface::Menu, Surface::Viewer];
 
 fn builtins() -> Vec<Rc<Action>> {
@@ -268,6 +273,15 @@ fn builtins() -> Vec<Rc<Action>> {
             order: 11,
             // several items need the zip route
             visible: Rc::new(|items, c| items.len() == 1 || (c.zip_download && !items.is_empty())),
+            ..Default::default()
+        },
+        Action {
+            id: "share".into(),
+            icon: "share-2",
+            label_key: "mobile.action.share",
+            group: Group::Primary,
+            order: 12,
+            visible: Rc::new(|items, c| c.share && !items.is_empty() && items.len() <= SHARE_MAX),
             ..Default::default()
         },
         Action {

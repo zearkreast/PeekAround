@@ -175,7 +175,7 @@ export component MemoryPlayer inherits Rectangle {
             if e.text == Key.RightArrow { PlayerState.step(1); return accept; }
             if e.text == Key.LeftArrow { PlayerState.step(-1); return accept; }
             if e.text == " " { PlayerState.toggle-pause(); return accept; }
-            if e.text == Key.Escape { PlayerState.close(); return accept; }
+            if (e.text == Key.Escape || e.text == Key.Back) { PlayerState.close(); return accept; }
             reject
         }
     }

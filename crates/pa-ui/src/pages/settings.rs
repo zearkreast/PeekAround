@@ -1605,45 +1605,47 @@ fn build(a: &Rc<AppInner>) -> Vec<Sec> {
         }],
     });
 
-    // ── shortcuts ──
-    let mut keys = vec![c.button(
-        "pref.shortcutsOpen",
-        c.t("pref.shortcutsHint"),
-        "shortcuts",
-        "pref.shortcutsOpen",
-        ic.get_keyboard(),
-        "keyboard klavye hotkey",
-    )];
-    let mut group = String::new();
-    for k in super::dialogs::shortcut_rows(a) {
-        if !k.group.is_empty() {
-            group = k.group.to_string();
-            keys.push(R(
-                row("keys", "", k.group.to_string(), String::new()),
-                format!("{group} keyboard klavye kısayol shortcut"),
-            ));
-        } else {
-            let mut r = row("key", "", k.label.to_string(), String::new());
-            r.keys = k.keys.clone();
-            keys.push(R(
-                r,
-                format!("{} {group} keyboard klavye kısayol shortcut", k.label),
-            ));
+    // ── shortcuts (a phone has no keyboard) ──
+    if !a.window.global::<crate::Shell>().get_phone() {
+        let mut keys = vec![c.button(
+            "pref.shortcutsOpen",
+            c.t("pref.shortcutsHint"),
+            "shortcuts",
+            "pref.shortcutsOpen",
+            ic.get_keyboard(),
+            "keyboard klavye hotkey",
+        )];
+        let mut group = String::new();
+        for k in super::dialogs::shortcut_rows(a) {
+            if !k.group.is_empty() {
+                group = k.group.to_string();
+                keys.push(R(
+                    row("keys", "", k.group.to_string(), String::new()),
+                    format!("{group} keyboard klavye kısayol shortcut"),
+                ));
+            } else {
+                let mut r = row("key", "", k.label.to_string(), String::new());
+                r.keys = k.keys.clone();
+                keys.push(R(
+                    r,
+                    format!("{} {group} keyboard klavye kısayol shortcut", k.label),
+                ));
+            }
         }
-    }
-    secs.push(Sec {
-        id: "shortcuts",
-        title: "pref.sec.shortcuts",
-        icon: ic.get_keyboard(),
-        cards: vec![Card {
+        secs.push(Sec {
             id: "shortcuts",
-            title_key: "pref.sec.shortcuts".into(),
-            title: c.t("pref.sec.shortcuts"),
+            title: "pref.sec.shortcuts",
             icon: ic.get_keyboard(),
-            scope: "",
-            rows: keys,
-        }],
-    });
+            cards: vec![Card {
+                id: "shortcuts",
+                title_key: "pref.sec.shortcuts".into(),
+                title: c.t("pref.sec.shortcuts"),
+                icon: ic.get_keyboard(),
+                scope: "",
+                rows: keys,
+            }],
+        });
+    }
 
     // ── about + backup ──
     let mut about = vec![];

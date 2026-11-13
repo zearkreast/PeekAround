@@ -59,7 +59,7 @@ export component MediaPickerDialog inherits Rectangle {
     FocusScope {
         init => { self.focus(); }
         key-pressed(e) => {
-            if e.text == Key.Escape {
+            if (e.text == Key.Escape || e.text == Key.Back) {
                 MediaPickerState.close();
                 return accept;
             }

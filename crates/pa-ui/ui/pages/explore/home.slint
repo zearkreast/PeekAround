@@ -230,7 +230,7 @@ export component ExplorePage inherits Rectangle {
                             color: Theme.text;
                         }
                     }
-                    Text { text: I18n.t("explore.subtitle", I18n.rev); font-size: 14px; color: Theme.text-dim; }
+                    Text { text: I18n.t("explore.subtitle", I18n.rev); font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
                 }
                 if root.ready && ExploreState.can-surprise: VerticalLayout {
                     alignment: end;

@@ -3,7 +3,7 @@
 import { Theme, Motion, I18n } from "theme.slint";
 import { Icons } from "icons.slint";
 import { Shell, GridState, PrefsState, Page, Conn } from "globals.slint";
-import { NavRail } from "shell/nav-rail.slint";
+import { NavRail, BottomNav } from "shell/nav-rail.slint";
 import { TopBar } from "shell/top-bar.slint";
 import { PhotosPage } from "pages/photos.slint";
 import { SettingsPage } from "pages/settings.slint";
@@ -86,8 +86,10 @@ export component AppWindow inherits Window {
     icon: Icons.logo;
     preferred-width: 1440px;
     preferred-height: 900px;
-    min-width: 720px;
-    min-height: 480px;
+    min-width: Shell.phone ? 320px : 720px;
+    min-height: Shell.phone ? 400px : 480px;
+    changed width => { Shell.window-width = self.width; }
+    init => { Shell.window-width = self.width; }
     background: Theme.bg;
     default-font-family: Theme.font-sans;
     default-font-size: 14px;
@@ -112,6 +114,9 @@ export component AppWindow inherits Window {
     property <bool> grid-page: Shell.page == Page.photos || Shell.page == Page.favorites || Shell.page == Page.search
         || Shell.page == Page.album || Shell.page == Page.lib || Shell.page == Page.folder;
 
+    property <length> rail: Shell.compact ? 0px : Theme.rail-w;
+    property <length> bottom-h: Shell.compact ? 64px : 0px;
+
     // keyboard: Ctrl+K / '/' focus the search, Alt+← back
     fs := FocusScope {
         key-pressed(e) => {
@@ -122,6 +127,9 @@ export component AppWindow inherits Window {
             if e.modifiers.alt && e.text == Key.LeftArrow {
                 Shell.back();
                 return accept;
+            }
+            if e.text == Key.Back {
+                return Shell.back-key() ? accept : reject;
             }
             // "?" shortcuts, F11 fullscreen, Ctrl + / − / 0 window zoom (desktop shell)
             if e.text == "?" && !e.modifiers.control && !e.modifiers.alt {
@@ -149,7 +157,7 @@ export component AppWindow inherits Window {
 
         HorizontalLayout {
             // (above the page: its drop flyout overlaps it)
-            NavRail { z: 10; }
+            if !Shell.compact: NavRail { z: 10; }
             Rectangle {
                 horizontal-stretch: 1;
                 // page below the bar (the bar is drawn last: its popups / tooltips stay on top)
@@ -157,7 +165,7 @@ export component AppWindow inherits Window {
                     // not drawn under an opaque viewer (every frame of a video would redraw the grid)
                     visible: !root.viewer-covers;
                     y: Theme.topbar-h;
-                    height: parent.height - Theme.topbar-h;
+                    height: parent.height - Theme.topbar-h - root.bottom-h;
                     clip: true;
                     if Shell.page == Page.photos: PageFrame {
                         PhotosPage { slideshow => { root.slideshow(); } }
@@ -229,14 +237,19 @@ export component AppWindow inherits Window {
                     title: root.page-title;
                     view-controls: root.grid-page;
                 }
+                if Shell.compact: BottomNav {
+                    visible: !root.viewer-covers;
+                    y: parent.height - self.height;
+                    height: root.bottom-h;
+                }
             }
         }
     }
 
     // selection pill over the page, viewer above everything but toasts, menus / dialogs on top
     SelectionBar {
-        x: Theme.rail-w + (root.width - Theme.rail-w - self.width) / 2;
-        y: root.height - self.height - 24px;
+        x: root.rail + (root.width - root.rail - self.width) / 2;
+        y: root.height - self.height - 24px - root.bottom-h;
     }
     // the map without the rail / top bar, the memory player
     if Shell.page == Page.explore-map && MapState.fullscreen: MapPage {
@@ -270,14 +283,14 @@ export component AppWindow inherits Window {
     // upload progress, dialogs of the library / albums / devices / MEGA / settings screens
     UploadPanel {
         x: root.width - self.width - 20px;
-        y: root.height - self.height - 20px;
+        y: root.height - self.height - 20px - root.bottom-h;
     }
     DialogLayer { }
 
     Toaster {
         width: Math.min(420px, root.width - 32px);
         x: (root.width - self.width) / 2;
-        y: root.height - self.height - 20px;
+        y: root.height - self.height - 20px - root.bottom-h;
         height: self.preferred-height;
         toasts: Shell.toasts;
         dismiss(id) => { Shell.dismiss-toast(id); }
