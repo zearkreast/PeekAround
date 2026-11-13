@@ -3,7 +3,8 @@
 # the place names the server reads from the web folder (geo/cities.bin).
 # usage: crates/pa-web/build.sh <out dir>
 # Needs: the wasm32-unknown-unknown target; wasm-bindgen-cli in the version of Cargo.lock (installed
-# when missing); gzip. wasm-opt (binaryen) and brotli are used when they are there.
+# when missing); gzip, and brotli when it is there.
+# No wasm-opt pass: it makes the module smaller (35 → 32 MB) but its compressed copy bigger.
 set -e
 out=${1:?usage: build.sh <out dir>}
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -18,11 +19,6 @@ rm -rf "$out"
 mkdir -p "$out/geo"
 wasm-bindgen --target web --no-typescript --out-dir "$out" --out-name peekaround \
   target/wasm32-unknown-unknown/release/pa_web.wasm
-if command -v wasm-opt >/dev/null 2>&1; then
-  wasm-opt -O2 --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals \
-    "$out/peekaround_bg.wasm" -o "$out/peekaround_bg.wasm.opt"
-  mv "$out/peekaround_bg.wasm.opt" "$out/peekaround_bg.wasm"
-fi
 # compressed copies: the server sends them to the browsers that accept them
 for f in "$out/peekaround_bg.wasm" "$out/peekaround.js"; do
   gzip -9 -k "$f"

@@ -13,7 +13,7 @@ ARG DEBIAN_IMAGE=debian:trixie-slim
 FROM --platform=$BUILDPLATFORM ${RUST_IMAGE} AS web
 RUN rustup target add wasm32-unknown-unknown \
  && apt-get update \
- && apt-get install -y --no-install-recommends binaryen brotli \
+ && apt-get install -y --no-install-recommends brotli \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . .
