@@ -488,6 +488,7 @@ mod tests {
             .collect(),
             slide_duration: 7.0,
             slide_transition: "zoom".into(),
+            slideshow: Default::default(),
         };
         assert_eq!(p, want);
         // 36 scalar prefs + 2 library views + 2 slideshow values
