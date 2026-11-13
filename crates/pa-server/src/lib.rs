@@ -643,18 +643,43 @@ async fn dispatch(app: Arc<App>, req: Request<Body>, conn: ConnInfo) -> Response
             }
         }
     } else if let Some(f) = web {
-        match http::send_file(
-            &parts.headers,
-            &parts.method,
-            &f,
-            http::SendOpts {
-                cache_control: true,
-                preset_cache_control: None,
-            },
-        )
-        .await
-        {
-            Some(r) => r,
+        // the browser UI is one big WebAssembly file: its build leaves compressed copies beside
+        // the files (`.br`, `.gz`), sent to the browsers that take them
+        let accepts = parts
+            .headers
+            .get(header::ACCEPT_ENCODING)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let packed = [("br", ".br"), ("gzip", ".gz")].into_iter().find_map(|(enc, ext)| {
+            let takes = accepts
+                .split(',')
+                .any(|a| a.split(';').next().is_some_and(|n| n.trim().eq_ignore_ascii_case(enc)));
+            let file = app.web_files.get(&format!("{decoded}{ext}"))?;
+            takes.then(|| (enc, file.clone()))
+        });
+        let opts = http::SendOpts {
+            cache_control: true,
+            preset_cache_control: None,
+        };
+        let sent = match &packed {
+            Some((_, p)) => http::send_file(&parts.headers, &parts.method, p, opts).await,
+            None => http::send_file(&parts.headers, &parts.method, &f, opts).await,
+        };
+        match sent {
+            Some(mut r) => {
+                if let Some((enc, _)) = packed {
+                    add_header(&mut r, "content-encoding", enc);
+                    add_header(&mut r, "vary", "Accept-Encoding");
+                    // the type of the file itself, not of its compressed copy
+                    match crate::mime::mime_of(&f.to_string_lossy()) {
+                        Some(t) => add_header(&mut r, "content-type", t),
+                        None => {
+                            r.headers_mut().remove(header::CONTENT_TYPE);
+                        }
+                    }
+                }
+                r
+            }
             None => json_error(404, "Not found"),
         }
     } else if let (Some(w), "GET", false, true) = (

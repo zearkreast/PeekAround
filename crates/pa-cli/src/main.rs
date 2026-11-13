@@ -17,6 +17,8 @@ Usage: peekaround [--root <dir>]... [options]
       --split-roots       one library per sub folder of each root          env PEEK_SPLIT_ROOTS
       --browse-root <dir> limit the \"add folder\" browser to these dirs      env PEEK_BROWSE_ROOTS
       --no-mdns           don't announce on the local network              env PEEK_MDNS=false
+      --web <dir>         folder of the browser UI (index.html)            env PEEK_WEB_DIR
+      --healthcheck       exit 0 when the server on this machine answers (Docker HEALTHCHECK)
 ";
 
 fn env(name: &str) -> Option<String> {
@@ -68,6 +70,7 @@ struct Args {
     split_roots: Option<bool>,
     browse_root: Vec<String>,
     verbose: Option<bool>,
+    healthcheck: bool,
     help: bool,
 }
 
@@ -137,6 +140,7 @@ fn parse_args(argv: Vec<String>) -> Result<Args, String> {
             "no-mdns" => a.no_mdns = true,
             "split-roots" => a.split_roots = Some(true),
             "verbose" => a.verbose = Some(true),
+            "healthcheck" => a.healthcheck = true,
             "help" => a.help = true,
             other => return Err(unknown(&format!("--{other}"))),
         }
@@ -161,6 +165,24 @@ fn web_dir(a: &Args) -> Option<PathBuf> {
         c.push(d.join("../share/peekaround/web"));
     }
     c.into_iter().find(|d| d.join("index.html").is_file())
+}
+
+/// `GET /api/info` on this machine's server: true when it answers 200.
+fn healthy(port: u16) -> bool {
+    use std::io::{Read, Write};
+    use std::time::Duration;
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut s) = std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(3)) else {
+        return false;
+    };
+    let _ = s.set_read_timeout(Some(Duration::from_secs(3)));
+    let _ = s.set_write_timeout(Some(Duration::from_secs(3)));
+    let req = format!("GET /api/info HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+    if s.write_all(req.as_bytes()).is_err() {
+        return false;
+    }
+    let mut head = [0u8; 12];
+    s.read_exact(&mut head).is_ok() && head.ends_with(b" 200")
 }
 
 #[tokio::main]
@@ -213,6 +235,9 @@ async fn main() {
         eprintln!("Invalid port: {port_s}");
         std::process::exit(1);
     };
+    if args.healthcheck {
+        std::process::exit(if healthy(port) { 0 } else { 1 });
+    }
     let mut browse: Vec<String> = args.browse_root.clone();
     if let Some(b) = env("PEEK_BROWSE_ROOTS") {
         browse.extend(
@@ -264,7 +289,7 @@ async fn main() {
         if web.is_some() {
             ""
         } else {
-            "\n    (web UI not built — run \"npm run build\" or use the Vite dev server)\n"
+            "\n    (no browser UI: build it with crates/pa-web/build.sh and pass --web <dir>)\n"
         }
     );
     let ctrl_c = tokio::signal::ctrl_c();
