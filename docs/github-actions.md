@@ -5,11 +5,12 @@
 | Ne zaman | Ne yapar |
 |---|---|
 | `main`'e her push ve her pull request | Rust testleri (`cargo test --workspace`) |
-| `v2.0.0` gibi bir etiket | Testler, Windows (`Setup.exe` + taşınabilir zip), Linux (`tar.gz`), Android APK, ardından **GitHub Release**. Etikette `-` varsa (`v2.1.0-beta.1`) ön sürüm olarak yayınlanır |
+| `main`'e her push | Testlerden sonra Docker imajı (amd64) `ghcr.io/<kullanıcı>/peekaround:main` olarak gönderilir |
+| `v2.1.0` gibi bir etiket | Testler, Windows (`Setup.exe` + taşınabilir zip), Linux (`tar.gz`), Android APK, ardından **GitHub Release**. Etikette `-` varsa (`v2.1.0-beta.1`) ön sürüm olarak yayınlanır. Docker imajı amd64 ve arm64 için derlenip sürüm numarasıyla ve `latest` olarak gönderilir (ön sürümde `latest` değişmez) |
 | `build-deneme` gibi bir etiket (`build-` ile başlayan) | Aynı paketler, Release olmadan; paketler çalıştırmanın "Artifacts" bölümüne eklenir |
 | Actions sekmesi → Build → **Run workflow** | Etiketsiz deneme derlemesi; `release_tag` yazılırsa paketler o mevcut sürüme yüklenir |
 
-Docker imajı bu iş akışında derlenmiyor; `ghcr.io/<kullanıcı>/peekaround` altındaki son imaj 1.3.2.
+Docker imajı Release'ten bağımsız yayınlanır: Docker işi başarısız olsa da paketler Release'e eklenir. arm64 imajı öykünme olmadan, GitHub'ın arm64 çalıştırıcısında derlenir.
 
 ## 1. Hangi token gerekli?
 
@@ -18,7 +19,7 @@ Docker imajı bu iş akışında derlenmiyor; `ghcr.io/<kullanıcı>/peekaround`
 Bir kez kontrol et: repo → **Settings → Actions → General**
 
 - *Actions permissions*: "Allow all actions and reusable workflows" seçili olmalı.
-- *Workflow permissions*: varsayılan "Read repository contents" kalabilir. Yazma izni gereken iş (release) bu izni kendisi istiyor.
+- *Workflow permissions*: varsayılan "Read repository contents" kalabilir. Yazma izni gereken işler (release, Docker imajı) bu izni kendileri istiyor.
 
 ## 2. Bilgisayardan GitHub'a push için token (gerekirse)
 

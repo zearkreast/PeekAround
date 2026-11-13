@@ -1,6 +1,9 @@
 name: Build
 
 # - every push to main / pull request: the tests of the Rust workspace
+# - every push to main and every v* tag: the Docker image (the server and the browser UI) goes to
+#   ghcr.io/<owner>/peekaround — `main` for the branch, the version and `latest` for a release
+#   (no `latest` for a pre-release); releases are built for amd64 and arm64
 # - a tag like v2.0.0 (or "Run workflow" by hand): also builds the packages (Windows zip + installer,
 #   Linux tarball, Android APK) and, for v* tags, publishes a GitHub Release with them
 #   (a tag with a "-", like v2.1.0-beta.1, becomes a pre-release).
@@ -22,7 +25,7 @@ on:
         required: false
         default: ''
 
-# least privilege: the release job asks for more below
+# least privilege: the release and Docker jobs ask for more below
 permissions:
   contents: read
 
@@ -276,6 +279,92 @@ jobs:
           name: peekaround-linux
           path: dist/*.tar.gz
           if-no-files-found: error
+
+  # Docker image: the server (pa-cli) and the browser UI (pa-web, WebAssembly). Each architecture is
+  # built on a runner of its own kind (nothing emulated) and pushed by digest; `docker-manifest`
+  # puts them under the tags. arm64 (Raspberry Pi, ARM NAS) only for releases.
+  docker:
+    name: Docker (${{ matrix.arch }})
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(startsWith(github.ref, 'refs/tags/v') && '["amd64", "arm64"]' || '["amd64"]') }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          # ghcr names must be lower case
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/peekaround,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=docker-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.arch }}
+      - name: Digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  docker-manifest:
+    name: Docker tags
+    needs: docker
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/peekaround
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: 'docker-digest-*'
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.IMAGE }}
+          # a pre-release (v2.1.0-beta.1) gets its version tag only: `latest` stays on the last release
+          flavor: latest=false
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+      - name: Tag
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          tags=$(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          # shellcheck disable=SC2046,SC2086
+          docker buildx imagetools create $tags $(printf "$IMAGE@sha256:%s " *)
+          docker buildx imagetools inspect "$IMAGE:${{ steps.meta.outputs.version }}"
 
   release:
     name: GitHub Release

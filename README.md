@@ -31,7 +31,7 @@ PeekAround; bilgisayarındaki, sunucundaki ya da telefonundaki klasörleri moder
 |---|---|---|
 | 🖥️ **Masaüstü** | Kişisel galeri ve düzenleyiciler; istersen ağda paylaş | Windows kurulum `.exe` ve taşınabilir `.zip`, Linux `.tar.gz` |
 | 📱 **Android** | Telefonun kendi klasörlerini gez **veya** bir PeekAround sunucusuna bağlan | `.apk` (64 bit ARM) |
-| 🐳 **Docker** | Ev sunucusunda tarayıcıdan galeri | Şimdilik **1.3.2** imajı, aşağıya bak |
+| 🐳 **Docker** | Ev sunucusunda ya da NAS'ta galeri: tarayıcıdan ve Android uygulamasından açılır | `ghcr.io/zearkreast/peekaround` (amd64, arm64) |
 
 ---
 
@@ -100,13 +100,36 @@ Telefonda ses çıkışı ve video dışa aktarma henüz yok.
 
 ### 🐳 Docker
 
-2.0'ın tarayıcı arayüzü sonraki sürümde gelecek. O zamana kadar Docker için **1.3.2** imajı kullanılır:
+Sunucu ve tarayıcı arayüzü tek imajdadır. Tarayıcıda açılan arayüz, masaüstü uygulamasıyla aynı arayüzün WebAssembly derlemesidir.
 
 ```bash
-docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/Fotoğraflar:/media/Fotoğraflar -v ./peekaround-data:/data ghcr.io/zearkreast/peekaround:1.3.2
+docker run -d --name peekaround -p 8080:8080 -e PUID=1000 -e PGID=1000 -v /yol/Fotoğraflar:/media/Fotoğraflar -v ./peekaround-data:/data ghcr.io/zearkreast/peekaround:latest
 ```
 
-ya da `docker/docker-compose.yml` içindeki klasör yollarını düzenleyip `docker compose -f docker/docker-compose.yml up -d`. Tarayıcıdan `http://<sunucu-ip>:8080` adresine git. Ortam değişkenleri ve güvenlik notları [`1.x` dalının README'sinde](https://github.com/zearkreast/PeekAround/tree/1.x#-docker-ağa-galeri-sunmak-için).
+ya da `docker/docker-compose.yml` içindeki klasör yollarını düzenleyip `docker compose -f docker/docker-compose.yml up -d`. `/media` altına bağladığın her klasör bir kütüphane olur. Tarayıcıdan `http://<sunucu-ip>:8080` adresine git; Android uygulaması da aynı adrese bağlanır.
+
+- **1.x'ten geçiş:** imaj etiketini değiştirmen yeterli. `/data` klasörü (kütüphaneler, favoriler, albümler, küçük resimler) ve ortam değişkenleri aynı kalır. İstersen önce `/data` klasörünü yedekle; 1.x'e dönmek için `ghcr.io/zearkreast/peekaround:1.3.2` etiketini kullan.
+- **Tarayıcı:** WebAssembly ve WebGL destekleyen güncel bir tarayıcı gerekir. İlk açılışta 6 ile 9 MB arası indirilir.
+- **Tarayıcıdaki farklar:** dosyalar tarayıcının indirme klasörüne iner; yükleme için dosya seçilir ya da sayfaya sürüklenir. Video ve ses tarayıcının kendi oynatıcısıyla oynar; tarayıcının açamadığı biçimleri (MKV, HEVC, AVI) sunucu dönüştürerek gönderir. Fotoğraf düzenleyici ekran kartı yerine işlemcide çalışır. Emoji çıkartmaların çoğu tarayıcıda görünmez (tarayıcı derlemesinde emoji fontu yok).
+- **Etiketler:** `latest` son sürüm, `2.1.0` gibi bir sürüm numarası, `main` geliştirme dalının son hali (yalnızca amd64).
+
+| Değişken | Varsayılan | Açıklama |
+|---|---|---|
+| `PEEK_ROOTS` | `/media` | İlk açılışta kütüphane yapılacak klasörler; `Ad=/yol` biçimi, virgülle ayrılır |
+| `PEEK_SPLIT_ROOTS` | `true` | Kökün her alt klasörü ayrı kütüphane olur |
+| `PUID` / `PGID` | `0` | Yazılan dosyaların sahibi (`id -u` / `id -g`) |
+| `PEEK_WATCH_POLL` | `false` | Ağ paylaşımlarında (NFS/SMB) dosya değişikliklerini yoklayarak izler |
+| `PEEK_READONLY` | `false` | Yükleme, düzenleme ve silmeyi kapatır |
+| `PEEK_BROWSE_ROOTS` | `/media` | "Klasör ekle" gezgininin gösterebileceği dizinler |
+| `PEEK_PORT` | `8080` | Port |
+| `TZ` | yok | Saat dilimi (örneğin `Europe/Istanbul`); ilk açılışta "ev saat dilimi" olur |
+| `PEEK_ALLOWED_HOSTS` | yok | Alan adıyla erişiyorsan (örneğin ters vekil arkasında `foto.ornek.com`) virgülle ekle; `*` denetimi kapatır |
+| `PEEK_ALLOWED_ORIGINS` | yok | API'yi çağırabilecek ek tarayıcı kökenleri |
+
+> Kimlik doğrulama yoktur: PeekAround'u yalnızca güvendiğin ağlarda çalıştır ya da önüne şifreli bir ters vekil (reverse proxy) koy. Sunucuya erişebilen herkes MEGA hesabına giriş ve çıkış da yapabilir.
+> Tarayıcı tabanlı saldırılara karşı korunur: bilinmeyen alan adları (DNS rebinding), başka sitelerden gelen yazma istekleri (CSRF) ve aşırı istekler reddedilir. `.local`, `.lan`, IP adresleri ve tek kelimelik ağ adları (örneğin `nas`) her zaman çalışır.
+
+İmajı kendin derlemek için `docker build -f docker/Dockerfile -t peekaround .` komutunu kullan. Arayüzün derlemesi çok bellek ister: Docker'a 8 GB ayrılmışken derleme yarıda kaldı. Hazır imajı kullanmak daha kolaydır.
 
 ---
 
@@ -117,19 +140,23 @@ Gereksinimler: güncel kararlı Rust, ffmpeg (PATH'te). Linux'ta ayrıca `libhei
 ```bash
 cargo build --release -p pa-desktop      # masaüstü uygulaması
 cargo build --release -p pa-cli          # başsız sunucu
+sh crates/pa-web/build.sh web            # tarayıcı arayüzü (wasm32-unknown-unknown hedefi gerekir)
 cargo test --workspace
 ```
 
+Sunucuyu tarayıcı arayüzüyle denemek için: `peekaround -r /yol/Fotoğraflar --web web`.
+
 Sunucu olmadan arayüzü denemek için: `pa-desktop --demo 10000` (10 bin öğelik sahte kütüphane). Ekran görüntüsü ve otomasyon için `PA_SCRIPT` ortam değişkeni (`wait 2000; nav explore; shot a.png; quit`); `PA_PHONE=1` telefon düzenini açar.
 
-Paketler GitHub Actions ile derlenir: `v2.0.0` gibi bir etiket Windows, Linux ve Android paketlerini derleyip Release'e ekler. Ayrıntılar: [docs/github-actions.md](docs/github-actions.md).
+Paketler GitHub Actions ile derlenir: `v2.1.0` gibi bir etiket Windows, Linux ve Android paketlerini derleyip Release'e ekler, Docker imajını da `ghcr.io`'ya gönderir. Ayrıntılar: [docs/github-actions.md](docs/github-actions.md).
 
 ### Yapı
 
 ```
 crates/pa-core     Saf mantık ve API tipleri
 crates/pa-server   HTTP/WebSocket sunucu: axum + tokio + SQLite
-crates/pa-cli      peekaround: başsız sunucu
+crates/pa-cli      peekaround: başsız sunucu (Docker imajındaki program)
+crates/pa-web      Tarayıcı arayüzü: pa-ui'nin WebAssembly derlemesi, Docker sunucusu sunar
 crates/pa-desktop  Masaüstü uygulaması: Slint arayüz + gömülü sunucu, tepsi, bildirimler
 crates/pa-android  Android uygulaması: NativeActivity üzerinde aynı arayüz + gömülü sunucu
 crates/pa-ui       Slint arayüzü: tüm ekranlar, düzenleyiciler ve görünüm modelleri
@@ -142,6 +169,7 @@ crates/pa-remote   MEGA akış klasörleri: listeleme, küçük resim, önbellek
 crates/pa-link     Telefon bağlantısı (bilgisayar tarafı): eşleştirme, cihaz klasörleri, aktarımlar
 crates/pa-phone    Telefon bağlantısı (telefon tarafı)
 assets/geo         Çevrimdışı yer adları (GeoNames)
+docker/            Dockerfile ve compose dosyası
 third_party/       Slint winit arka ucunun yamalı kopyası (0 Hz ekran düzeltmesi)
 ```
 

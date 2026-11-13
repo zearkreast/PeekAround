@@ -1,0 +1,14 @@
+target
+.git
+.github
+.local-project-files
+.claude
+CLAUDE.md
+fixtures
+data
+dist
+release
+docs
+*.log
+**/android/app/build
+**/android/.gradle
