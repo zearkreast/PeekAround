@@ -133,8 +133,8 @@ impl AppInner {
         let iso = p.date_format == "iso";
         ps.set_date_preview(i18n::format_date_time(sample_ms(), lang, iso, hc).into());
         // the web UI previews the clock with "now"
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map(|d| d.as_millis() as i64)
             .unwrap_or(0);
         ps.set_time_preview(
@@ -435,7 +435,7 @@ pub struct Integration {
 /// Build the window, wire everything, run the event loop until the window closes.
 pub fn run(
     backend: Arc<dyn Backend>,
-    rt: tokio::runtime::Handle,
+    rt: crate::rt::Handle,
     opts: UiOptions,
 ) -> Result<(), slint::PlatformError> {
     run_with(
@@ -454,7 +454,7 @@ pub fn run(
 /// unless `setup` installs another close handler).
 pub fn run_with(
     backend: Arc<dyn Backend>,
-    rt: tokio::runtime::Handle,
+    rt: crate::rt::Handle,
     opts: UiOptions,
     integ: Integration,
 ) -> Result<(), slint::PlatformError> {
@@ -474,7 +474,8 @@ pub fn run_with(
     let shell = window.global::<Shell>();
     shell.set_toasts(ModelRc::from(toasts.clone()));
     shell.set_server_label(backend.label().into());
-    shell.set_phone(integ.host.platform() == "android" || std::env::var_os("PA_PHONE").is_some());
+    shell.set_phone(integ.host.phone() || std::env::var_os("PA_PHONE").is_some());
+    shell.set_web(integ.host.platform() == "web");
     let app = Rc::new(AppInner {
         window: window.clone_strong(),
         backend: backend.clone(),
@@ -680,6 +681,9 @@ pub fn run_with(
     if let Some(setup) = integ.setup {
         setup(&window);
     }
+    // the browser's event loop never comes back here: the app lives as long as the page
+    #[cfg(target_arch = "wasm32")]
+    std::mem::forget(app.clone());
     let r = if integ.show { window.show() } else { Ok(()) }
         .and_then(|_| slint::run_event_loop_until_quit());
     let _ = window.hide();

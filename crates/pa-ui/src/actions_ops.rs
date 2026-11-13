@@ -41,8 +41,9 @@ impl MediaSource {
     }
 }
 
-/// Media operations (all futures are `Send + 'static`; they run on the tokio runtime).
-pub trait MediaOps: Send + Sync {
+/// Media operations (the futures are `Send + 'static` on the native targets, where they run on
+/// the tokio runtime).
+pub trait MediaOps: crate::backend::Shared {
     /// `GET /api/media/:id`
     fn media(&self, id: &str) -> BoxFut<MediaDetails>;
     /// an image of an item
@@ -134,6 +135,9 @@ mod http {
                 ImageSize::Full => c.full_url(id),
                 ImageSize::Filmstrip(n, h) => c.filmstrip_url(id, n, h),
             };
+            #[cfg(target_arch = "wasm32")]
+            return crate::backend::fetch_decoded(url);
+            #[cfg(not(target_arch = "wasm32"))]
             Box::pin(async move {
                 c.get_bytes(&url)
                     .await
@@ -178,6 +182,40 @@ mod http {
             let c = self.client().clone();
             Box::pin(async move { c.create_album(&name, &ids).await.map_err(berr) })
         }
+        #[cfg(target_arch = "wasm32")]
+        fn upload(&self, file: PathBuf, to: DirTarget, rel: String) -> BoxFut<()> {
+            let c = self.client().clone();
+            Box::pin(async move {
+                let f = crate::web::file(&file).ok_or_else(|| BackendError {
+                    status: 0,
+                    message: format!("{}: not found", file.display()),
+                })?;
+                let opts = pa_client::UploadOptions {
+                    folder_id: to.folder_id,
+                    dir: to.dir,
+                    path: rel,
+                    zip: None,
+                    mtime: Some(f.last_modified() as i64),
+                };
+                c.upload_blob(&f, &opts).await.map(|_| ()).map_err(berr)
+            })
+        }
+        /// The browser saves the file itself: `dest` only names it.
+        #[cfg(target_arch = "wasm32")]
+        fn download(&self, ids: Vec<String>, dest: PathBuf) -> BoxFut<PathBuf> {
+            let url = if ids.len() == 1 {
+                self.client().file_url(&ids[0], true)
+            } else {
+                self.client().download_url(&ids, None)
+            };
+            let name = dest
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            crate::web::save_url(&url, &name);
+            Box::pin(async move { Ok(dest) })
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         fn upload(&self, file: PathBuf, to: DirTarget, rel: String) -> BoxFut<()> {
             let c = self.client().clone();
             Box::pin(async move {
@@ -196,6 +234,7 @@ mod http {
                 c.upload_path(&file, &opts).await.map(|_| ()).map_err(berr)
             })
         }
+        #[cfg(not(target_arch = "wasm32"))]
         fn download(&self, ids: Vec<String>, dest: PathBuf) -> BoxFut<PathBuf> {
             let c = self.client().clone();
             Box::pin(async move {
@@ -206,7 +245,7 @@ mod http {
                 };
                 let bytes = c.get_bytes(&url).await.map_err(berr)?;
                 let d2 = dest.clone();
-                tokio::task::spawn_blocking(move || std::fs::write(&d2, &bytes))
+                crate::rt::spawn_blocking(move || std::fs::write(&d2, &bytes))
                     .await
                     .map_err(|e| BackendError {
                         status: 0,
@@ -219,6 +258,17 @@ mod http {
                 Ok(dest)
             })
         }
+        /// The `<video>` element plays the original, or the transcoded stream of the server
+        /// for formats a browser cannot play.
+        #[cfg(target_arch = "wasm32")]
+        fn source(&self, item: &MediaItem, _path: Option<&str>) -> Option<MediaSource> {
+            Some(MediaSource::Url(if item.playback == pa_core::Playback::Transcode {
+                self.client().stream_url(&item.id, 0.0)
+            } else {
+                self.client().file_url(&item.id, false)
+            }))
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         fn source(&self, item: &MediaItem, path: Option<&str>) -> Option<MediaSource> {
             // same machine (desktop app / local server): ffmpeg reads the file itself
             if let Some(p) = path.filter(|p| Path::new(p).is_absolute() && Path::new(p).is_file()) {

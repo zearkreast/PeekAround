@@ -2,7 +2,8 @@
 //! the sliders, the filter presets, the geometry (quarter turns, flips, straighten, crop) and the
 //! undo history. Pure, so the preview and the full-size export read the same values.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 /// Slider keys, in panel order. Values are "slider units" (mostly −100…100, hue in degrees).
 pub const KEYS: [&str; 15] = [

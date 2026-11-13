@@ -20,7 +20,8 @@ use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroUsize;
 use std::rc::{Rc, Weak};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use pa_core::{BrowseQuery, GeoPoints, MapTileStyle, MediaItem, MediaKind};
 use slint::{ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, VecModel};
@@ -972,7 +973,7 @@ impl MapCtl {
         a.rt.spawn_then(
             async move {
                 match fut.await {
-                    Ok(b) => tokio::task::spawn_blocking(move || decode_tile(&b, dark))
+                    Ok(b) => crate::rt::spawn_blocking(move || decode_tile(&b, dark))
                         .await
                         .ok()
                         .flatten()

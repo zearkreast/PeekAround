@@ -379,9 +379,22 @@ pub(crate) fn copy_to_pc(a: &Rc<AppInner>, refs: Vec<FileRef>, label: &str, remo
 /// zip download (album / folder): save as → stream to the file
 pub(crate) fn download(a: &Rc<AppInner>, path: &str, name: &str) {
     let name = sanitize_file_name(name);
-    if a.backend.url(path).is_none() {
+    let Some(_url) = a.backend.url(path) else {
+        return;
+    };
+    // the browser streams the zip to its own downloads folder
+    #[cfg(target_arch = "wasm32")]
+    {
+        crate::web::save_url(&_url, &name);
+        a.toast(ToastKind::Info, &a.t("common.download"), &name);
         return;
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    download_to_file(a, path, name);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn download_to_file(a: &Rc<AppInner>, path: &str, name: String) {
     let fut = a.host.save_file(&a.t("common.download"), &name);
     let path = path.to_string();
     let w = Rc::downgrade(a);
@@ -1899,8 +1912,8 @@ pub(crate) fn add_files(
         a.toast(ToastKind::Error, &a.t("drop.readonly"), "");
         return;
     }
-    let dirs: Vec<PathBuf> = paths.iter().filter(|p| p.is_dir()).cloned().collect();
-    let files: Vec<PathBuf> = paths.iter().filter(|p| p.is_file()).cloned().collect();
+    let dirs: Vec<PathBuf> = paths.iter().filter(|p| crate::files::is_dir(p)).cloned().collect();
+    let files: Vec<PathBuf> = paths.iter().filter(|p| crate::files::is_file(p)).cloned().collect();
     if a.host.is_desktop() && !dirs.is_empty() && !picked_folder {
         let names: Vec<String> = dirs
             .iter()
@@ -2123,15 +2136,11 @@ fn upload_queue(a: &Rc<AppInner>, paths: Vec<PathBuf>, t: DirTarget, zip: Option
 }
 
 fn collect(p: &std::path::Path, base: &std::path::Path, out: &mut Vec<(PathBuf, String)>) {
-    if p.is_dir() {
-        if let Ok(rd) = std::fs::read_dir(p) {
-            let mut v: Vec<_> = rd.flatten().map(|e| e.path()).collect();
-            v.sort();
-            for c in v {
-                collect(&c, base, out);
-            }
+    if crate::files::is_dir(p) {
+        for c in crate::files::read_dir(p) {
+            collect(&c, base, out);
         }
-    } else if p.is_file() {
+    } else if crate::files::is_file(p) {
         let rel = p
             .strip_prefix(base)
             .unwrap_or(p)

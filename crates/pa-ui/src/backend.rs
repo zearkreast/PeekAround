@@ -3,7 +3,8 @@
 //! synthesizes a big library (perf tests, screenshots without a server).
 //!
 //! Futures are `Send + 'static` so they can run on the tokio runtime the binary provides; the UI
-//! thread only receives their results (see `rt.rs`).
+//! thread only receives their results (see `rt.rs`). The browser build has one thread and futures
+//! that hold JS values: there the `Send` bounds are dropped.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -29,7 +30,11 @@ impl std::fmt::Display for BackendError {
 /// Backend result.
 pub type BResult<T> = Result<T, BackendError>;
 /// Boxed backend future.
+#[cfg(not(target_arch = "wasm32"))]
 pub type BoxFut<T> = Pin<Box<dyn Future<Output = BResult<T>> + Send + 'static>>;
+/// Boxed backend future.
+#[cfg(target_arch = "wasm32")]
+pub type BoxFut<T> = Pin<Box<dyn Future<Output = BResult<T>> + 'static>>;
 
 /// A thumbnail as delivered by the backend.
 pub enum ThumbData {
@@ -69,10 +74,25 @@ pub enum BackendEvent {
 }
 
 /// Event sink (called from a background thread).
+#[cfg(not(target_arch = "wasm32"))]
 pub type EventSink = Box<dyn Fn(BackendEvent) + Send + Sync + 'static>;
+/// Event sink.
+#[cfg(target_arch = "wasm32")]
+pub type EventSink = Box<dyn Fn(BackendEvent) + 'static>;
+
+/// `Send + Sync` on the native targets, nothing in the browser.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait Shared: Send + Sync {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Send + Sync> Shared for T {}
+/// `Send + Sync` on the native targets, nothing in the browser.
+#[cfg(target_arch = "wasm32")]
+pub trait Shared {}
+#[cfg(target_arch = "wasm32")]
+impl<T> Shared for T {}
 
 /// The UI's view of a PeekAround server (or a local library).
-pub trait Backend: Send + Sync + 'static {
+pub trait Backend: Shared + 'static {
     /// short label (server URL / "Demo")
     fn label(&self) -> String;
     /// `GET /api/info`
@@ -180,17 +200,32 @@ pub struct UploadSpec {
 #[cfg(feature = "http")]
 pub struct HttpBackend {
     client: pa_client::Client,
-    rt: tokio::runtime::Handle,
+    #[cfg(not(target_arch = "wasm32"))]
+    rt: crate::rt::Handle,
+    #[cfg(not(target_arch = "wasm32"))]
     events: std::sync::Mutex<Vec<tokio::task::JoinHandle<()>>>,
+    #[cfg(target_arch = "wasm32")]
+    events: std::cell::RefCell<Vec<pa_client::WebEvents>>,
 }
 
 #[cfg(feature = "http")]
 impl HttpBackend {
     /// `rt`: the runtime the event socket runs on.
-    pub fn new(client: pa_client::Client, rt: tokio::runtime::Handle) -> Arc<HttpBackend> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn new(client: pa_client::Client, rt: crate::rt::Handle) -> Arc<HttpBackend> {
         Arc::new(HttpBackend {
             client,
             rt,
+            events: Default::default(),
+        })
+    }
+
+    /// The server this page was loaded from.
+    #[cfg(target_arch = "wasm32")]
+    #[allow(clippy::arc_with_non_send_sync)]
+    pub fn new(client: pa_client::Client, _rt: crate::rt::Handle) -> Arc<HttpBackend> {
+        Arc::new(HttpBackend {
+            client,
             events: Default::default(),
         })
     }
@@ -201,7 +236,7 @@ impl HttpBackend {
     }
 }
 
-#[cfg(feature = "http")]
+#[cfg(all(feature = "http", not(target_arch = "wasm32")))]
 impl Drop for HttpBackend {
     fn drop(&mut self) {
         for t in self.events.lock().unwrap().drain(..) {
@@ -238,6 +273,11 @@ impl Backend for HttpBackend {
         let c = self.client.clone();
         Box::pin(async move { c.browse(&q).await.map_err(berr) })
     }
+    #[cfg(target_arch = "wasm32")]
+    fn thumb(&self, id: String, size: u32) -> BoxFut<ThumbData> {
+        fetch_decoded(self.client.thumb_url(&id, size))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     fn thumb(&self, id: String, size: u32) -> BoxFut<ThumbData> {
         let c = self.client.clone();
         Box::pin(async move {
@@ -248,6 +288,21 @@ impl Backend for HttpBackend {
                 .map_err(berr)
         })
     }
+    #[cfg(target_arch = "wasm32")]
+    fn subscribe(&self, sink: EventSink) {
+        let ev = self.client.events_web(move |e| {
+            sink(match e {
+                pa_client::ClientEvent::Connection(s) => BackendEvent::Connection(match s {
+                    pa_client::ConnectionState::Connecting => Connection::Connecting,
+                    pa_client::ConnectionState::Online => Connection::Online,
+                    pa_client::ConnectionState::Offline => Connection::Offline,
+                }),
+                pa_client::ClientEvent::Server(e) => BackendEvent::Server(e),
+            });
+        });
+        self.events.borrow_mut().push(ev);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     fn subscribe(&self, sink: EventSink) {
         let mut ev = self.client.events_on(&self.rt);
         let task = self.rt.spawn(async move {
@@ -287,11 +342,36 @@ impl Backend for HttpBackend {
         let url = format!("{}{path}", c.base());
         Box::pin(async move { c.get_bytes(&url).await.map_err(berr) })
     }
+    #[cfg(not(target_arch = "wasm32"))]
     fn download_to(&self, path: &str, dest: std::path::PathBuf) -> BoxFut<u64> {
         let c = self.client.clone();
         let p = path.to_string();
         Box::pin(async move { c.download_to(&p, &dest).await.map_err(berr) })
     }
+    /// `file`: a path of `web::register` (a file the user picked or dropped on the page).
+    #[cfg(target_arch = "wasm32")]
+    fn upload_path(
+        &self,
+        file: std::path::PathBuf,
+        o: UploadSpec,
+    ) -> BoxFut<pa_core::UploadResult> {
+        let c = self.client.clone();
+        Box::pin(async move {
+            let blob = crate::web::file(&file).ok_or_else(|| BackendError {
+                status: 0,
+                message: format!("{}: not found", file.display()),
+            })?;
+            let opts = pa_client::UploadOptions {
+                folder_id: o.folder_id,
+                dir: o.dir,
+                path: o.path,
+                zip: o.zip,
+                mtime: o.mtime,
+            };
+            c.upload_blob(&blob, &opts).await.map_err(berr)
+        })
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     fn upload_path(
         &self,
         file: std::path::PathBuf,
@@ -309,6 +389,22 @@ impl Backend for HttpBackend {
             c.upload_path(&file, &opts).await.map_err(berr)
         })
     }
+}
+
+/// An image of the server as pixels: the browser fetches and decodes it (its own codecs, off
+/// the UI thread), where the native builds decode the bytes on a worker thread.
+#[cfg(all(feature = "http", target_arch = "wasm32"))]
+pub(crate) fn fetch_decoded(url: String) -> BoxFut<ThumbData> {
+    Box::pin(async move {
+        match crate::web::fetch_image(&url).await {
+            Ok(d) => Ok(ThumbData::Rgba {
+                width: d.width,
+                height: d.height,
+                pixels: d.pixels,
+            }),
+            Err((status, message)) => Err(BackendError { status, message }),
+        }
+    })
 }
 
 // ───────── demo ─────────
@@ -404,7 +500,7 @@ impl DemoBackend {
 
 /// simulated latency (created inside the future: it runs on the tokio runtime)
 async fn sleep_ms(ms: u64) {
-    tokio::time::sleep(std::time::Duration::from_millis(ms)).await
+    crate::rt::sleep_ms(ms).await
 }
 
 impl Backend for DemoBackend {

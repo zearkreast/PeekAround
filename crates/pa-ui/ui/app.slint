@@ -86,8 +86,8 @@ export component AppWindow inherits Window {
     icon: Icons.logo;
     preferred-width: 1440px;
     preferred-height: 900px;
-    min-width: Shell.phone ? 320px : 720px;
-    min-height: Shell.phone ? 400px : 480px;
+    min-width: Shell.phone || Shell.web ? 320px : 720px;
+    min-height: Shell.phone || Shell.web ? 400px : 480px;
     changed width => { Shell.window-width = self.width; }
     init => { Shell.window-width = self.width; }
     background: Theme.bg;

@@ -15,8 +15,9 @@
 #![warn(missing_docs)]
 
 mod error;
-#[cfg(not(target_arch = "wasm32"))]
 mod events;
+#[cfg(target_arch = "wasm32")]
+mod events_web;
 mod query;
 
 use std::sync::{Arc, RwLock};
@@ -31,7 +32,10 @@ use serde::{Deserialize, Serialize};
 
 pub use error::{Error, Result};
 #[cfg(not(target_arch = "wasm32"))]
-pub use events::{ClientEvent, ConnectionState, Events};
+pub use events::Events;
+pub use events::{ClientEvent, ConnectionState};
+#[cfg(target_arch = "wasm32")]
+pub use events_web::WebEvents;
 pub use query::{browse_qs, encode_seg, Qs};
 
 /// Credentials of a paired phone (PeekLink) — sent as headers and as `pdev`/`ptok` on media URLs.
@@ -432,12 +436,8 @@ impl Client {
         .await
     }
 
-    /// `PUT /api/upload` with the raw file body.
-    pub async fn upload(
-        &self,
-        body: impl Into<reqwest::Body>,
-        opts: &UploadOptions,
-    ) -> Result<UploadResult> {
+    /// `/api/upload?folderId=…&dir=…&path=…`
+    fn upload_path_qs(opts: &UploadOptions) -> String {
         let mut qs = Qs::new();
         qs.str("folderId", &opts.folder_id)
             .str("dir", &opts.dir)
@@ -448,8 +448,17 @@ impl Client {
         if let Some(m) = opts.mtime {
             qs.num("mtime", m);
         }
+        format!("/api/upload{qs}")
+    }
+
+    /// `PUT /api/upload` with the raw file body.
+    pub async fn upload(
+        &self,
+        body: impl Into<reqwest::Body>,
+        opts: &UploadOptions,
+    ) -> Result<UploadResult> {
         let rb = self
-            .request(reqwest::Method::PUT, &format!("/api/upload{qs}"))
+            .request(reqwest::Method::PUT, &Self::upload_path_qs(opts))
             .header("Content-Type", "application/octet-stream")
             .body(body);
         let res = self.send(rb).await?;
@@ -477,6 +486,52 @@ impl Client {
             .map_err(|e| Error::Network(format!("{}: {e}", file.display())))?;
         let body = reqwest::Body::wrap_stream(tokio_util::io::ReaderStream::new(f));
         self.upload(body, opts).await
+    }
+
+    /// `PUT /api/upload` with a file the user picked or dropped in the browser: `fetch` streams
+    /// it from disk, so a big video never sits in memory.
+    #[cfg(target_arch = "wasm32")]
+    pub async fn upload_blob(
+        &self,
+        blob: &web_sys::Blob,
+        opts: &UploadOptions,
+    ) -> Result<UploadResult> {
+        use wasm_bindgen::JsCast;
+        let js = |e: wasm_bindgen::JsValue| Error::Network(format!("{e:?}"));
+        let init = web_sys::RequestInit::new();
+        init.set_method("PUT");
+        init.set_body(blob);
+        let headers = web_sys::Headers::new().map_err(js)?;
+        headers
+            .set("Content-Type", "application/octet-stream")
+            .map_err(js)?;
+        init.set_headers(&headers);
+        let url = self.murl(&Self::upload_path_qs(opts));
+        let win = web_sys::window().ok_or_else(|| Error::Network("no window".into()))?;
+        let res = wasm_bindgen_futures::JsFuture::from(win.fetch_with_str_and_init(&url, &init))
+            .await
+            .map_err(js)?;
+        let res: web_sys::Response = res.dyn_into().map_err(js)?;
+        let text = wasm_bindgen_futures::JsFuture::from(res.text().map_err(js)?)
+            .await
+            .map_err(js)?
+            .as_string()
+            .unwrap_or_default();
+        if !res.ok() {
+            let message = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from))
+                .unwrap_or_else(|| res.status_text());
+            return Err(Error::Api {
+                status: res.status(),
+                message,
+            });
+        }
+        Ok(serde_json::from_str(&text).unwrap_or(UploadResult {
+            created: vec![],
+            temp_folder: None,
+            extracted_dir: None,
+        }))
     }
 
     // ───────── jobs ─────────

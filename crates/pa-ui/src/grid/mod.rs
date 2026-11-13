@@ -17,7 +17,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use web_time::Instant;
 
 use pa_core::{BrowseQuery, KindCounts, MediaItem, MediaKind};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
@@ -155,8 +155,8 @@ pub struct GridCtl {
 pub struct GridHandle(pub Rc<RefCell<GridCtl>>);
 
 fn now_year() -> i64 {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let secs = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     i18n::civil_from_days(secs / 86_400).0
@@ -792,7 +792,7 @@ impl GridCtl {
                     Err(_) => return None,
                 };
                 Some(
-                    tokio::task::spawn_blocking(move || thumbs::decode(data))
+                    crate::rt::spawn_blocking(move || thumbs::decode(data))
                         .await
                         .ok()
                         .flatten(),

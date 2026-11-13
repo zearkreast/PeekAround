@@ -587,7 +587,7 @@ mod tests {
             left -= c;
             d += 1;
         }
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         let l = layout_grid(
             &a,
             n,

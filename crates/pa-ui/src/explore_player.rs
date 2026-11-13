@@ -6,7 +6,8 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use pa_core::{BrowseQuery, MediaItem, MediaKind, Memory, MemoryKind, SortDir};
 use slint::{ComponentHandle, Image};

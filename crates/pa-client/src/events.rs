@@ -1,12 +1,17 @@
-//! `/api/events` WebSocket with reconnect (native transport: tokio-tungstenite).
+//! `/api/events` WebSocket with reconnect (native transport: tokio-tungstenite; the browser's
+//! own `WebSocket` in `events_web.rs`).
 
 use std::time::Duration;
 
+#[cfg(not(target_arch = "wasm32"))]
 use futures_util::StreamExt;
 use pa_core::ServerEvent;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::sync::mpsc;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio_tungstenite::tungstenite::Message;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::{encode_seg, Client};
 
 /// Connection state of the events socket (the web UI's `ConnectionState`).
@@ -32,12 +37,14 @@ pub enum ClientEvent {
 }
 
 /// Live events; the background task stops when this is dropped.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 pub struct Events {
     rx: mpsc::UnboundedReceiver<ClientEvent>,
     task: tokio::task::JoinHandle<()>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Events {
     /// next event (None once the task ended, which only happens on drop)
     pub async fn recv(&mut self) -> Option<ClientEvent> {
@@ -50,6 +57,7 @@ impl Events {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for Events {
     fn drop(&mut self) {
         self.task.abort();
@@ -61,6 +69,7 @@ pub(crate) fn backoff(retry: u32) -> Duration {
     Duration::from_millis((500u64 << retry.min(10)).min(15_000))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Client {
     /// Open the events socket on the current tokio runtime (reconnects until dropped).
     pub fn events(&self) -> Events {
@@ -83,6 +92,7 @@ impl Client {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn run(url: String, tx: mpsc::UnboundedSender<ClientEvent>) {
     let mut retry: u32 = 0;
     let mut state = None;

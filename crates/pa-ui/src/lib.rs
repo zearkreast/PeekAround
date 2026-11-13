@@ -8,6 +8,7 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod backend;
+mod files;
 pub mod fmt;
 pub mod host;
 pub mod grid;
@@ -23,7 +24,14 @@ pub mod actions_ops;
 pub mod actions_ui;
 mod actions_script;
 pub mod selection;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod video;
+#[cfg(target_arch = "wasm32")]
+#[path = "video_web.rs"]
+pub mod video;
+mod video_common;
+#[cfg(target_arch = "wasm32")]
+pub mod web;
 mod viewer;
 mod viewer_fmt;
 
@@ -57,5 +65,5 @@ pub use generated::*;
 
 pub use app::{run, run_gallery, run_with, Integration, UiOptions};
 pub use pages::announce_update;
-#[cfg(feature = "desktop")]
+#[cfg(any(feature = "desktop", feature = "web"))]
 pub use pages::observe_window_events;

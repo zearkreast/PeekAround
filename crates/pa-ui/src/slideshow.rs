@@ -133,8 +133,8 @@ impl Rng {
         Rng(seed.max(1))
     }
     pub fn from_time() -> Rng {
-        let t = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let t = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map(|d| d.as_nanos() as u64)
             .unwrap_or(1);
         Rng::new(t)

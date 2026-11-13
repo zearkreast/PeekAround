@@ -1,7 +1,9 @@
 //! Device-local UI preferences (the web UI's `store/prefs.ts` subset the native UI uses so far),
 //! persisted as JSON next to the app's other per-user data (`ui-prefs.json`).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -145,11 +147,22 @@ impl Default for Prefs {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+const WEB_KEY: &str = "peekaround.prefs";
+
+#[cfg(target_arch = "wasm32")]
+fn web_storage() -> Option<web_sys::Storage> {
+    web_sys::window()?.local_storage().ok()?
+}
+
 /// English when the OS language is English, Turkish otherwise (the web UI's rule).
 fn system_lang() -> &'static str {
+    #[cfg(not(target_arch = "wasm32"))]
     let env = ["LC_ALL", "LC_MESSAGES", "LANG"]
         .iter()
         .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()));
+    #[cfg(target_arch = "wasm32")]
+    let env = web_sys::window().and_then(|w| w.navigator().language());
     match env {
         Some(v) if v.to_ascii_lowercase().starts_with("en") => "en",
         _ => "tr",
@@ -236,6 +249,7 @@ impl Prefs {
     }
 
     /// Load (defaults when missing / unreadable).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(path: &Path) -> Prefs {
         std::fs::read(path)
             .ok()
@@ -244,7 +258,28 @@ impl Prefs {
             .sanitized()
     }
 
+    /// Load from the browser's localStorage (`path` is not used: a page has no files).
+    #[cfg(target_arch = "wasm32")]
+    pub fn load(_path: &Path) -> Prefs {
+        web_storage()
+            .and_then(|s| s.get_item(WEB_KEY).ok().flatten())
+            .and_then(|j| serde_json::from_str::<Prefs>(&j).ok())
+            .unwrap_or_default()
+            .sanitized()
+    }
+
+    /// Save to the browser's localStorage.
+    #[cfg(target_arch = "wasm32")]
+    pub fn save(&self, _path: &Path) -> std::io::Result<()> {
+        let json = serde_json::to_string(self).map_err(std::io::Error::other)?;
+        web_storage()
+            .ok_or_else(|| std::io::Error::other("localStorage is not available"))?
+            .set_item(WEB_KEY, &json)
+            .map_err(|_| std::io::Error::other("localStorage is full or blocked"))
+    }
+
     /// Save atomically (write + rename).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;

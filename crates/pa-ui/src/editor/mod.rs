@@ -366,7 +366,7 @@ impl Ctl {
         let me = Rc::downgrade(self);
         a.rt.spawn_then(
             async move {
-                tokio::task::spawn_blocking(move || {
+                crate::rt::spawn_blocking(move || {
                     let mut g = r.lock().unwrap();
                     g.as_mut().filter(|r| r.has_source()).map(|r| r.render(&p, w, h))
                 })
@@ -445,7 +445,7 @@ impl Ctl {
         let me = Rc::downgrade(self);
         a.rt.spawn_then(
             async move {
-                tokio::task::spawn_blocking(move || {
+                crate::rt::spawn_blocking(move || {
                     let mut g = r.lock().unwrap();
                     let r = g.as_mut().filter(|r| r.has_source())?;
                     Some(jobs.iter().map(|p| r.render(p, THUMB, THUMB)).collect::<Vec<_>>())
@@ -577,7 +577,7 @@ impl Ctl {
         a.rt.spawn_then(
             async move {
                 let data = fut.await.map_err(|e| e.message)?;
-                tokio::task::spawn_blocking(move || -> Result<(f64, f64, String), String> {
+                crate::rt::spawn_blocking(move || -> Result<(f64, f64, String), String> {
                     let img = Arc::new(decode_full(data)?);
                     let (w, h) = img.dimensions();
                     let mut g = r.lock().unwrap();
@@ -631,7 +631,7 @@ impl Ctl {
         self.src.set(None);
         *self.item.borrow_mut() = None;
         let r = self.renderer.clone();
-        a.rt.handle().spawn_blocking(move || {
+        let _ = a.rt.handle().spawn_blocking(move || {
             if let Some(r) = r.lock().unwrap().as_mut() {
                 r.clear_source();
             }
@@ -769,7 +769,7 @@ impl Ctl {
         let rendering = a.t("photo.rendering");
         let encoding = a.t("photo.encoding");
         let render = async move {
-            tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
+            crate::rt::spawn_blocking(move || -> Result<Vec<u8>, String> {
                 use image::ImageEncoder;
                 let mut g = r.lock().unwrap();
                 let rr = g.as_mut().filter(|r| r.has_source()).ok_or("no source")?;

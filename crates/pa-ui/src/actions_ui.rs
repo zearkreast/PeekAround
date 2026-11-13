@@ -310,19 +310,42 @@ pub fn reveal_in_file_manager(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Save the video frame at `t` as a photo next to the video (VideoPlayer saveFrame).
-pub(crate) fn save_frame(a: &Rc<AppInner>, item: MediaItem, input: String, t: f64) {
-    let Some(ops) = a.backend.ops() else { return };
+/// `<video name>_<time>` for a saved frame.
+fn frame_name(item: &MediaItem, t: f64) -> String {
     let stem = item
         .name
         .rsplit_once('.')
         .map(|(s, _)| s)
-        .unwrap_or(&item.name)
-        .to_string();
-    let name = format!(
-        "{stem}_{}.jpg",
-        crate::viewer_fmt::clock(t).replace(':', "-")
-    );
+        .unwrap_or(&item.name);
+    format!("{stem}_{}", crate::viewer_fmt::clock(t).replace(':', "-"))
+}
+
+/// Save a frame the browser took from its `<video>` element as a photo next to the video.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn save_frame_image(a: &Rc<AppInner>, item: MediaItem, jpeg: Vec<u8>, t: f64) {
+    let Some(ops) = a.backend.ops() else { return };
+    let stem = frame_name(&item, t);
+    let to = DirTarget {
+        folder_id: item.folder_id.clone(),
+        dir: item.dir.clone(),
+    };
+    let up = ops.save_image(jpeg, to, &stem, "jpg", 92);
+    let name = format!("{stem}.jpg");
+    let w = Rc::downgrade(a);
+    a.rt.spawn_then(up, move |r| {
+        let Some(a) = w.upgrade() else { return };
+        match r {
+            Ok(_) => a.toast(ToastKind::Success, &a.t("viewer.frameSaved"), &name),
+            Err(e) => a.toast(ToastKind::Error, &a.t("common.error"), &e.message),
+        }
+    });
+}
+
+/// Save the video frame at `t` as a photo next to the video (VideoPlayer saveFrame).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn save_frame(a: &Rc<AppInner>, item: MediaItem, input: String, t: f64) {
+    let Some(ops) = a.backend.ops() else { return };
+    let name = format!("{}.jpg", frame_name(&item, t));
     let tmp = std::env::temp_dir().join(format!("pa-frame-{}-{name}", std::process::id()));
     let to = DirTarget {
         folder_id: item.folder_id.clone(),
@@ -334,7 +357,7 @@ pub(crate) fn save_frame(a: &Rc<AppInner>, item: MediaItem, input: String, t: f6
         async move {
             let t2 = tmp.clone();
             let grabbed =
-                tokio::task::spawn_blocking(move || crate::video::grab_frame(&input, t, &t2))
+                crate::rt::spawn_blocking(move || crate::video::grab_frame(&input, t, &t2))
                     .await
                     .map_err(|e| e.to_string())?;
             grabbed?;
@@ -675,12 +698,17 @@ impl Hub {
 
     fn download(&self, a: &Rc<AppInner>, items: Vec<MediaItem>) {
         let Some(ops) = a.backend.ops() else { return };
+        // the browser picks the folder itself: only the file name matters there
+        #[cfg(target_arch = "wasm32")]
+        let dir = PathBuf::from("/");
+        #[cfg(not(target_arch = "wasm32"))]
         let dir = a
             .host
             .download_dir()
             .or_else(dirs::download_dir)
             .or_else(dirs::home_dir)
             .unwrap_or_else(std::env::temp_dir);
+        #[cfg(not(target_arch = "wasm32"))]
         let _ = std::fs::create_dir_all(&dir);
         let name = if items.len() == 1 {
             items[0].name.clone()
@@ -1964,11 +1992,8 @@ fn ref_of(m: &MediaItem) -> FileRef {
 }
 
 fn collect_files(p: &Path, base: &Path, out: &mut Vec<(PathBuf, String)>) {
-    if p.is_dir() {
-        let Ok(rd) = std::fs::read_dir(p) else { return };
-        let mut entries: Vec<PathBuf> = rd.filter_map(|e| e.ok().map(|e| e.path())).collect();
-        entries.sort();
-        for e in entries {
+    if crate::files::is_dir(p) {
+        for e in crate::files::read_dir(p) {
             if e.file_name()
                 .is_some_and(|n| n.to_string_lossy().starts_with('.'))
             {
@@ -1976,7 +2001,7 @@ fn collect_files(p: &Path, base: &Path, out: &mut Vec<(PathBuf, String)>) {
             }
             collect_files(&e, base, out);
         }
-    } else if p.is_file() {
+    } else if crate::files::is_file(p) {
         let rel = p
             .strip_prefix(base)
             .unwrap_or(p)
@@ -2004,7 +2029,7 @@ pub(crate) fn set_clipboard(text: &str) -> Result<(), String> {
 
 // ───────── winit: OS file drops, Ctrl+wheel ─────────
 
-#[cfg(feature = "desktop")]
+#[cfg(any(feature = "desktop", feature = "web"))]
 fn install_winit(app: &Rc<AppInner>) {
     use slint::winit_030::winit::event::{MouseScrollDelta, WindowEvent};
     use slint::winit_030::{EventResult, WinitWindowAccessor};
@@ -2079,6 +2104,84 @@ fn install_winit(app: &Rc<AppInner>) {
         }
         EventResult::Propagate
     });
+}
+
+/// Files dragged from the desktop onto the page: winit reports none in the browser, the page
+/// does. The listeners live as long as the page; what they change goes through the event loop
+/// of the UI, which is what repaints.
+#[cfg(target_arch = "wasm32")]
+fn install_page_drop() {
+    use wasm_bindgen::prelude::*;
+    use wasm_bindgen::JsCast;
+    let Some(win) = web_sys::window() else { return };
+    let has_files = |e: &web_sys::DragEvent| {
+        e.data_transfer()
+            .is_some_and(|d| d.types().iter().any(|t| t.as_string().as_deref() == Some("Files")))
+    };
+    let over = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
+        if !has_files(&e) {
+            return;
+        }
+        // without this the browser opens the file instead of dropping it here
+        e.prevent_default();
+        let _ = slint::invoke_from_event_loop(|| {
+            let Some(h) = hub() else { return };
+            let Some(a) = h.app() else { return };
+            let ds = a.window.global::<DragState>();
+            if !ds.get_files_over() {
+                ds.set_files_readonly(!h.ctx().writable);
+                ds.set_files_target(
+                    h.drop_target
+                        .borrow()
+                        .as_ref()
+                        .map(|t| t.1.clone())
+                        .unwrap_or_default()
+                        .into(),
+                );
+                ds.set_files_over(true);
+            }
+        });
+    });
+    let leave = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
+        // leaving the page, not moving between two elements of it
+        if e.related_target().is_some() {
+            return;
+        }
+        let _ = slint::invoke_from_event_loop(|| {
+            if let Some(a) = hub().and_then(|h| h.app()) {
+                a.window.global::<DragState>().set_files_over(false);
+            }
+        });
+    });
+    let drop = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
+        if !has_files(&e) {
+            return;
+        }
+        e.prevent_default();
+        let mut paths = vec![];
+        if let Some(list) = e.data_transfer().and_then(|d| d.files()) {
+            for i in 0..list.length() {
+                if let Some(f) = list.get(i) {
+                    paths.push(crate::web::register(f));
+                }
+            }
+        }
+        let _ = slint::invoke_from_event_loop(move || {
+            let Some(h) = hub() else { return };
+            if let Some(a) = h.app() {
+                a.window.global::<DragState>().set_files_over(false);
+            }
+            if !paths.is_empty() {
+                h.files_dropped(paths);
+            }
+        });
+    });
+    let _ = win.add_event_listener_with_callback("dragover", over.as_ref().unchecked_ref());
+    let _ = win.add_event_listener_with_callback("dragleave", leave.as_ref().unchecked_ref());
+    let _ = win.add_event_listener_with_callback("drop", drop.as_ref().unchecked_ref());
+    over.forget();
+    leave.forget();
+    drop.forget();
 }
 
 /// Simulate an OS file drop (automation / tests).
@@ -2216,7 +2319,9 @@ pub(crate) fn install(app: &Rc<AppInner>) {
             }
         }
     }));
-    #[cfg(feature = "desktop")]
+    #[cfg(any(feature = "desktop", feature = "web"))]
     install_winit(app);
+    #[cfg(target_arch = "wasm32")]
+    install_page_drop();
     h.load_info();
 }

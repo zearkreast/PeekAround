@@ -2391,6 +2391,19 @@ fn export_backup(a: &Rc<AppInner>) {
     let (y, m, d) = i18n::civil_from_days(now / 86_400_000);
     let name = format!("peekaround-settings-{y:04}-{m:02}-{d:02}.json");
     let json = serde_json::to_string_pretty(&make_backup(a)).unwrap_or_default();
+    // the browser saves it into its own downloads folder
+    #[cfg(target_arch = "wasm32")]
+    {
+        crate::web::save_bytes(json.as_bytes(), &name, "application/json");
+        a.toast(ToastKind::Success, &a.t("pref.export"), &name);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    export_backup_to_file(a, name, json);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn export_backup_to_file(a: &Rc<AppInner>, name: String, json: String) {
     let fut = a.host.save_file(&a.t("pref.export"), &name);
     let w = Rc::downgrade(a);
     a.rt.spawn_then(fut, move |dest| {
@@ -2494,12 +2507,20 @@ fn import_backup(a: &Rc<AppInner>) {
         }],
     );
     let w = Rc::downgrade(a);
-    a.rt.spawn_then(fut, move |files| {
+    // None: nothing picked; Some(None): unreadable
+    let text = async move {
+        let f = fut.await.into_iter().next()?;
+        Some(
+            crate::rt::read_file(f)
+                .await
+                .ok()
+                .and_then(|b| String::from_utf8(b).ok()),
+        )
+    };
+    a.rt.spawn_then(text, move |text| {
         let Some(a) = w.upgrade() else { return };
-        let Some(f) = files.first() else { return };
-        let ok = std::fs::read_to_string(f)
-            .ok()
-            .is_some_and(|t| apply_backup(&a, &t));
+        let Some(text) = text else { return };
+        let ok = text.is_some_and(|t| apply_backup(&a, &t));
         if ok {
             a.toast(ToastKind::Success, &a.t("pref.imported"), "");
         } else {

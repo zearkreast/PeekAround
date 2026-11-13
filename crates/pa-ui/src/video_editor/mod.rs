@@ -12,7 +12,8 @@ pub(crate) use export::{on_job, owns_job};
 use std::cell::{Cell, RefCell, RefMut};
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use pa_core::{MediaItem, MediaKind, VideoFormat, VideoQuality};
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
@@ -741,7 +742,7 @@ impl Ctl {
         a.rt.spawn_then(
             async move {
                 let data = fut.await.map_err(|e| e.message)?;
-                tokio::task::spawn_blocking(move || -> Result<(Vec<u8>, u32, u32), String> {
+                crate::rt::spawn_blocking(move || -> Result<(Vec<u8>, u32, u32), String> {
                     match data {
                         ThumbData::Encoded(b) => {
                             let img = image::load_from_memory(&b).map_err(|e| e.to_string())?.into_rgba8();
@@ -939,7 +940,10 @@ impl Ctl {
         self.strip_timer.stop();
         if let Some(p) = self.player.borrow_mut().take() {
             // ffmpeg is killed and reaped off the UI thread
+            #[cfg(not(target_arch = "wasm32"))]
             std::thread::spawn(move || drop(p));
+            #[cfg(target_arch = "wasm32")]
+            drop(p);
         }
     }
 

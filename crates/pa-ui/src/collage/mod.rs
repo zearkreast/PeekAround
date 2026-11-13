@@ -483,7 +483,7 @@ impl Ctl {
             a.rt.spawn_then(
                 async move {
                     let data = fut.await.map_err(|e| e.message)?;
-                    tokio::task::spawn_blocking(move || crate::editor::decode_full(data).map(|img| Arc::new(Mips::new(img))))
+                    crate::rt::spawn_blocking(move || crate::editor::decode_full(data).map(|img| Arc::new(Mips::new(img))))
                         .await
                         .map_err(|e| e.to_string())?
                 },
@@ -539,7 +539,7 @@ impl Ctl {
         let me = Rc::downgrade(self);
         a.rt.spawn_then(
             async move {
-                tokio::task::spawn_blocking(move || {
+                crate::rt::spawn_blocking(move || {
                     let mut get = |id: &str| previews.get(id).cloned();
                     render::render(&d, pw, ph, scale, bg.as_deref(), &mut get, None, true, &|_| {}).px
                 })
@@ -899,16 +899,37 @@ impl Ctl {
         let rendering = a.t("collage.rendering");
         s.set_progress_label(rendering.clone().into());
         let gen = self.gen.get();
+        #[cfg(not(target_arch = "wasm32"))]
         let handle = a.rt.handle().clone();
         let render = async move {
-            tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
+            // the browser has no worker thread that could wait for a download: they all finish
+            // before the drawing starts
+            #[cfg(target_arch = "wasm32")]
+            let (bg, mut ready) = {
+                let mips = |data| crate::editor::decode_full(data).ok().map(|img| Arc::new(Mips::new(img)));
+                let mut ready = HashMap::new();
+                for (id, f) in futs.drain() {
+                    ready.insert(id, f.await.ok().and_then(mips));
+                }
+                let bg = match bg_fut {
+                    Some(f) => f.await.ok().and_then(mips),
+                    None => None,
+                };
+                (bg, ready)
+            };
+            crate::rt::spawn_blocking(move || -> Result<Vec<u8>, String> {
                 use image::ImageEncoder;
+                #[cfg(not(target_arch = "wasm32"))]
                 let load = |f: crate::backend::BoxFut<crate::backend::ThumbData>| {
                     handle.block_on(f).ok().and_then(|data| crate::editor::decode_full(data).ok()).map(|img| Arc::new(Mips::new(img)))
                 };
+                #[cfg(not(target_arch = "wasm32"))]
                 let bg = bg_fut.and_then(load);
                 // the display renditions load one at a time, as the cells are drawn
+                #[cfg(not(target_arch = "wasm32"))]
                 let mut get = |id: &str| futs.remove(id).and_then(load);
+                #[cfg(target_arch = "wasm32")]
+                let mut get = |id: &str| ready.remove(id).flatten();
                 let mut fonts = collection.map(crate::editor::overlay::Fonts::new);
                 let canvas = render::render(&d, ow, oh, scale, bg.as_deref(), &mut get, fonts.as_mut(), false, &|p| progress(gen, p * 0.9, &rendering));
                 let img = render::unpremultiply(canvas);

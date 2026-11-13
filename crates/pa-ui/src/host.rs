@@ -10,7 +10,11 @@ use std::pin::Pin;
 use serde::{Deserialize, Serialize};
 
 /// Boxed host future (runs on the tokio runtime; results come back to the UI thread).
+#[cfg(not(target_arch = "wasm32"))]
 pub type HostFut<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
+/// Boxed host future (runs on the event loop of the page).
+#[cfg(target_arch = "wasm32")]
+pub type HostFut<T> = Pin<Box<dyn Future<Output = T> + 'static>>;
 
 /// `peek:get-lan` / `peek:set-lan`
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -128,9 +132,14 @@ pub struct Shared {
 
 /// The desktop shell. Every method has a "not available" default.
 pub trait Host {
-    /// "win32" | "linux" | "darwin" | "android" | "" (no desktop shell)
+    /// "win32" | "linux" | "darwin" | "android" | "web" (a browser tab) | "" (no desktop shell)
     fn platform(&self) -> &'static str {
         ""
+    }
+    /// lay the UI out for a phone where the window is narrow (touch sized controls, no
+    /// keyboard shortcuts page)
+    fn phone(&self) -> bool {
+        self.platform() == "android"
     }
     /// a desktop shell is there (Settings → Desktop, LAN share card, native folder picker)
     fn is_desktop(&self) -> bool {

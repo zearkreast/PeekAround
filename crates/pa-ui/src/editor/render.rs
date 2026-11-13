@@ -97,6 +97,7 @@ impl RenderParams {
     }
 }
 
+#[cfg_attr(not(feature = "gpu"), allow(dead_code))]
 pub const SHADER: &str = r#"
 struct U {
   view: vec4f,     // ox, oy, k, -
@@ -243,6 +244,7 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 "#;
 
 /// Mipmap generation: each level samples the one above it (linear filter = 2×2 average).
+#[cfg_attr(not(feature = "gpu"), allow(dead_code))]
 pub const MIP_SHADER: &str = r#"
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var smp: sampler;
@@ -261,6 +263,7 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 "#;
 
 /// Mip chain length of a w × h texture.
+#[cfg_attr(not(feature = "gpu"), allow(dead_code))]
 pub fn mip_levels(w: u32, h: u32) -> u32 {
     32 - w.max(h).max(1).leading_zeros()
 }
@@ -613,24 +616,35 @@ impl Renderer for Cpu {
             return out;
         }
         let u = p.uniforms(self.tex_scale, (self.levels.len() - 1) as f32);
+        // the browser build has one thread
+        #[cfg(target_arch = "wasm32")]
+        let threads = 1;
+        #[cfg(not(target_arch = "wasm32"))]
         let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(16);
         let rows_per = (h as usize).div_ceil(threads).max(1);
         let me = &*self;
+        let u = &u;
+        let rows = |ci: usize, chunk: &mut [u8]| {
+            let y0 = ci * rows_per;
+            for (ry, row) in chunk.chunks_mut(w as usize * 4).enumerate() {
+                let y = (y0 + ry) as f32 + 0.5;
+                for x in 0..w as usize {
+                    let c = shade(me, u, x as f32 + 0.5, y);
+                    for i in 0..4 {
+                        row[x * 4 + i] = (c[i] * 255.0 + 0.5) as u8;
+                    }
+                }
+            }
+        };
+        #[cfg(target_arch = "wasm32")]
+        for (ci, chunk) in out.chunks_mut(rows_per * w as usize * 4).enumerate() {
+            rows(ci, chunk);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         std::thread::scope(|s| {
             for (ci, chunk) in out.chunks_mut(rows_per * w as usize * 4).enumerate() {
-                let u = &u;
-                s.spawn(move || {
-                    let y0 = ci * rows_per;
-                    for (ry, row) in chunk.chunks_mut(w as usize * 4).enumerate() {
-                        let y = (y0 + ry) as f32 + 0.5;
-                        for x in 0..w as usize {
-                            let c = shade(me, u, x as f32 + 0.5, y);
-                            for i in 0..4 {
-                                row[x * 4 + i] = (c[i] * 255.0 + 0.5) as u8;
-                            }
-                        }
-                    }
-                });
+                let rows = &rows;
+                s.spawn(move || rows(ci, chunk));
             }
         });
         out

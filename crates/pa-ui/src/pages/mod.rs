@@ -104,7 +104,7 @@ pub(crate) fn cover(app: &Rc<AppInner>, id: &str, size: u32, then: impl FnOnce(I
     app.rt.spawn_then(
         async move {
             let d = fut.await.ok()?;
-            tokio::task::spawn_blocking(move || thumbs::decode(d))
+            crate::rt::spawn_blocking(move || thumbs::decode(d))
                 .await
                 .ok()
                 .flatten()
@@ -347,22 +347,22 @@ pub(crate) fn script_step(app: &Rc<AppInner>, cmd: &[String]) -> bool {
 }
 
 /// a winit window event observer (see [`observe_window_events`])
-#[cfg(feature = "desktop")]
+#[cfg(any(feature = "desktop", feature = "web"))]
 type WinitObserver = Box<dyn Fn(&slint::winit_030::winit::event::WindowEvent)>;
 
-#[cfg(feature = "desktop")]
+#[cfg(any(feature = "desktop", feature = "web"))]
 thread_local! {
     static OBSERVERS: RefCell<Vec<WinitObserver>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Watch the window's winit events (focus, scale factor …). Slint keeps one winit event filter
 /// per window and actions_ui owns it; it forwards every event here first.
-#[cfg(feature = "desktop")]
+#[cfg(any(feature = "desktop", feature = "web"))]
 pub fn observe_window_events(f: impl Fn(&slint::winit_030::winit::event::WindowEvent) + 'static) {
     OBSERVERS.with(|o| o.borrow_mut().push(Box::new(f)));
 }
 
-#[cfg(feature = "desktop")]
+#[cfg(any(feature = "desktop", feature = "web"))]
 pub(crate) fn notify_window_event(ev: &slint::winit_030::winit::event::WindowEvent) {
     OBSERVERS.with(|o| {
         for f in o.borrow().iter() {

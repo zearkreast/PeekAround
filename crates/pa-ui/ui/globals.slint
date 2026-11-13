@@ -20,8 +20,10 @@ export global Shell {
     in property <bool> readonly;
     // the Android app (or PA_PHONE=1): phone layout below 720px, back key
     in property <bool> phone;
+    // the browser build: its window is a tab of any size, so it lays out like a phone when narrow
+    in property <bool> web;
     // narrow window: bottom navigation, panels under the stage
-    out property <bool> compact: self.phone && self.window-width < 720px;
+    out property <bool> compact: (self.phone || self.web) && self.window-width < 720px;
     in-out property <length> window-width: 1440px;
     in-out property <string> search-text;
     in-out property <string> settings-section: "appearance";

@@ -18,6 +18,8 @@ audio = ["dep:cpal"]
 # copy path → system clipboard
 clipboard = ["dep:arboard"]
 android = ["slint/backend-android-activity-06"]
+# the browser build (the Docker web UI): winit on a canvas
+web = ["slint/backend-winit", "slint/unstable-winit-030"]
 # photo editor adjustments on the GPU (wgpu, headless); without it a CPU path renders them
 gpu = ["dep:wgpu", "dep:pollster"]
 
@@ -28,7 +30,8 @@ pa-core = { path = "../pa-core", default-features = false }
 pa-client = { path = "../pa-client", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt", "sync", "time", "fs"] }
+# `Instant` / `SystemTime` that also work in the browser (std's own on the other targets)
+web-time = "1"
 # WOFF 1.0 tables (Fonts page previews)
 flate2 = "1"
 bytes = "1"
@@ -39,7 +42,6 @@ thumbhash = "0.1"
 qrcode = { version = "0.14", default-features = false }
 lru = "0.12"
 log = "0.4"
-dirs = "6"
 cpal = { version = "0.16", optional = true }
 arboard = { version = "3", default-features = false, optional = true }
 wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "wgsl", "dx12", "vulkan", "metal"], optional = true }
@@ -48,6 +50,23 @@ pollster = { version = "0.4", optional = true }
 # fonts registered with Slint (bundled, uploaded) render the same in the saved file
 parley = { version = "=0.11.1", default-features = false, features = ["std", "system"] }
 swash = { version = "=0.2.10", default-features = false, features = ["std", "render"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["rt", "sync", "time", "fs"] }
+dirs = "6"
+
+# the browser build: no tokio runtime (channels only), the page's own APIs instead
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", features = ["sync"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "Blob", "BlobPropertyBag", "CanvasGradient", "CanvasRenderingContext2d", "DataTransfer", "Document", "DragEvent", "Element",
+    "Event", "EventTarget", "File", "FileList", "HtmlAnchorElement", "HtmlAudioElement", "HtmlCanvasElement", "HtmlElement",
+    "HtmlInputElement", "HtmlMediaElement", "HtmlVideoElement", "ImageBitmap", "ImageData", "MediaError",
+    "MediaQueryList", "Navigator", "Node", "Response", "Storage", "TimeRanges", "Url", "Window",
+] }
 
 [build-dependencies]
 slint-build = "=1.18.1"

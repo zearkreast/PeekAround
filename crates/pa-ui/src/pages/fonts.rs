@@ -374,7 +374,7 @@ fn upload_next(app: &Rc<AppInner>, mut left: Vec<PathBuf>, added: usize) {
     let w = Rc::downgrade(app);
     app.rt.spawn_then(
         async move {
-            let body = tokio::fs::read(&p).await.map_err(|e| e.to_string())?;
+            let body = crate::rt::read_file(p).await?;
             backend.put_bytes(&path, body).await.map_err(|e| e.message)
         },
         move |r| {

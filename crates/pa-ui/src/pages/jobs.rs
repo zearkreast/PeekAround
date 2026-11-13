@@ -239,7 +239,7 @@ pub(crate) fn upload_files(
         for (p, rel) in &files {
             ups.push(Up {
                 name: rel.clone(),
-                size: std::fs::metadata(p).map(|m| m.len() as i64).unwrap_or(0),
+                size: crate::files::size(p),
                 status: "queued".into(),
                 error: String::new(),
             });
@@ -301,11 +301,7 @@ fn next_upload(
         } else {
             None
         },
-        mtime: std::fs::metadata(&path)
-            .ok()
-            .and_then(|m| m.modified().ok())
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_millis() as i64),
+        mtime: crate::files::mtime_ms(&path),
     };
     let fut = a.backend.upload_path(path, spec);
     let w = Rc::downgrade(a);

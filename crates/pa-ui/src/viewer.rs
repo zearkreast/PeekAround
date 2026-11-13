@@ -12,7 +12,8 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::rc::{Rc, Weak};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use pa_core::{MediaDetails, MediaItem, MediaKind};
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
@@ -812,7 +813,7 @@ impl Viewer {
         a.rt.spawn_then(
             async move {
                 let data = fut.await.ok()?;
-                tokio::task::spawn_blocking(move || thumbs::decode(data))
+                crate::rt::spawn_blocking(move || thumbs::decode(data))
                     .await
                     .ok()
                     .flatten()
@@ -853,7 +854,7 @@ impl Viewer {
         a.rt.spawn_then(
             async move {
                 let data = fut.await.ok()?;
-                tokio::task::spawn_blocking(move || thumbs::decode(data))
+                crate::rt::spawn_blocking(move || thumbs::decode(data))
                     .await
                     .ok()
                     .flatten()
@@ -2102,6 +2103,22 @@ impl Viewer {
         self.with_vs(|vs| vs.set_speed(sp as f32));
     }
 
+    /// The browser has the picture in its `<video>` element: no ffmpeg run, the server only
+    /// stores it next to the video.
+    #[cfg(target_arch = "wasm32")]
+    fn save_frame(&self) {
+        let Some(a) = self.app() else { return };
+        let (item, pos, jpeg) = {
+            let s = self.st.borrow();
+            let Some(p) = s.player.as_ref() else { return };
+            (s.item.clone(), p.clock(), p.snapshot_jpeg())
+        };
+        if let (Some(item), Some(jpeg)) = (item, jpeg) {
+            crate::actions_ui::save_frame_image(&a, item, jpeg, pos);
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     fn save_frame(&self) {
         let Some(a) = self.app() else { return };
         let (item, pos, input) = {

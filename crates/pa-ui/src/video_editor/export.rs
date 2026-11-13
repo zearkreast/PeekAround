@@ -82,7 +82,7 @@ impl Ctl {
         let collection = (!groups.is_empty()).then(slint::fontique_011::shared_collection);
         let backend = a.backend.clone();
         let fut = async move {
-            let pngs = tokio::task::spawn_blocking(move || -> Result<Vec<(f64, f64, Vec<u8>)>, String> {
+            let pngs = crate::rt::spawn_blocking(move || -> Result<Vec<(f64, f64, Vec<u8>)>, String> {
                 let Some(collection) = collection else { return Ok(vec![]) };
                 let mut fonts = Fonts::new(collection);
                 groups.into_iter().map(|(st, en, layers)| Ok((st, en, render_overlay(&layers, out, scale, &mut fonts)?))).collect()

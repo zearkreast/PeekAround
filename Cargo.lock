@@ -884,6 +884,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "const-field-offset"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4785,6 +4795,9 @@ dependencies = [
  "tokio-tungstenite 0.29.0",
  "tokio-util",
  "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -5065,6 +5078,7 @@ dependencies = [
  "dirs 6.0.0",
  "flate2",
  "image",
+ "js-sys",
  "log",
  "lru",
  "pa-client",
@@ -5080,7 +5094,25 @@ dependencies = [
  "swash",
  "thumbhash",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
  "wgpu",
+]
+
+[[package]]
+name = "pa-web"
+version = "2.0.0"
+dependencies = [
+ "console_error_panic_hook",
+ "js-sys",
+ "log",
+ "pa-client",
+ "pa-ui",
+ "slint",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
