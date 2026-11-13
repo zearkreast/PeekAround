@@ -25,7 +25,7 @@
 
 PeekAround; bilgisayarındaki, sunucundaki ya da telefonundaki klasörleri modern, animasyonlu bir galeriye dönüştürür. Fotoğraf ve videolarına göz at, izle, albümlere ayır, anılarını ve gezilerini otomatik bulsun, fotoğraf ve videolarda düzenleme yap, kolaj ve slayt gösterisi hazırla. **Orijinallere hiç dokunmaz**: her düzenleme bir kopyaya kaydedilir.
 
-> 🦀 **2.0, Rust + Slint ile baştan yazıldı.** Electron, React ve Node.js yok; arayüz yerel olarak çizilir. Windows paketi 148 MB'tan yaklaşık 40 MB'a indi. 1.x'teki veriler olduğu gibi okunur. Eski TypeScript sürümü [`1.x`](https://github.com/zearkreast/PeekAround/tree/1.x) dalında.
+> 🦀 **2.0, Rust + Slint ile baştan yazıldı.** Electron, React ve Node.js yok; arayüz yerel olarak çizilir. Windows kurulum dosyası 148 MB'tan 50 MB'a indi. 1.x'teki veriler olduğu gibi okunur. Eski TypeScript sürümü [`1.x`](https://github.com/zearkreast/PeekAround/tree/1.x) dalında.
 
 | | Ne işe yarar | Paket |
 |---|---|---|
