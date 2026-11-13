@@ -4750,7 +4750,7 @@ dependencies = [
 
 [[package]]
 name = "pa-android"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "jni 0.21.1",
  "log",
@@ -4770,7 +4770,7 @@ dependencies = [
 
 [[package]]
 name = "pa-cli"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "pa-server",
  "tokio",
@@ -4779,7 +4779,7 @@ dependencies = [
 
 [[package]]
 name = "pa-client"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "axum",
  "bytes",
@@ -4802,7 +4802,7 @@ dependencies = [
 
 [[package]]
 name = "pa-core"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "flate2",
  "icu_collator",
@@ -4816,7 +4816,7 @@ dependencies = [
 
 [[package]]
 name = "pa-desktop"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "auto-launch",
  "dirs 6.0.0",
@@ -4847,7 +4847,7 @@ dependencies = [
 
 [[package]]
 name = "pa-jobs"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4869,7 +4869,7 @@ dependencies = [
 
 [[package]]
 name = "pa-link"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -4896,7 +4896,7 @@ dependencies = [
 
 [[package]]
 name = "pa-media"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4924,7 +4924,7 @@ dependencies = [
 
 [[package]]
 name = "pa-mega"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "aes",
  "axum",
@@ -4952,7 +4952,7 @@ dependencies = [
 
 [[package]]
 name = "pa-meta"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "indexmap",
  "pa-core",
@@ -4963,7 +4963,7 @@ dependencies = [
 
 [[package]]
 name = "pa-phone"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -4988,7 +4988,7 @@ dependencies = [
 
 [[package]]
 name = "pa-remote"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -5017,7 +5017,7 @@ dependencies = [
 
 [[package]]
 name = "pa-server"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -5069,7 +5069,7 @@ dependencies = [
 
 [[package]]
 name = "pa-ui"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -5103,7 +5103,7 @@ dependencies = [
 
 [[package]]
 name = "pa-web"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
