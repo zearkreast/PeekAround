@@ -39,8 +39,6 @@ jobs:
     env:
       # no debug info: the test binaries of the whole workspace fit on the runner's disk
       CARGO_PROFILE_DEV_DEBUG: '0'
-      # the generated Slint code of pa-ui takes gigabytes per rustc: more jobs run out of memory
-      CARGO_BUILD_JOBS: '2'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Toolchain and packages
@@ -59,7 +57,19 @@ jobs:
             target
           key: rust-test-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
           restore-keys: rust-test-
-      - run: cargo test --workspace
+      # the generated Slint code of pa-ui takes gigabytes per rustc: its lib and test builds side
+      # by side run the runner out of memory, so they go one at a time with some swap
+      - name: Swap
+        run: |
+          sudo fallocate -l 8G /swapfile2
+          sudo chmod 600 /swapfile2
+          sudo mkswap /swapfile2
+          sudo swapon /swapfile2
+          free -h
+      - name: Tests
+        run: cargo test --workspace --exclude pa-ui --exclude pa-desktop --exclude pa-android
+      - name: Tests (pa-ui and the apps)
+        run: cargo test -p pa-ui -p pa-desktop -p pa-android -j 1
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         if: always()
         with:
