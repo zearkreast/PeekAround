@@ -16,3 +16,4 @@ release/
 # LLM files
 .claude
 CLAUDE.md
+2.8.0-PROGRESS.md
