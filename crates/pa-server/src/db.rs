@@ -439,6 +439,12 @@ fn value_opt_str(v: ValueRef<'_>) -> Option<String> {
     }
 }
 
+/// Length as SQLite's `substr` counts it: characters, not the UTF-16 units of `js::len16`
+/// (an emoji is 2 there), so `substr(dir, 1, sql_len(d))` matches the prefix `d`.
+pub fn sql_len(s: &str) -> i64 {
+    s.chars().count() as i64
+}
+
 /// `systemTimeZone()`: the zone of this machine (TZ env first), UTC when unknown
 pub fn system_time_zone() -> String {
     if let Ok(tz) = std::env::var("TZ") {

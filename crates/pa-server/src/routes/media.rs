@@ -620,7 +620,7 @@ async fn download(ctx: C, req: Req) -> ApiResult<Response<Body>> {
                     p![folder.id],
                 )
             } else {
-                ("SELECT * FROM media WHERE folder_id = ? AND (dir = ? OR substr(dir, 1, ?) = ?) ORDER BY dir, name".to_string(), p![folder.id, dir.clone(), pa_core::js::len16(&dir) as i64 + 1, format!("{dir}/")])
+                ("SELECT * FROM media WHERE folder_id = ? AND (dir = ? OR substr(dir, 1, ?) = ?) ORDER BY dir, name".to_string(), p![folder.id, dir.clone(), crate::db::sql_len(&dir) + 1, format!("{dir}/")])
             };
             let rows = ctx.db.all(&sql, ps, MediaRow::from_row)?;
             let rf = crate::remote::row_of(&folder);

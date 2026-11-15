@@ -380,7 +380,7 @@ fn walk_folder(ctx: &C, folder_id: i64, sub: &str) {
     } else {
         (
             " AND (dir = ? OR substr(dir, 1, ?) = ?)",
-            p![sub, pa_core::js::len16(sub) as i64 + 1, format!("{sub}/")],
+            p![sub, crate::db::sql_len(sub) + 1, format!("{sub}/")],
         )
     };
     let mut ps = p![folder_id];
@@ -430,7 +430,7 @@ fn walk_folder(ctx: &C, folder_id: i64, sub: &str) {
                 } else {
                     ctx.db.run(
                         "UPDATE media SET seen = 1 WHERE folder_id = ? AND (dir = ? OR substr(dir, 1, ?) = ?)",
-                        p![folder_id, rel, pa_core::js::len16(rel) as i64 + 1, format!("{rel}/")],
+                        p![folder_id, rel, crate::db::sql_len(rel) + 1, format!("{rel}/")],
                     )
                 };
             }
@@ -660,7 +660,7 @@ pub fn remove_dir(ctx: &Ctx, folder_id: i64, rel_dir: &str) {
         p![
             folder_id,
             dir,
-            pa_core::js::len16(dir) as i64 + 1,
+            crate::db::sql_len(dir) + 1,
             format!("{dir}/")
         ],
     );
@@ -772,10 +772,10 @@ pub fn relocate_dir(
     let n = ctx
         .db
         .tx(|c| {
-            c.execute(&format!("DELETE FROM media WHERE folder_id = ? AND {under}"), rusqlite::params![to_folder, dst, pa_core::js::len16(&dst) as i64 + 1, format!("{dst}/")])?;
+            c.execute(&format!("DELETE FROM media WHERE folder_id = ? AND {under}"), rusqlite::params![to_folder, dst, crate::db::sql_len(&dst) + 1, format!("{dst}/")])?;
             c.execute(
                 &format!("UPDATE media SET folder_id = ?, dir = CASE WHEN dir = ? THEN ? ELSE ? || substr(dir, ?) END WHERE folder_id = ? AND {under}"),
-                rusqlite::params![to_folder, src, dst, dst, pa_core::js::len16(&src) as i64 + 1, from_folder, src, pa_core::js::len16(&src) as i64 + 1, format!("{src}/")],
+                rusqlite::params![to_folder, src, dst, dst, crate::db::sql_len(&src) + 1, from_folder, src, crate::db::sql_len(&src) + 1, format!("{src}/")],
             )
         })
         .unwrap_or(0);

@@ -215,7 +215,7 @@ fn dir_clause(folder_id: i64, dir: &str, recursive: bool, s: &mut Scope) {
             s.push("(dir = ? OR substr(dir, 1, ?) = ?)");
             s.params.extend(p![
                 dir,
-                pa_core::js::len16(dir) as i64 + 1,
+                crate::db::sql_len(dir) + 1,
                 format!("{dir}/")
             ]);
         }

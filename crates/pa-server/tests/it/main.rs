@@ -25,4 +25,5 @@ mod explore_insights;
 mod grouping;
 mod jobs;
 mod modes;
+mod emoji_dirs;
 mod skeleton_bench;

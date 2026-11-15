@@ -260,7 +260,7 @@ fn unlink(ctx: &C, folder_id: i64, rel: &str) {
     } else {
         let under = ctx
             .db
-            .int("SELECT 1 FROM media WHERE folder_id = ? AND (dir = ? OR substr(dir, 1, ?) = ?) LIMIT 1", crate::p![folder_id, rel, pa_core::js::len16(rel) as i64 + 1, format!("{rel}/")])
+            .int("SELECT 1 FROM media WHERE folder_id = ? AND (dir = ? OR substr(dir, 1, ?) = ?) LIMIT 1", crate::p![folder_id, rel, crate::db::sql_len(rel) + 1, format!("{rel}/")])
             .ok()
             .flatten()
             .is_some();

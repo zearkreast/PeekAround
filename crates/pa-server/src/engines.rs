@@ -140,7 +140,7 @@ fn scope_sql(scope: &ListScope) -> (String, crate::db::Params) {
             " AND (dir = ? OR substr(dir, 1, ?) = ?)".into(),
             p![
                 scope.dir.clone(),
-                pa_core::js::len16(&scope.dir) as i64 + 1,
+                crate::db::sql_len(&scope.dir) + 1,
                 format!("{}/", scope.dir)
             ],
         )

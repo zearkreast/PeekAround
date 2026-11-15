@@ -193,11 +193,11 @@ fn device_child_dirs(ctx: &Ctx, folder_id: i64, dir: &str) -> ApiResult<Vec<Stri
      UNION SELECT dir FROM device_dirs WHERE folder_id = ? AND substr(dir, 1, ?) = ? AND dir != ?",
         p![
             folder_id,
-            pa_core::js::len16(&prefix) as i64,
+            crate::db::sql_len(&prefix),
             prefix.clone(),
             dir,
             folder_id,
-            pa_core::js::len16(&prefix) as i64,
+            crate::db::sql_len(&prefix),
             prefix.clone(),
             dir
         ],
@@ -283,7 +283,7 @@ async fn sub_folders(ctx: &C, folder: &FolderRow, dir: &str) -> ApiResult<Vec<Su
     let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
     let rows = ctx.db.all(
         "SELECT dir, count(*) c FROM media WHERE folder_id = ? AND kind IN ('image','video') AND substr(dir, 1, ?) = ? AND dir != ? GROUP BY dir",
-        p![folder.id, pa_core::js::len16(&prefix) as i64, prefix.clone(), dir],
+        p![folder.id, crate::db::sql_len(&prefix), prefix.clone(), dir],
         |r| Ok((crate::db::text(r, 0).unwrap_or_default(), r.get::<_, i64>(1)?)),
     )?;
     for (d, c) in rows {
@@ -302,7 +302,7 @@ async fn sub_folders(ctx: &C, folder: &FolderRow, dir: &str) -> ApiResult<Vec<Su
         let d = format!("{prefix}{name}");
         let covers = ctx.db.all(
             "SELECT id, taken_local t FROM media WHERE folder_id = ? AND kind IN ('image','video') AND (dir = ? OR substr(dir, 1, ?) = ?) ORDER BY taken_local DESC LIMIT 3",
-            p![folder.id, d.clone(), pa_core::js::len16(&d) as i64 + 1, format!("{d}/")],
+            p![folder.id, d.clone(), crate::db::sql_len(&d) + 1, format!("{d}/")],
             |r| Ok((r.get::<_, i64>(0)?, crate::db::num_i(r, 1))),
         )?;
         out.push(SubFolder {
