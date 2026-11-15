@@ -205,6 +205,11 @@ impl RateLimiter {
     }
 }
 
+/// Equal without an early exit (secrets compared against request headers).
+pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

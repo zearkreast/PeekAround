@@ -192,7 +192,7 @@ impl Transfers {
                     let base = if g.file {
                         to_abs.clone()
                     } else {
-                        unique_path(&to_abs, &g.top).await
+                        unique_path(&to_abs, &pa_jobs::paths::sanitize_name(&g.top)).await
                     };
                     for it in g.items {
                         if jc.is_cancelled() {
@@ -203,7 +203,13 @@ impl Transfers {
                             .split('/')
                             .filter(|s| !s.is_empty() && *s != ".")
                         {
-                            target_dir.push(s);
+                            // phone-supplied: "C:" or "\\x" would leave the target on Windows
+                            target_dir.push(pa_jobs::paths::sanitize_name(s));
+                        }
+                        if !pa_jobs::paths::is_inside(&to_abs, &target_dir) {
+                            failed.push(it.row.name.clone());
+                            done += 1;
+                            continue;
                         }
                         let before = *bytes.lock().unwrap();
                         let jc2 = jc.clone();

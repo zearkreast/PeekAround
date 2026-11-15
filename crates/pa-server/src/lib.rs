@@ -603,7 +603,12 @@ async fn dispatch(app: Arc<App>, req: Request<Body>, conn: ConnInfo) -> Response
     let is_route = found.is_some() || web.is_some() || method == "OPTIONS";
     let mut rate: Option<security::RateState> = None;
     if is_route {
-        let internal = hv("x-peek-internal").is_some() && security::is_loopback_ip(&conn.ip);
+        // ffmpeg reading our own streams: behind a reverse proxy every client is loopback, so the
+        // header alone must not lift the limits
+        let internal = security::is_loopback_ip(&conn.ip)
+            && hv("x-peek-internal").is_some_and(|v| {
+                security::ct_eq(v.as_bytes(), ctx.devices.internal_token.as_bytes())
+            });
         if !internal && !path.starts_with("/api/devices/reply/") {
             let (store, max) = match &found {
                 Some((r, _)) if r.limit != security::Limit::Global => {
@@ -628,6 +633,9 @@ async fn dispatch(app: Arc<App>, req: Request<Body>, conn: ConnInfo) -> Response
         let handler = route.handler.clone();
         let scope = route.scope;
         let r: error::ApiResult<Response<Body>> = async {
+            if ctx.cfg.readonly && !readonly_allows(&method, &pattern) {
+                routes::util::require_writable(ctx)?;
+            }
             req.parse_body(scope).await?;
             devices::device_access(ctx, &req, &pattern)?;
             handler(ctx.clone(), req).await
@@ -740,4 +748,16 @@ async fn dispatch(app: Arc<App>, req: Request<Body>, conn: ConnInfo) -> Response
         add_header(&mut resp, "access-control-allow-origin", o);
     }
     resp
+}
+
+/// PEEK_READONLY: reads, plus the writes that touch no file and no setting (favorites, albums,
+/// phone pairing and its data plane, inspecting a MEGA link, cancelling jobs)
+fn readonly_allows(method: &str, pattern: &str) -> bool {
+    matches!(method, "GET" | "HEAD" | "OPTIONS")
+        || pattern.starts_with("/api/devices/")
+        || pattern.starts_with("/api/albums")
+        || matches!(
+            pattern,
+            "/api/media/favorite" | "/api/remote/inspect" | "/api/jobs" | "/api/jobs/:id"
+        )
 }

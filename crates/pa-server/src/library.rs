@@ -469,7 +469,8 @@ pub fn create_temp_folder(
     source_name: &str,
     hours: f64,
 ) -> ApiResult<FolderRow> {
-    let name = strip_zip_ext(source_name);
+    // source names come from zips and MEGA links: one safe segment, it becomes a folder on "keep"
+    let name = crate::paths::sanitize_name(&strip_zip_ext(source_name));
     let id = ctx.db.insert(
         "INSERT INTO folders (library_id, path, name, temp, expires_at, source_name) VALUES (NULL, ?, ?, 1, ?, ?)",
         p![abs.to_string_lossy().into_owned(), name, now_ms() + (hours * 3_600_000.0) as i64, source_name],

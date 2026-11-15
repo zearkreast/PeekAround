@@ -489,14 +489,15 @@ pub fn routes(r: &mut Router) {
                 .map(crate::http::js_string)
                 .unwrap_or_default();
             let dest_parent = resolve_in_root(&target.path, &dir)?;
-            let dest = unique_path(
-                &dest_parent,
-                if temp.name.is_empty() {
-                    "Archive"
-                } else {
-                    &temp.name
-                },
-            );
+            let name = if temp.name.is_empty() {
+                "Archive".to_string()
+            } else {
+                crate::paths::sanitize_name(&temp.name)
+            };
+            let dest = unique_path(&dest_parent, &name);
+            if !crate::paths::is_inside(&dest_parent, &dest) || dest == dest_parent {
+                return Err(HttpError::new(400, "Path escapes root"));
+            }
             move_file(Path::new(&temp.path), &dest).await?;
             library::delete_temp(&ctx, &temp).await?;
             let rel_dir = crate::paths::rel_of(&target.path, &dest);

@@ -46,6 +46,11 @@ async fn readonly_mode_refuses_every_write() {
         ),
         ("POST", "/api/jobs/video-edit", json!({})),
         ("POST", "/api/remote/folders", json!({"url": "x"})),
+        ("PATCH", "/api/settings", json!({"showHidden": true})),
+        ("DELETE", "/api/fonts/x", json!({})),
+        ("POST", "/api/zip/peek", json!({"folderId": "1", "rel": "a.zip"})),
+        ("POST", "/api/meta/reread", json!({})),
+        ("POST", "/api/libraries", json!({"name": "x", "path": "/tmp"})),
     ] {
         let r = send(&srv, m, u, b).await;
         assert_eq!(
@@ -59,6 +64,11 @@ async fn readonly_mode_refuses_every_write() {
     assert!(lib.join("a.jpg").exists() && !lib.join("x.jpg").exists());
     // reads still work
     assert_eq!(get(&srv, "/api/browse?folderId=1").await.status, 200);
+    // favorites and albums live in the database only
+    let fav = send(&srv, "POST", "/api/media/favorite", json!({"ids": [], "favorite": true})).await;
+    assert_ne!(fav.status, 403);
+    let album = send(&srv, "POST", "/api/albums", json!({"name": "Yaz"})).await;
+    assert_ne!(album.status, 403);
     srv.close().await;
 }
 

@@ -119,7 +119,7 @@ ya da `docker/docker-compose.yml` içindeki klasör yollarını düzenleyip `doc
 | `PEEK_SPLIT_ROOTS` | `true` | Kökün her alt klasörü ayrı kütüphane olur |
 | `PUID` / `PGID` | `0` | Yazılan dosyaların sahibi (`id -u` / `id -g`) |
 | `PEEK_WATCH_POLL` | `false` | Ağ paylaşımlarında (NFS/SMB) dosya değişikliklerini yoklayarak izler |
-| `PEEK_READONLY` | `false` | Yükleme, düzenleme ve silmeyi kapatır |
+| `PEEK_READONLY` | `false` | Dosyalara ve ayarlara yazmayı kapatır: yükleme, düzenleme, silme, zip açma, fontlar, ayarlar (favoriler ve albümler açık kalır) |
 | `PEEK_BROWSE_ROOTS` | `/media` | "Klasör ekle" gezgininin gösterebileceği dizinler |
 | `PEEK_PORT` | `8080` | Port |
 | `TZ` | yok | Saat dilimi (örneğin `Europe/Istanbul`); ilk açılışta "ev saat dilimi" olur |

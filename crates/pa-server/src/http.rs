@@ -562,6 +562,7 @@ pub async fn send_file(
     let etag = format!("W/\"{:x}-{:x}\"", size, mtime);
     headers.push(("etag", etag.clone()));
     let p = abs.to_string_lossy();
+    let static_route = opts.cache_control;
     let mut ctype = crate::mime::mime_of(&p).map(String::from);
     if let Some(t) = &ctype {
         let l = t.len();
@@ -590,7 +591,8 @@ pub async fn send_file(
             set_header(&mut r, k, &v);
         }
         // app.ts setHeaders
-        let assets = p.contains("/assets/") || p.contains("\\assets\\");
+        // only the web UI's own hashed files: a library folder named "assets" is not immutable
+        let assets = static_route && (p.contains("/assets/") || p.contains("\\assets\\"));
         set_header(
             &mut r,
             "cache-control",
