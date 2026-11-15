@@ -1084,7 +1084,8 @@ fn ex_save(a: &Rc<AppInner>) {
 
 /// first MEGA link in text (mega.ts `findMegaUrl`)
 pub(crate) fn find_mega_url(text: &str) -> Option<String> {
-    let lower = text.to_lowercase();
+    // ASCII-only: full lowercasing changes byte lengths ("İ" → "i̇"), and offsets in `lower` index `text`
+    let lower = text.to_ascii_lowercase();
     for host in ["mega.nz/", "mega.co.nz/"] {
         let Some(i) = lower.find(host) else { continue };
         // back to the start of the URL (scheme / www.)
@@ -1158,7 +1159,7 @@ pub(crate) fn find_mega_url(text: &str) -> Option<String> {
             continue;
         }
         let raw = &text[start..end];
-        let low = raw.to_lowercase();
+        let low = raw.to_ascii_lowercase();
         return Some(if low.starts_with("https://") {
             raw.to_string()
         } else if low.starts_with("http://") {
@@ -2729,6 +2730,15 @@ mod tests {
         assert_eq!(find_mega_url("https://mega.nz/folder/AbCdEf12"), None);
         assert!(looks_like_mega("https://mega.nz/folder/AbCdEf12"));
         assert_eq!(find_mega_url("https://example.com"), None);
+        // "İ" grows from 2 to 3 bytes when lowercased: positions must still match the input
+        assert_eq!(
+            find_mega_url("İŞTE İSTANBUL: https://mega.nz/folder/AbCdEf12#0123456789abcdefABCD").as_deref(),
+            Some("https://mega.nz/folder/AbCdEf12#0123456789abcdefABCD")
+        );
+        assert_eq!(
+            find_mega_url("İİ mega.nz/file/AbCdEf12#0123456789abcdef").as_deref(),
+            Some("https://mega.nz/file/AbCdEf12#0123456789abcdef")
+        );
     }
 
     #[test]

@@ -2,8 +2,24 @@
 
 use crate::i18n::{self, Lang};
 
-/// `formatBytes`: 0 B, 512 B, 1.5 KB, 12.3 MB, 120 GB
+static LANG_TR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The UI language for formatters that are called without one ([`format_bytes`]).
+pub fn set_lang(lang: Lang) {
+    LANG_TR.store(lang == Lang::Tr, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// `formatBytes` in the current UI language: 0 B, 512 B, 1.5 KB / 1,5 KB, 120 GB
 pub fn format_bytes(n: i64) -> String {
+    let s = format_bytes_en(n);
+    if LANG_TR.load(std::sync::atomic::Ordering::Relaxed) {
+        s.replace('.', ",")
+    } else {
+        s
+    }
+}
+
+fn format_bytes_en(n: i64) -> String {
     if n <= 0 {
         return "0 B".into();
     }

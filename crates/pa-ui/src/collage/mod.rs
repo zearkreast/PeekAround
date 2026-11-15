@@ -852,7 +852,8 @@ impl Ctl {
         if !self.hist.borrow().doc.filled() {
             return;
         }
-        let now = crate::fmt::now_ms() + crate::viewer_fmt::local_offset_ms();
+        let now = crate::fmt::now_ms();
+        let now = now + crate::viewer_fmt::local_offset_at(now);
         let date = crate::viewer_fmt::date_medium(now, a.lang());
         s.set_default_name(crate::i18n::tv(a.lang(), "collage.defaultName", &[("date", &date)]).into());
         s.set_format(self.format.borrow().clone().into());

@@ -65,5 +65,6 @@ pub use generated::*;
 
 pub use app::{run, run_gallery, run_with, Integration, UiOptions};
 pub use pages::announce_update;
+pub use viewer_fmt::set_time_zone;
 #[cfg(any(feature = "desktop", feature = "web"))]
 pub use pages::observe_window_events;

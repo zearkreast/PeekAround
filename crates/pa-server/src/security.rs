@@ -60,7 +60,8 @@ pub fn is_allowed_host(host: Option<&str>, extra: &[String]) -> bool {
         return true;
     }
     let hn = crate::config::hostname().to_lowercase();
-    if name == hn || name.starts_with(&format!("{hn}.")) {
+    // exact only: "<hostname>.<anything>" would let a rebinding domain like "nas.attacker.com" in
+    if name == hn {
         return true;
     }
     extra
@@ -229,6 +230,11 @@ mod tests {
         for h in ["evil.example.com", "attacker.net:8080", "127.0.0.1.nip.io"] {
             assert!(!is_allowed_host(Some(h), &[]), "{h}");
         }
+        let hn = crate::config::hostname().to_lowercase();
+        if !hn.is_empty() && hn.contains('.') {
+            assert!(is_allowed_host(Some(&hn), &[]));
+        }
+        assert!(!is_allowed_host(Some(&format!("{hn}.attacker.com")), &[]));
         assert!(is_allowed_host(
             Some("photos.example.com"),
             &["photos.example.com".into()]

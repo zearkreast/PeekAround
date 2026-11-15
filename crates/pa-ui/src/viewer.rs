@@ -667,7 +667,7 @@ impl Viewer {
         let when = if item.local_at != 0 {
             fmt::date_long_time(item.local_at, lang, hc)
         } else {
-            fmt::date_long_time(item.taken_at + fmt::local_offset_ms(), lang, hc)
+            fmt::date_long_time(item.taken_at + fmt::local_offset_at(item.taken_at), lang, hc)
         };
         let pos = idx
             .map(|i| {
@@ -1552,7 +1552,7 @@ impl Viewer {
         let local = if item.local_at != 0 {
             item.local_at
         } else {
-            item.taken_at + fmt::local_offset_ms()
+            item.taken_at + fmt::local_offset_at(item.taken_at)
         };
         rows.push(row(
             "calendar",
@@ -1562,7 +1562,7 @@ impl Viewer {
         ));
         if let (Some(w), Some(h)) = (item.width, item.height) {
             let mp = (w * h) as f64 / 1e6;
-            let mp = format!("{mp:.1}");
+            let mp = decimal(format!("{mp:.1}"), lang);
             rows.push(row(
                 "maximize",
                 t("viewer.dimensions"),
@@ -1593,8 +1593,8 @@ impl Viewer {
                 .to_uppercase();
             let sub = [
                 v.fps
-                    .map(|f| format!("{} fps", (f * 100.0).round() / 100.0)),
-                v.bitrate.map(|b| format!("{:.1} Mbps", b / 1e6)),
+                    .map(|f| format!("{} fps", decimal(((f * 100.0).round() / 100.0).to_string(), lang))),
+                v.bitrate.map(|b| format!("{} Mbps", decimal(format!("{:.1}", b / 1e6), lang))),
             ]
             .into_iter()
             .flatten()
@@ -1720,7 +1720,7 @@ impl Viewer {
         rows.push(row(
             "file-image",
             t("viewer.modified"),
-            fmt::date_medium_time(item.mtime + fmt::local_offset_ms(), lang, hc),
+            fmt::date_medium_time(item.mtime + fmt::local_offset_at(item.mtime), lang, hc),
             String::new(),
         ));
         vs.set_info_name(item.name.clone().into());
@@ -2392,5 +2392,14 @@ mod tests {
         assert_eq!(rubber(5.0, 0.0, 10.0), 5.0);
         assert_eq!(rubber(20.0, 0.0, 10.0), 13.0);
         assert_eq!(rubber(-10.0, 0.0, 10.0), -3.0);
+    }
+}
+
+/// a formatted number with the decimal separator of `lang` ("1.5" → "1,5" in Turkish)
+fn decimal(s: String, lang: crate::i18n::Lang) -> String {
+    if lang == crate::i18n::Lang::Tr {
+        s.replace('.', ",")
+    } else {
+        s
     }
 }

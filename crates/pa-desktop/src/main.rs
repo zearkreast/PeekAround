@@ -103,6 +103,7 @@ fn main() {
     let paths = paths::Paths::detect(user_data);
     // the viewer's video player uses the same (bundled) ffmpeg as the server
     pa_ui::video::set_ffmpeg_path(PathBuf::from(server::ffmpeg_path()));
+    pa_ui::set_time_zone(pa_server::db::system_time_zone());
     let script = std::env::var("PA_SCRIPT")
         .ok()
         .filter(|s| !s.trim().is_empty());

@@ -636,7 +636,7 @@ impl Explore {
                     badge: if kind == "largest" {
                         lb::bytes_label(it.value, lang)
                     } else {
-                        lb::day_month(it.value + crate::viewer_fmt::local_offset_ms(), lang)
+                        lb::day_month(it.value + crate::viewer_fmt::local_offset_at(it.value), lang)
                     }
                     .into(),
                     covers: covers(&a, std::slice::from_ref(&it.id), false),

@@ -368,6 +368,12 @@ fn walk_folder(ctx: &C, folder_id: i64, sub: &str) {
     let Ok(folder) = library::folder_row(ctx, folder_id) else {
         return;
     };
+    // an unmounted drive / offline share reads as an empty folder: sweeping then would drop every
+    // row (and with it favorites and album memberships)
+    if let Err(e) = std::fs::read_dir(&folder.path) {
+        tracing::warn!("scan skipped, library folder not readable: {} ({e})", folder.path);
+        return;
+    }
     let rules = rules_of(ctx, folder_id);
     let (scope, scope_params): (&str, crate::db::Params) = if sub.is_empty() {
         ("", vec![])
@@ -417,6 +423,17 @@ fn walk_folder(ctx: &C, folder_id: i64, sub: &str) {
             return;
         }
         let Some(entries) = sorted_entries(dir_abs) else {
+            // still there but unreadable (permissions, I/O error): keep its rows; gone: let them go
+            if dir_abs.exists() {
+                let _ = if rel.is_empty() {
+                    ctx.db.run("UPDATE media SET seen = 1 WHERE folder_id = ?", p![folder_id])
+                } else {
+                    ctx.db.run(
+                        "UPDATE media SET seen = 1 WHERE folder_id = ? AND (dir = ? OR substr(dir, 1, ?) = ?)",
+                        p![folder_id, rel, pa_core::js::len16(rel) as i64 + 1, format!("{rel}/")],
+                    )
+                };
+            }
             return;
         };
         for e in entries {

@@ -91,6 +91,7 @@ impl AppInner {
         let lang = Lang::parse(&p.lang);
         let lang_changed = lang != self.lang.get();
         self.lang.set(lang);
+        crate::fmt::set_lang(lang);
         let i = w.global::<I18n>();
         i.set_lang(lang.code().into());
         if lang_changed {

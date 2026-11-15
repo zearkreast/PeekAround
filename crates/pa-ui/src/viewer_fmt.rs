@@ -123,10 +123,20 @@ pub fn date_medium_time(local_ms: i64, lang: Lang, hc: HourCycle) -> String {
     }
 }
 
-/// The machine's UTC offset now (ms) — `formatDate` of UTC instants shows them in local time.
-pub fn local_offset_ms() -> i64 {
-    // no tz database in the UI crate: TZ-less environments show UTC; the server's localAt
-    // (wall clock of the capture) is what the viewer shows for photos anyway
+static TIME_ZONE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The machine's IANA time zone; the platform crates set it once at start-up
+/// (the UI crate has no access to the system zone, notably on wasm).
+pub fn set_time_zone(tz: String) {
+    let _ = TIME_ZONE.set(tz);
+}
+
+/// The machine's UTC offset (ms) at `instant` — `formatDate` of UTC instants shows them in local
+/// time. Without a zone set: `PA_TZ_OFFSET_MIN`, else UTC.
+pub fn local_offset_at(instant: i64) -> i64 {
+    if let Some(tz) = TIME_ZONE.get() {
+        return pa_core::time::tz_offset_at(instant, tz) as i64 * 60_000;
+    }
     std::env::var("PA_TZ_OFFSET_MIN")
         .ok()
         .and_then(|v| v.parse::<i64>().ok())
@@ -168,60 +178,9 @@ pub fn camera_label(make: Option<&str>, model: Option<&str>) -> String {
     }
 }
 
-/// Country name of an ISO code (`Intl.DisplayNames` for the common ones; else the code).
+/// Country name of an ISO code (the code itself when unknown).
 pub fn country(cc: &str, lang: Lang) -> String {
-    const C: &[(&str, &str, &str)] = &[
-        ("TR", "Türkiye", "Türkiye"),
-        ("DE", "Almanya", "Germany"),
-        ("US", "Amerika Birleşik Devletleri", "United States"),
-        ("GB", "Birleşik Krallık", "United Kingdom"),
-        ("FR", "Fransa", "France"),
-        ("IT", "İtalya", "Italy"),
-        ("ES", "İspanya", "Spain"),
-        ("PT", "Portekiz", "Portugal"),
-        ("NL", "Hollanda", "Netherlands"),
-        ("BE", "Belçika", "Belgium"),
-        ("AT", "Avusturya", "Austria"),
-        ("CH", "İsviçre", "Switzerland"),
-        ("GR", "Yunanistan", "Greece"),
-        ("CY", "Kıbrıs", "Cyprus"),
-        ("BG", "Bulgaristan", "Bulgaria"),
-        ("GE", "Gürcistan", "Georgia"),
-        ("AZ", "Azerbaycan", "Azerbaijan"),
-        ("RU", "Rusya", "Russia"),
-        ("UA", "Ukrayna", "Ukraine"),
-        ("PL", "Polonya", "Poland"),
-        ("CZ", "Çekya", "Czechia"),
-        ("HU", "Macaristan", "Hungary"),
-        ("RO", "Romanya", "Romania"),
-        ("SE", "İsveç", "Sweden"),
-        ("NO", "Norveç", "Norway"),
-        ("DK", "Danimarka", "Denmark"),
-        ("FI", "Finlandiya", "Finland"),
-        ("IE", "İrlanda", "Ireland"),
-        ("EG", "Mısır", "Egypt"),
-        ("AE", "Birleşik Arap Emirlikleri", "United Arab Emirates"),
-        ("JP", "Japonya", "Japan"),
-        ("CN", "Çin", "China"),
-        ("KR", "Güney Kore", "South Korea"),
-        ("TH", "Tayland", "Thailand"),
-        ("IN", "Hindistan", "India"),
-        ("CA", "Kanada", "Canada"),
-        ("MX", "Meksika", "Mexico"),
-        ("BR", "Brezilya", "Brazil"),
-        ("AU", "Avustralya", "Australia"),
-    ];
-    let up = cc.to_ascii_uppercase();
-    C.iter()
-        .find(|(c, ..)| *c == up)
-        .map(|(_, tr, en)| {
-            if lang == Lang::Tr {
-                tr.to_string()
-            } else {
-                en.to_string()
-            }
-        })
-        .unwrap_or(up)
+    crate::explore_labels::country_name(cc, lang)
 }
 
 #[cfg(test)]
@@ -262,5 +221,7 @@ mod tests {
             "Canon EOS R6"
         );
         assert_eq!(camera_label(None, Some("X")), "X");
+        assert_eq!(country("rs", Lang::Tr), "Sırbistan");
+        assert_eq!(country("HR", Lang::En), "Croatia");
     }
 }

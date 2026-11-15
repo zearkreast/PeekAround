@@ -66,6 +66,7 @@ pub fn run(files: &Path) {
         Some(p) => pa_ui::video::set_ffmpeg_path(p.clone()),
         None => log::warn!("no ffmpeg in this build: videos do not play"),
     }
+    pa_ui::set_time_zone(pa_server::db::system_time_zone());
     let mode = match config::load_mode(files) {
         Some(m) => m,
         None => match setup::run(files, runtime.handle().clone()) {

@@ -592,7 +592,7 @@ impl Show {
             let local = if cur.media.local_at != 0 {
                 cur.media.local_at
             } else {
-                cur.media.taken_at + crate::viewer_fmt::local_offset_ms()
+                cur.media.taken_at + crate::viewer_fmt::local_offset_at(cur.media.taken_at)
             };
             self.app
                 .upgrade()
