@@ -627,6 +627,14 @@ pub fn group_columns(
             pa_core::resolve_from_instant(i, home_time_zone),
             time_src::INSTANT,
         )
+    } else if let Some(local) = pa_core::date_from_name(&row.name)
+        // a copy keeps the name but gets a new mtime, never an older one
+        .filter(|l| *l <= row.mtime + 2 * pa_core::DAY_MS)
+    {
+        (
+            pa_core::resolve_from_local(local, None, home_time_zone),
+            time_src::LOCAL,
+        )
     } else {
         (
             pa_core::resolve_from_instant(row.mtime, home_time_zone),

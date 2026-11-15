@@ -42,6 +42,34 @@ fn digits(b: &[u8], i: &mut usize, min: usize, max: usize) -> Option<i64> {
     std::str::from_utf8(&b[start..*i]).ok()?.parse().ok()
 }
 
+static NAME_DATE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(
+        r"(?:^|[^0-9])((?:19|20)[0-9]{2})[-_.]?(0[1-9]|1[0-2])[-_.]?(0[1-9]|[12][0-9]|3[01])(?:(?: at | um |[-_ T.])?([01][0-9]|2[0-3])[-_.:]?([0-5][0-9])(?:[-_.:]?([0-5][0-9])(?:[0-9]{3})?)?)?(?:[^0-9]|$)",
+    )
+    .expect("name date regex")
+});
+
+/// Wall-clock ms (as UTC) of a date in a file name: "IMG_20230512_142233.jpg",
+/// "Screenshot_2023-08-01-21-04-33.png", "IMG-20240512-WA0003.jpg" (no time → noon, so the day
+/// survives any zone), "PXL_20230512_142233123.jpg". None without a valid date from 1990 on.
+pub fn date_from_name(name: &str) -> Option<i64> {
+    let c = NAME_DATE.captures(name)?;
+    let n = |i: usize| c.get(i).and_then(|m| m.as_str().parse::<i64>().ok());
+    let (y, mo, d) = (n(1)?, n(2)?, n(3)?);
+    if y < 1990 {
+        return None;
+    }
+    let days = js::days_from_civil(y, mo, d);
+    if js::civil_from_days(days) != (y, mo, d) {
+        return None;
+    }
+    let (h, mi, sec) = match n(4) {
+        Some(h) => (h, n(5).unwrap_or(0), n(6).unwrap_or(0)),
+        None => (12, 0, 0),
+    };
+    Some(days * DAY_MS + ((h * 60 + mi) * 60 + sec) * 1000)
+}
+
 /// Like [`parse_exif_date_time`] but also returns a trailing offset ("Z", "+03:00", "+0300") when present.
 pub fn parse_date_time_with_offset(s: &str) -> Option<LocalWithOffset> {
     let str = js::trim(s);
@@ -423,4 +451,30 @@ pub fn local_day_key(local_at: i64) -> String {
 /// Start of the (UTC-encoded) local day.
 pub fn local_day_start(local_at: i64) -> i64 {
     local_at.div_euclid(DAY_MS) * DAY_MS
+}
+
+#[cfg(test)]
+mod name_date_tests {
+    use super::*;
+
+    fn at(y: i64, mo: i64, d: i64, h: i64, mi: i64, s: i64) -> Option<i64> {
+        Some(js::days_from_civil(y, mo, d) * DAY_MS + ((h * 60 + mi) * 60 + s) * 1000)
+    }
+
+    #[test]
+    fn dates_in_file_names() {
+        assert_eq!(date_from_name("IMG_20230512_142233.jpg"), at(2023, 5, 12, 14, 22, 33));
+        assert_eq!(date_from_name("VID_20220704_181502.mp4"), at(2022, 7, 4, 18, 15, 2));
+        assert_eq!(date_from_name("PXL_20230512_142233123.jpg"), at(2023, 5, 12, 14, 22, 33));
+        assert_eq!(date_from_name("Screenshot_20250911-102010.png"), at(2025, 9, 11, 10, 20, 10));
+        assert_eq!(date_from_name("Screenshot_2023-08-01-21-04-33.png"), at(2023, 8, 1, 21, 4, 33));
+        assert_eq!(date_from_name("2023-08-01 21.04.33.jpg"), at(2023, 8, 1, 21, 4, 33));
+        assert_eq!(date_from_name("Screen Shot 2023-05-02 at 10.11.12.png"), at(2023, 5, 2, 10, 11, 12));
+        assert_eq!(date_from_name("Bildschirmfoto 2025-04-19 um 09.30.00.png"), at(2025, 4, 19, 9, 30, 0));
+        assert_eq!(date_from_name("IMG-20240512-WA0003.jpg"), at(2024, 5, 12, 12, 0, 0));
+        assert_eq!(date_from_name("signal-2023-08-01-210433.jpg"), at(2023, 8, 1, 21, 4, 33));
+        for no in ["DSCN0010.jpg", "IMG_1234.jpg", "20231345_x.jpg", "20230230.jpg", "19800101.jpg", "a120230512.jpg", ""] {
+            assert_eq!(date_from_name(no), None, "{no}");
+        }
+    }
 }

@@ -111,11 +111,23 @@ fn extract_meta_matches_typescript() {
         let row: RowInfo = serde_json::from_value(f["row"].clone()).expect("row");
         // group columns from the TS-extracted meta, so a meta difference does not hide a grouping one
         let ts_meta: ExtractedMeta = serde_json::from_value(f["meta"].clone()).expect("meta");
+        // the TS server never read dates from file names: those rows keep their mtime there
+        let name_dated = pa_core::date_from_name(&row.name)
+            .is_some_and(|l| l <= row.mtime + 2 * pa_core::DAY_MS)
+            && f["group"]["UTC"]["time_src"].as_i64() == Some(0);
         for z in &zones {
             let gc = group_columns(&row, &ts_meta, Some(&geo), z);
+            let mut want = f["group"][z].clone();
+            if name_dated {
+                let got = to_v(&gc);
+                for k in ["taken_at", "taken_local", "tz_off", "time_src"] {
+                    want[k] = got[k].clone();
+                }
+                assert_eq!(gc.time_src, pa_meta::time_src::LOCAL, "{rel}");
+            }
             same(
                 &to_v(&gc),
-                &f["group"][z],
+                &want,
                 &format!("group[{z}]"),
                 &mut diffs,
             );

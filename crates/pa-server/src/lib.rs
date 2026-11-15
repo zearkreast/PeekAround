@@ -315,6 +315,7 @@ impl Server {
         });
 
         library::ensure_roots(&ctx)?;
+        scanner::recheck_name_dates(&ctx);
         let _ = library::cleanup_temp(&ctx, false).await;
         for t in library::list_temp(&ctx).unwrap_or_default() {
             if !std::path::Path::new(&t.path).exists() {

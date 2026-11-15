@@ -1216,6 +1216,19 @@ pub fn indexing(ctx: &Ctx) -> pa_core::Progress {
     }
 }
 
+/// Once per database: rows dated by their mtime whose name may hold a date go back to the
+/// enrichment queue (dates in file names were not read before).
+pub fn recheck_name_dates(ctx: &C) {
+    if ctx.db.get_setting("nameDates").is_some() {
+        return;
+    }
+    let _ = ctx.db.run(
+        "UPDATE media SET meta_state = 0 WHERE time_src = 0 AND kind IN ('image', 'video') AND (name GLOB '*19[0-9][0-9]*' OR name GLOB '*20[0-9][0-9]*')",
+        p![],
+    );
+    let _ = ctx.db.set_setting("nameDates", &serde_json::json!(true));
+}
+
 async fn enrich_loop(ctx: &C) {
     let touched: Arc<Mutex<HashMap<i64, indexmap::IndexSet<String>>>> =
         Arc::new(Mutex::new(HashMap::new()));
