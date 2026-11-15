@@ -158,13 +158,11 @@ async fn upload(ctx: C, mut req: Req) -> ApiResult<axum::http::Response<axum::bo
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let final_abs = unique_path(&parent, &fname);
-    let part = PathBuf::from(format!(
-        "{}.{}.part",
-        final_abs.display(),
+    let part = parent.join(format!(
+        "{fname}.{}.part",
         hex::encode(rand::random::<[u8; 4]>())
     ));
-    let r: ApiResult<()> = async {
+    let r: ApiResult<PathBuf> = async {
         write_body(&mut req, &part, limit).await?;
         let mtime = req.q("mtime").map(pa_core::js::number).unwrap_or(f64::NAN);
         if mtime.is_finite() && mtime > 0.0 && mtime < 4_102_444_800_000.0 {
@@ -176,14 +174,22 @@ async fn upload(ctx: C, mut req: Req) -> ApiResult<axum::http::Response<axum::bo
                     .set_modified(t),
             )?;
         }
-        tokio::fs::rename(&part, &final_abs).await?;
-        Ok(())
+        // the free name is picked once the body is in: an upload can take minutes
+        let (p2, dir2) = (part.clone(), parent.clone());
+        let published =
+            tokio::task::spawn_blocking(move || crate::paths::publish_unique(&p2, &dir2, &fname))
+                .await
+                .map_err(HttpError::internal)??;
+        Ok(published)
     }
     .await;
-    if let Err(e) = r {
-        let _ = tokio::fs::remove_file(&part).await;
-        return Err(e);
-    }
+    let final_abs = match r {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = tokio::fs::remove_file(&part).await;
+            return Err(e);
+        }
+    };
     let rel = rel_of(&folder.path, &final_abs);
     crate::scanner::upsert_file(&ctx, folder.id, &rel).await;
     ok_json(&UploadResult {
@@ -435,9 +441,7 @@ pub fn routes(r: &mut Router) {
             if dest == abs {
                 return ok_json(&json!({ "rel": rel_src }));
             }
-            if dest.exists()
-                && dest.to_string_lossy().to_lowercase() != abs.to_string_lossy().to_lowercase()
-            {
+            if dest.exists() && !crate::paths::same_file(&abs, &dest) {
                 return Err(HttpError::new(409, "A file with that name already exists"));
             }
             let fav = if st.is_file() {

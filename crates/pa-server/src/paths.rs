@@ -210,6 +210,73 @@ pub fn unique_path(dir: &Path, name: &str) -> PathBuf {
     candidate
 }
 
+/// Both paths name the same file (case-only renames on case-insensitive file systems).
+pub fn same_file(a: &Path, b: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        match (std::fs::metadata(a), std::fs::metadata(b)) {
+            (Ok(x), Ok(y)) => x.dev() == y.dev() && x.ino() == y.ino(),
+            _ => false,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    }
+}
+
+/// Give the finished temp file `part` the first free name `candidate(0)`, `candidate(1)` … and
+/// never replace a file: names are claimed with a hard link, which fails on an existing target.
+/// File systems without hard links fall back to check-then-rename.
+pub fn publish(part: &Path, mut candidate: impl FnMut(u32) -> PathBuf) -> std::io::Result<PathBuf> {
+    for i in 0..10_000 {
+        let c = candidate(i);
+        if exists(&c) {
+            continue;
+        }
+        match std::fs::hard_link(part, &c) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(part);
+                return Ok(c);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => {
+                if exists(&c) {
+                    continue;
+                }
+                std::fs::rename(part, &c)?;
+                return Ok(c);
+            }
+        }
+    }
+    Err(std::io::Error::other("no free file name"))
+}
+
+/// [`publish`] under `name` in `dir`, then "name (1).ext" … like [`unique_path`]
+pub fn publish_unique(part: &Path, dir: &Path, name: &str) -> std::io::Result<PathBuf> {
+    let ext = extname(name);
+    let base = &name[..name.len() - ext.len()];
+    publish(part, |i| {
+        if i == 0 {
+            dir.join(name)
+        } else {
+            dir.join(format!("{base} ({i}){ext}"))
+        }
+    })
+}
+
+/// [`publish`] as "a_edit.jpg", "a_edit-2.jpg" … like [`unique_edit_path`]
+pub fn publish_edit(part: &Path, dir: &Path, base: &str, suffix: &str, ext: &str) -> std::io::Result<PathBuf> {
+    publish(part, |i| {
+        if i == 0 {
+            dir.join(format!("{base}{suffix}.{ext}"))
+        } else {
+            dir.join(format!("{base}{suffix}-{}.{ext}", i + 1))
+        }
+    })
+}
+
 /// "a" + "_edit" + "jpg" → "a_edit.jpg", "a_edit-2.jpg" …
 pub fn unique_edit_path(dir: &Path, base: &str, suffix: &str, ext: &str) -> PathBuf {
     let mut candidate = dir.join(format!("{base}{suffix}.{ext}"));
