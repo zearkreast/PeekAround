@@ -58,6 +58,7 @@ fn lib_card(a: &AppInner, l: &Library, stats: Option<&LibraryStats>) -> LibCardD
             .unwrap_or_default()
             .into(),
         remote: remote_state(l).into(),
+        offline: l.folders.iter().any(|f| f.offline),
     }
 }
 
@@ -340,6 +341,13 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     hs.on_edit_library(move |id| {
         if let Some(a) = w.upgrade() {
             super::dialogs::edit_library(&a, Some(id.to_string()));
+        }
+    });
+    let w = Rc::downgrade(app);
+    hs.on_retry_library(move |id| {
+        if let Some(a) = w.upgrade() {
+            let path = format!("/api/libraries/{}/rescan", crate::api::enc(&id));
+            crate::api::act(&a, "POST", &path, Some(serde_json::json!({})), |a, _| load_libraries(a));
         }
     });
     let w = Rc::downgrade(app);

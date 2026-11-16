@@ -26,6 +26,8 @@ export struct LibCardData {
     range: string,
     // MEGA library: "" | "ok" | "busy" | "warn" | "error"
     remote: string,
+    // a folder of it cannot be read right now (unmounted drive, offline share)
+    offline: bool,
 }
 
 export struct AlbumCardData {
@@ -108,6 +110,7 @@ export global HubState {
     callback open-tool(string);
     // "Trash · 12" when the server keeps a folder trash and it holds something, else ""
     in property <string> trash-label;
+    callback retry-library(string);
 }
 
 export global AlbumsState {

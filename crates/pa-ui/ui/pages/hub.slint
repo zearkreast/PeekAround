@@ -195,6 +195,7 @@ export component HubPage inherits Rectangle {
                             can-edit: root.can-edit;
                             clicked => { HubState.open-library(l.id); }
                             edit => { HubState.edit-library(l.id); }
+                            retry => { HubState.retry-library(l.id); }
                         }
                     }
                 }

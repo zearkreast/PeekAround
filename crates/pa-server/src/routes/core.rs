@@ -353,6 +353,8 @@ pub fn routes(r: &mut Router) {
         m,
         h(|ctx, req| async move {
             let lib = library::library(&ctx, req.param("id"))?;
+            // "Retry" on an offline library: notice now that it is back (watcher, event)
+            library::check_offline(&ctx).await;
             rescan(&ctx, lib.folders.iter().filter_map(|f| f.id.parse().ok()));
             ok_json(&json!({ "ok": true }))
         }),

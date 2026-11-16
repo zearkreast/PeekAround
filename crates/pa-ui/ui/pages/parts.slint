@@ -226,6 +226,7 @@ export component LibraryCard inherits Rectangle {
     in property <int> index;
     callback clicked();
     callback edit();
+    callback retry();
     property <bool> hover: ta.has-hover || eb.hovered;
     // card-lift
     property <length> lift: hover ? -3px : 0px;
@@ -256,6 +257,7 @@ export component LibraryCard inherits Rectangle {
             background: @linear-gradient(0deg, #000000d9 0%, #00000033 50%, #00000000 100%);
         }
         HorizontalLayout {
+            visible: !root.data.offline;
             y: parent.height - self.height;
             height: self.preferred-height;
             padding: 16px;
@@ -324,6 +326,56 @@ export component LibraryCard inherits Rectangle {
             }
         }
         ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+        // offline: the cover dims, a warning chip, why nothing changes, and a retry
+        if root.data.offline: Rectangle {
+            background: #09090dcc;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 8px;
+                HorizontalLayout {
+                    alignment: start;
+                    Rectangle {
+                        height: 26px;
+                        width: ol.preferred-width + 34px;
+                        border-radius: 13px;
+                        background: Theme.warn;
+                        Image { x: 10px; source: Icons.wifi-off; colorize: #1a1305; width: 14px; height: 14px; }
+                        ol := Text {
+                            x: 28px;
+                            text: I18n.t("lib2.offline", I18n.rev);
+                            font-size: 12px;
+                            font-weight: 600;
+                            color: #1a1305;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                Rectangle { vertical-stretch: 1; }
+                Text {
+                    text: root.data.name;
+                    font-family: Theme.font-display;
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: #ffffff;
+                    overflow: elide;
+                }
+                Text {
+                    text: I18n.t("lib2.offlineBody", I18n.rev);
+                    font-size: 12.5px;
+                    color: #d4d4dc;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: I18n.t("lib2.retry", I18n.rev);
+                        variant: ButtonVariant.primary;
+                        size: ButtonSize.sm;
+                        clicked => { root.retry(); }
+                    }
+                }
+            }
+        }
         eb := IconButton {
             x: parent.width - self.width - 10px;
             y: 10px;

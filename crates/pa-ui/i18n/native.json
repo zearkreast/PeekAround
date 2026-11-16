@@ -35,7 +35,10 @@
     "trash.deleted": "{n} öğe kalıcı olarak silindi",
     "trash.confirmDelete": "{n} öğe kalıcı olarak silinsin mi?",
     "trash.confirmEmpty": "Çöp kutusu boşaltılsın mı?",
-    "trash.confirmBody": "Bu işlem geri alınamaz."
+    "trash.confirmBody": "Bu işlem geri alınamaz.",
+    "lib2.offline": "Bağlantı yok",
+    "lib2.offlineBody": "Klasöre şu an ulaşılamıyor. Tarama bekliyor; favoriler ve albümler korunuyor.",
+    "lib2.retry": "Yeniden dene"
   },
   "en": {
     "native.soon.title": "Coming soon",
@@ -72,6 +75,9 @@
     "trash.deleted": "{n} item deleted for good|{n} items deleted for good",
     "trash.confirmDelete": "Delete {n} item for good?|Delete {n} items for good?",
     "trash.confirmEmpty": "Empty the trash?",
-    "trash.confirmBody": "This can't be undone."
+    "trash.confirmBody": "This can't be undone.",
+    "lib2.offline": "Offline",
+    "lib2.offlineBody": "The folder can't be reached right now. Scanning waits; favorites and albums are kept.",
+    "lib2.retry": "Retry"
   }
 }
