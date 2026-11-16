@@ -1,130 +1,130 @@
-# GitHub Actions: otomatik derleme ve gerekli token'lar
+# GitHub Actions: automatic builds and the tokens they need
 
-`.github/workflows/build.yml` şunları yapar:
+`.github/workflows/build.yml` does the following:
 
-| Ne zaman | Ne yapar |
+| When | What it does |
 |---|---|
-| `main`'e her push ve her pull request | Rust testleri (`cargo test --workspace`) |
-| `main`'e her push | Testlerden sonra Docker imajı (amd64) `ghcr.io/<kullanıcı>/peekaround:main` olarak gönderilir |
-| `v2.1.0` gibi bir etiket | Testler, Windows (`Setup.exe` + taşınabilir zip), Linux (`tar.gz`), Android APK, ardından **GitHub Release**. Etikette `-` varsa (`v2.1.0-beta.1`) ön sürüm olarak yayınlanır. Docker imajı amd64 ve arm64 için derlenip sürüm numarasıyla ve `latest` olarak gönderilir (ön sürümde `latest` değişmez) |
-| `build-deneme` gibi bir etiket (`build-` ile başlayan) | Aynı paketler, Release olmadan; paketler çalıştırmanın "Artifacts" bölümüne eklenir |
-| Actions sekmesi → Build → **Run workflow** | Etiketsiz deneme derlemesi; `release_tag` yazılırsa paketler o mevcut sürüme yüklenir |
+| Every push to `main` and every pull request | Rust tests (`cargo test --workspace`) |
+| Every push to `main` | After the tests, the Docker image (amd64) is pushed as `ghcr.io/<user>/peekaround:main` |
+| A tag like `v2.6.0` | Tests, Windows (`Setup.exe` + portable zip), Linux (`tar.gz`), Android APK, then a **GitHub Release**. A tag with a `-` (`v2.6.0-beta.1`) is published as a pre-release. The Docker image is built for amd64 and arm64 and pushed with the version number and as `latest` (a pre-release leaves `latest` alone) |
+| A tag like `build-test` (starting with `build-`) | The same packages without a Release; they are attached to the run's "Artifacts" section |
+| Actions tab → Build → **Run workflow** | A test build without a tag; if `release_tag` is filled in, the packages are uploaded to that existing release |
 
-Docker imajı Release'ten bağımsız yayınlanır: Docker işi başarısız olsa da paketler Release'e eklenir. arm64 imajı öykünme olmadan, GitHub'ın arm64 çalıştırıcısında derlenir.
+The Docker image is published independently of the Release: even if the Docker job fails, the packages are still attached to the Release. The arm64 image is built on GitHub's arm64 runner, without emulation.
 
-## 1. Hangi token gerekli?
+## 1. Which token is needed?
 
-**Workflow için hiçbir kişisel token gerekmez.** GitHub her çalıştırmaya otomatik olarak `GITHUB_TOKEN` verir. Release oluşturma bununla yapılır; izinler workflow dosyasında yazılı.
+**The workflow needs no personal token.** GitHub gives every run a `GITHUB_TOKEN` automatically. The Release is created with it; the permissions are written in the workflow file.
 
-Bir kez kontrol et: repo → **Settings → Actions → General**
+Check once: repo → **Settings → Actions → General**
 
-- *Actions permissions*: "Allow all actions and reusable workflows" seçili olmalı.
-- *Workflow permissions*: varsayılan "Read repository contents" kalabilir. Yazma izni gereken işler (release, Docker imajı) bu izni kendileri istiyor.
+- *Actions permissions*: "Allow all actions and reusable workflows" must be selected.
+- *Workflow permissions*: the default "Read repository contents" is fine. The jobs that need write access (release, Docker image) ask for it themselves.
 
-## 2. Bilgisayardan GitHub'a push için token (gerekirse)
+## 2. A token for pushing from your computer (if needed)
 
-Git, HTTPS ile push ederken şifre yerine token ister. Windows'ta "Git Credential Manager" tarayıcıdan giriş yaptırıyorsa token oluşturmana gerek yok.
+When pushing over HTTPS, Git asks for a token instead of a password. If "Git Credential Manager" on Windows signs you in through the browser, you do not need to create one.
 
-Token gerekiyorsa:
+If you need a token:
 
-1. GitHub'da sağ üstte profil resmi → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
-2. Formu şöyle doldur:
+1. On GitHub, profile picture at the top right → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+2. Fill in the form like this:
    - **Token name:** `PeekAround push`
-   - **Expiration:** örneğin 90 gün
+   - **Expiration:** for example 90 days
    - **Repository access:** *Only select repositories* → `PeakAround`
    - **Permissions → Repository permissions:**
      - **Contents:** Read and write
-     - **Workflows:** Read and write. Bu olmadan `.github/workflows/` altındaki dosyaları push edemezsin; GitHub "refusing to allow a Personal Access Token to create or update workflow" hatası verir.
-     - **Metadata:** Read-only (otomatik gelir)
-3. **Generate token**'a bas ve token'ı kopyala. Token bir daha gösterilmez.
-4. İlk `git push`'ta şunları gir:
-   - kullanıcı adı: GitHub kullanıcı adın
-   - şifre: token
+     - **Workflows:** Read and write. Without it you cannot push files under `.github/workflows/`; GitHub answers "refusing to allow a Personal Access Token to create or update workflow".
+     - **Metadata:** Read-only (added automatically)
+3. Press **Generate token** and copy the token. It is never shown again.
+4. On the first `git push` enter:
+   - username: your GitHub username
+   - password: the token
 
-Klasik token kullanıyorsan (**Tokens (classic)**) `repo` ve `workflow` kutularını işaretle.
+With a classic token (**Tokens (classic)**) tick the `repo` and `workflow` boxes.
 
-## 3. İmzalı Android APK (önerilir, ücretsiz)
+## 3. Signed Android APK (recommended, free)
 
-Android'de her APK imzalıdır. Önemli olan imzanın **hep aynı anahtarla** atılması: telefon, uygulamanın yeni sürümünü ancak aynı anahtarla imzalanmışsa eskisinin üzerine kurar.
+Every APK on Android is signed. What matters is that it is always signed **with the same key**: a phone installs a new version over the old one only if both are signed with the same key.
 
-Secret eklemezsen workflow **debug** imzalı bir APK üretir. GitHub'ın makinelerinde bu debug anahtarı her çalıştırmada yeniden oluşur. Sonuç: her sürümün imzası farklı olur ve telefonda "uygulama yüklenmedi / paket çakışıyor" hatası alırsın. Bu durumda eskisini kaldırıp yeniden kurmak gerekir, bu da uygulamanın ayarlarını ve eşleştirmesini siler.
+Without the secrets the workflow produces a **debug**-signed APK. On GitHub's machines that debug key is created anew on every run, so every release has a different signature and the phone says "app not installed / package conflicts". You then have to uninstall the old one and install again, which deletes the app's settings and pairing.
 
-Bunu önlemek için kendi anahtarını bir kez oluştur. Ücretsizdir, sertifika satın alman gerekmez:
+To avoid this, create your own key once. It is free; you do not need to buy a certificate:
 
-1. **Anahtar oluştur.** `keytool` Android Studio veya JDK ile gelir. Örneğin Windows'ta `C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe`.
+1. **Create a key.** `keytool` comes with Android Studio or the JDK, for example `C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe` on Windows.
 
 ```bash
 keytool -genkeypair -v -keystore peekaround-release.keystore -alias peekaround -keyalg RSA -keysize 4096 -validity 10000
 ```
 
-   Sorulan şifreyi ve bilgileri gir. **Bu dosyayı ve şifreyi kaybetme.** Anahtar değişirse telefondaki uygulama güncellenemez; kaldırıp yeniden kurman gerekir.
+   Enter the password and details it asks for. **Do not lose this file or the password.** If the key changes, the app on the phone cannot be updated; it has to be uninstalled and installed again.
 
-2. **Dosyayı base64 metne çevir.**
+2. **Turn the file into base64 text.**
 
-   Windows PowerShell'de (metin panoya kopyalanır):
+   In Windows PowerShell (the text is copied to the clipboard):
 
 ```powershell
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("peekaround-release.keystore")) | Set-Clipboard
 ```
 
-   Linux veya macOS'ta:
+   On Linux or macOS:
 
 ```bash
 base64 -w0 peekaround-release.keystore
 ```
 
-3. **Secret'ları ekle.** Repo → **Settings → Secrets and variables → Actions → New repository secret**:
+3. **Add the secrets.** Repo → **Settings → Secrets and variables → Actions → New repository secret**:
 
-| Ad | Değer |
+| Name | Value |
 |---|---|
-| `ANDROID_KEYSTORE_BASE64` | 2. adımdaki base64 metin |
-| `ANDROID_KEYSTORE_PASSWORD` | keystore şifresi |
-| `ANDROID_KEY_ALIAS` | `peekaround` (keytool'da `-alias` ile verdiğin ad) |
-| `ANDROID_KEY_PASSWORD` | anahtar şifresi (keytool ayrı sormadıysa keystore şifresiyle aynı) |
+| `ANDROID_KEYSTORE_BASE64` | the base64 text from step 2 |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
+| `ANDROID_KEY_ALIAS` | `peekaround` (the name you gave keytool with `-alias`) |
+| `ANDROID_KEY_PASSWORD` | the key password (the same as the keystore password if keytool did not ask separately) |
 
-4. Sonraki etiketten itibaren Release'te `PeekAround-<sürüm>-android-release.apk` olur. Telefonda debug APK kuruluysa, imza değiştiği için bir kez kaldırıp yeniden kur.
+4. From the next tag on, the Release has `PeekAround-<version>-android-release.apk`. If a debug APK is installed on the phone, uninstall it once and reinstall, because the signature changes.
 
-## 4. Windows imzası (isteğe bağlı, genelde ücretli)
+## 4. Windows signing (optional, usually paid)
 
-Secret yoksa Windows `.exe` dosyaları **imzasız** çıkar. Uygulama çalışır, ama ilk açılışta SmartScreen "Windows bilgisayarınızı korudu" uyarısı verir ("Ek bilgi" → "Yine de çalıştır").
+Without secrets the Windows `.exe` files are **unsigned**. The app works, but on first launch SmartScreen shows "Windows protected your PC" ("More info" → "Run anyway").
 
-Uyarıyı kaldırmanın yolları:
+Ways to remove the warning:
 
-| Yol | Maliyet | Not |
+| Option | Cost | Note |
 |---|---|---|
-| **SignPath Foundation** (signpath.org) | Açık kaynak projelere ücretsiz | Başvuru ve onay gerekir. GPL lisanslı, herkese açık repo uygun. İmzalama SignPath'in kendi GitHub Action'ı ile yapılır; onaylanırsan workflow'a o adım eklenir. |
-| **Azure Trusted Signing** (Microsoft) | Aylık birkaç dolar | Bireysel kimlik doğrulaması her ülkede açık değil; Türkiye'den bireysel kayıt mümkün olmayabilir. |
-| **OV/EV kod imzalama sertifikası** (Sectigo, DigiCert, Certum…) | Yılda yaklaşık 100–400 $ | Yeni sertifikalarda bile SmartScreen uyarısı, uygulama yeterince indirilene kadar bir süre görünebilir. |
+| **SignPath Foundation** (signpath.org) | Free for open-source projects | Needs an application and approval. A public GPL repo qualifies. Signing is done with SignPath's own GitHub Action; once approved, that step is added to the workflow. |
+| **Azure Trusted Signing** (Microsoft) | A few dollars a month | Identity validation for individuals is not available in every country; registering as an individual from Turkey may not be possible. |
+| **OV/EV code signing certificate** (Sectigo, DigiCert, Certum…) | About $100–400 a year | Even with a new certificate, SmartScreen may warn for a while until the app has enough downloads. |
 
-İş akışında şu an imzalama adımı yok; sertifikan olursa Windows işine eklenmesi gerekir.
+The workflow has no signing step yet; with a certificate it would have to be added to the Windows job.
 
-## 5. Sürüm yayınlama
+## 5. Publishing a release
 
 ```bash
-git tag v2.0.0
+git tag v2.6.0
 ```
 
 ```bash
-git push origin v2.0.0
+git push origin v2.6.0
 ```
 
-Actions sekmesinde **Build** çalışır. Bitince **Releases** sayfasında paketler görünür.
+**Build** runs in the Actions tab. When it finishes, the packages appear on the **Releases** page.
 
-- Etiketin sürümü `Cargo.toml` içindeki `version` ile aynı olmalı (`v2.0.0` ↔ `2.0.0`); değilse Release işi durur.
-- Bir etiketi baştan derletmek istersen:
-
-```bash
-git push origin :refs/tags/v2.0.0
-```
+- The tag's version must match `version` in `Cargo.toml` (`v2.6.0` ↔ `2.6.0`); otherwise the Release job stops.
+- To rebuild a tag from scratch:
 
 ```bash
-git tag -f v2.0.0
+git push origin :refs/tags/v2.6.0
 ```
 
 ```bash
-git push origin v2.0.0
+git tag -f v2.6.0
 ```
 
-## Sorun giderme
-- **Testler düşüyor:** Actions'ta kırmızı adıma tıkla, `FAILED` veya `panicked` satırını bul.
-- **Release oluşmadı:** Release yalnızca `v` ile başlayan etiketlerde oluşur. Ayrıca testler ile Windows, Linux ve Android işlerinin hepsi başarılı olmalı.
+```bash
+git push origin v2.6.0
+```
+
+## Troubleshooting
+- **Tests fail:** click the red step in Actions and look for the `FAILED` or `panicked` line.
+- **No Release was created:** a Release is created only for tags starting with `v`. The tests and the Windows, Linux and Android jobs must all succeed.
