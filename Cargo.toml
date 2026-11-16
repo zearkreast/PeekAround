@@ -4,7 +4,7 @@ members = ["crates/*"]
 exclude = ["third_party"]
 
 [workspace.package]
-version = "2.1.1"
+version = "2.6.0"
 edition = "2021"
 license = "GPL-3.0-only"
 repository = "https://github.com/zearkreast/PeekAround"
