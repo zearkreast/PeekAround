@@ -38,6 +38,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[no_mangle]
 fn android_main(app: slint::android::AndroidApp) {
     platform::init_logging();
+    platform::attach_activity(&app);
     let files = app
         .internal_data_path()
         .unwrap_or_else(|| PathBuf::from("/data/data/app.peekaround/files"));
@@ -121,8 +122,17 @@ pub fn run(files: &Path) {
     }
     let host: Rc<dyn pa_ui::host::Host> =
         Rc::new(host::AndroidHost::new(files.to_path_buf(), mode.clone()));
+    let prefs_path = files.join("ui-prefs.json");
+    // pa-ui takes its first language from the environment, which Android does not set
+    #[cfg(target_os = "android")]
+    if !prefs_path.exists() {
+        let lang = format!(r#"{{"lang":"{}"}}"#, platform::system_lang());
+        if let Err(e) = std::fs::write(&prefs_path, lang) {
+            log::warn!("ui-prefs.json: {e}");
+        }
+    }
     let opts = pa_ui::UiOptions {
-        prefs_path: Some(files.join("ui-prefs.json")),
+        prefs_path: Some(prefs_path),
         #[cfg(target_os = "android")]
         script: None,
         #[cfg(not(target_os = "android"))]

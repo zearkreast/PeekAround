@@ -4755,7 +4755,6 @@ dependencies = [
  "jni 0.21.1",
  "log",
  "mdns-sd",
- "ndk-context",
  "pa-client",
  "pa-core",
  "pa-phone",

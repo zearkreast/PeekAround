@@ -44,6 +44,7 @@ public class MainActivity extends NativeActivity {
     private final Object sharedLock = new Object();
     /** what other apps shared and Rust has not taken yet: {"files":[path…],"text":…} */
     private JSONObject shared;
+    private volatile boolean inFront;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,6 +61,18 @@ public class MainActivity extends NativeActivity {
         }
         new Thread(() -> dropOld(new File(getCacheDir(), "incoming"))).start();
         handleShare(getIntent());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        inFront = true;
+    }
+
+    @Override
+    protected void onPause() {
+        inFront = false;
+        super.onPause();
     }
 
     @Override
@@ -216,19 +229,31 @@ public class MainActivity extends NativeActivity {
                 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
     }
 
+    /** false while a system page (the permission screen) or another app covers the UI */
+    public boolean isInFront() {
+        return inFront;
+    }
+
     public void requestAllFilesAccess() {
         runOnUiThread(() -> {
-            if (Build.VERSION.SDK_INT >= 30) {
-                try {
-                    startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + getPackageName())));
-                } catch (Exception e) {
-                    try {
-                        startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
-                    } catch (Exception ignored) {
-                    }
-                }
-            } else {
+            if (Build.VERSION.SDK_INT < 30) {
                 requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+                return;
+            }
+            Uri pkg = Uri.parse("package:" + getPackageName());
+            // some vendor ROMs lack the per-app page, a few the list too: the app's own page has the switch
+            Intent[] pages = {
+                    new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, pkg),
+                    new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+                    new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg),
+            };
+            for (Intent page : pages) {
+                try {
+                    startActivity(page);
+                    return;
+                } catch (Exception e) {
+                    Log.w(TAG, "no " + page.getAction(), e);
+                }
             }
         });
     }

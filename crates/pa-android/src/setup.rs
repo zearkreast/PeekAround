@@ -390,12 +390,25 @@ pub fn run(files: &Path, rt: tokio::runtime::Handle) -> Option<Mode> {
                 w.set_waiting(true);
             }
             let finish = finish.clone();
+            let ww = ww.clone();
+            let poll = Rc::downgrade(&poll2);
+            let mut left = false;
             poll2.start(
                 slint::TimerMode::Repeated,
-                Duration::from_secs(1),
+                Duration::from_millis(500),
                 move || {
                     if platform::has_all_files() {
                         finish(Mode::Local);
+                    } else if !platform::in_front() {
+                        left = true;
+                    } else if left {
+                        // back from the system page without the permission: the button asks again
+                        if let Some(w) = ww.upgrade() {
+                            w.set_waiting(false);
+                        }
+                        if let Some(p) = poll.upgrade() {
+                            p.stop();
+                        }
                     }
                 },
             );

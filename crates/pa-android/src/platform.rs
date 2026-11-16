@@ -1,6 +1,6 @@
 //! Android APIs used by the UI process: Java methods of `app.peekaround.MainActivity`
 //! (crates/pa-android/android/app/src/main/java/app/peekaround/MainActivity.java) called through
-//! JNI on the activity object android-activity hands to `ndk-context`. Off Android: stubs.
+//! JNI on the activity object of [`attach_activity`]. Off Android: stubs.
 
 use std::path::PathBuf;
 
@@ -46,6 +46,14 @@ pub fn has_all_files() -> bool {
 pub fn request_all_files() {
     #[cfg(target_os = "android")]
     jni_impl::call_void("requestAllFilesAccess");
+}
+
+/// the activity is resumed: false while the permission page of [`request_all_files`] is open
+pub fn in_front() -> bool {
+    #[cfg(target_os = "android")]
+    return jni_impl::call_bool("isInFront").unwrap_or(true);
+    #[cfg(not(target_os = "android"))]
+    true
 }
 
 /// POST_NOTIFICATIONS (Android 13+) — the sharing notification needs it
@@ -168,13 +176,47 @@ pub fn init_logging() {
     jni_impl::init_logging();
 }
 
+/// Keep the activity for the calls above. `ndk-context` cannot be used for them: since
+/// android-activity 0.6.1 it holds the Application, which has none of MainActivity's methods.
+#[cfg(target_os = "android")]
+pub fn attach_activity(app: &slint::android::AndroidApp) {
+    jni_impl::attach_activity(app.vm_as_ptr(), app.activity_as_ptr());
+}
+
 #[cfg(target_os = "android")]
 pub(crate) mod jni_impl {
-    use std::ffi::CString;
-    use std::sync::Once;
+    use std::ffi::{c_void, CString};
+    use std::sync::{Once, OnceLock};
 
-    use jni::objects::{JObject, JString, JValue};
+    use jni::objects::{GlobalRef, JObject, JString, JValue};
     use jni::JavaVM;
+
+    struct Activity {
+        vm: JavaVM,
+        obj: GlobalRef,
+    }
+
+    static ACTIVITY: OnceLock<Activity> = OnceLock::new();
+
+    /// `vm`, `activity`: `AndroidApp::vm_as_ptr` and `activity_as_ptr`
+    pub(crate) fn attach_activity(vm: *mut c_void, activity: *mut c_void) {
+        let made = (|| -> jni::errors::Result<Activity> {
+            let vm = unsafe { JavaVM::from_raw(vm.cast()) }?;
+            let obj = {
+                let env = vm.attach_current_thread()?;
+                // android-activity owns this reference: only a global one of ours outlives the call
+                let activity = unsafe { JObject::from_raw(activity.cast()) };
+                env.new_global_ref(&activity)?
+            };
+            Ok(Activity { vm, obj })
+        })();
+        match made {
+            Ok(a) => {
+                let _ = ACTIVITY.set(a);
+            }
+            Err(e) => log::error!("jni: no activity: {e}"),
+        }
+    }
 
     #[link(name = "log")]
     extern "C" {
@@ -226,18 +268,17 @@ pub(crate) mod jni_impl {
     }
 
     fn with_activity<R>(f: impl FnOnce(&mut jni::JNIEnv, &JObject) -> jni::errors::Result<R>) -> Option<R> {
-        let ctx = ndk_context::android_context();
-        let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
-        let mut env = vm.attach_current_thread().ok()?;
-        let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+        let Some(a) = ACTIVITY.get() else {
+            log::warn!("jni: no activity");
+            return None;
+        };
+        let mut env = a.vm.attach_current_thread().ok()?;
         // the android_main thread stays attached: free the local refs of every call
-        let r = env.with_local_frame(16, |env| f(env, &activity));
+        let r = env.with_local_frame(16, |env| f(env, a.obj.as_obj()));
         if env.exception_check().unwrap_or(false) {
             let _ = env.exception_describe();
             let _ = env.exception_clear();
         }
-        // the activity reference belongs to android-activity
-        std::mem::forget(activity);
         match r {
             Ok(v) => Some(v),
             Err(e) => {
