@@ -48,6 +48,7 @@ pub mod scope;
 pub mod security;
 pub mod thumbs;
 pub mod tiles;
+pub mod trash;
 pub mod watcher;
 pub mod zip;
 
@@ -328,7 +329,12 @@ impl Server {
         let cleanup = tokio::spawn(async move {
             loop {
                 tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(600)) => { let _ = library::cleanup_temp(&c2, false).await; }
+                    _ = tokio::time::sleep(Duration::from_secs(600)) => {
+                        let _ = library::cleanup_temp(&c2, false).await;
+                        let c3 = c2.clone();
+                        let cutoff = events::now_ms() - trash::KEEP_DAYS * pa_core::DAY_MS;
+                        let _ = tokio::task::spawn_blocking(move || trash::purge(&c3, cutoff)).await;
+                    }
                     _ = c2.shutdown.cancelled() => break,
                 }
             }

@@ -27,4 +27,5 @@ mod jobs;
 mod modes;
 mod emoji_dirs;
 mod no_clobber;
+mod trash;
 mod skeleton_bench;

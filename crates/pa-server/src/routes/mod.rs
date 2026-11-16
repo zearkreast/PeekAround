@@ -7,6 +7,7 @@ pub mod explore;
 pub mod files;
 pub mod media;
 pub mod misc;
+pub mod trash;
 pub mod util;
 
 use crate::router::Router;
@@ -22,6 +23,7 @@ pub fn router() -> Router {
     albums::routes(&mut r);
     misc::routes(&mut r);
     files::routes(&mut r);
+    trash::routes(&mut r);
     r
 }
 
