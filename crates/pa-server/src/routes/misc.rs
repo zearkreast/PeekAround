@@ -247,6 +247,14 @@ pub fn routes(r: &mut Router) {
                     .ok_or_else(|| HttpError::new(503, "Server is starting"))?;
                 let body = req.body.value().cloned().unwrap_or(Value::Null);
                 let slideshow = req.parts.uri.path().ends_with("/slideshow");
+                // the export lands next to the source: in a zip session it would expire with it
+                if let Some(sid) = body.get("sourceId").map(crate::http::js_string).filter(|_| !slideshow) {
+                    if let Ok(row) = super::util::media_row(&ctx, &sid) {
+                        if crate::library::folder_row(&ctx, row.folder_id).is_ok_and(|f| f.temp != 0) {
+                            return Err(HttpError::new(409, "Keep the temporary folder before saving edits"));
+                        }
+                    }
+                }
                 // Exporter::start_slideshow's future is not provably Send (higher-ranked closure
                 // lifetimes inside pa-jobs): drive it on a blocking thread of this runtime
                 let rt = tokio::runtime::Handle::current();

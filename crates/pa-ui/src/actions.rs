@@ -314,7 +314,10 @@ fn builtins() -> Vec<Rc<Action>> {
             label_key: "viewer.edit",
             group: Group::Primary,
             order: 20,
-            visible: Rc::new(|items, c| c.writable && items.len() == 1 && is_media(&items[0]) && !c.on_device(items)),
+            // the copy is saved next to the original; a zip session's files expire
+            visible: Rc::new(|items, c| {
+                c.writable && items.len() == 1 && is_media(&items[0]) && !c.on_device(items) && !c.any_temp(items)
+            }),
             ..Default::default()
         },
         Action {
@@ -513,6 +516,12 @@ mod tests {
         };
         let v = for_items(&one, Surface::Menu, &mega);
         assert!(ids(&v).contains(&"favorite") && !ids(&v).contains(&"move"));
+        // zip session items: no editor (its copy would expire with the session)
+        let zip = Ctx {
+            temp: ["f1".to_string()].into(),
+            ..ctx.clone()
+        };
+        assert!(!ids(&for_items(&one, Surface::Menu, &zip)).contains(&"edit"));
         // several items without zip download: no download
         let two = [
             item("a", "f1", MediaKind::Image, true),

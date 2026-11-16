@@ -13,7 +13,7 @@ use crate::library;
 use crate::p;
 use crate::paths::{
     base_of_rel, dir_of_rel, normalize_rel, rel_of, resolve_host_path, resolve_in_root,
-    sanitize_name, sanitize_rel, unique_edit_path, unique_path,
+    sanitize_name, sanitize_rel, unique_path,
 };
 use crate::router::{h, Router};
 use crate::scanner::TRASH_DIR;
@@ -53,12 +53,33 @@ pub async fn zip_to_temp(ctx: &C, zip_file: &Path, source_name: &str) -> ApiResu
     Ok(library::folder_ref(ctx, &row, None))
 }
 
-async fn extract(zip: &Path, dest: &Path) -> ApiResult<crate::zip::ExtractResult> {
-    let (z, d) = (zip.to_path_buf(), dest.to_path_buf());
-    tokio::task::spawn_blocking(move || crate::zip::extract_zip(&z, &d, crate::zip::MAX_EXTRACT))
+/// Extract into a hidden sibling of `dest` and rename it when complete, so a failing archive
+/// (encrypted entry, corrupt data, size guard) leaves nothing behind in the library. Returns the
+/// final directory: another free name when `dest` was taken meanwhile.
+async fn extract(zip: &Path, dest: &Path) -> ApiResult<(crate::zip::ExtractResult, PathBuf)> {
+    let parent = dest.parent().map(Path::to_path_buf).unwrap_or_default();
+    let name = dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let part = parent.join(format!(".{name}.{}.part", hex::encode(rand::random::<[u8; 4]>())));
+    let (z, d) = (zip.to_path_buf(), part.clone());
+    let r = tokio::task::spawn_blocking(move || crate::zip::extract_zip(&z, &d, crate::zip::MAX_EXTRACT))
         .await
-        .map_err(HttpError::internal)?
-        .map_err(|e| HttpError::new(500, e.to_string()))
+        .map_err(HttpError::internal)?;
+    let res = match r {
+        Ok(res) => res,
+        Err(e) => {
+            let _ = tokio::fs::remove_dir_all(&part).await;
+            return Err(HttpError::new(500, e.to_string()));
+        }
+    };
+    let mut fin = dest.to_path_buf();
+    for _ in 0..100 {
+        if !crate::paths::exists(&fin) && tokio::fs::rename(&part, &fin).await.is_ok() {
+            return Ok((res, fin));
+        }
+        fin = unique_path(&parent, &name);
+    }
+    let _ = tokio::fs::remove_dir_all(&part).await;
+    Err(HttpError::new(500, "No free folder name"))
 }
 
 async fn write_body(req: &mut Req, file: &Path, limit: u64) -> ApiResult<u64> {
@@ -125,7 +146,7 @@ async fn upload(ctx: C, mut req: Req) -> ApiResult<axum::http::Response<axum::bo
             tokio::fs::create_dir_all(&parent_abs).await?;
             let stem = library::strip_zip_ext(&name);
             let dest = unique_path(&parent_abs, if stem.is_empty() { "Archive" } else { &stem });
-            let res = extract(&scratch, &dest).await?;
+            let (res, dest) = extract(&scratch, &dest).await?;
             let dest_rel = rel_of(&folder.path, &dest);
             crate::scanner::scan_folder(&ctx, folder.id, &dest_rel).await;
             ok_json(&UploadResult {
@@ -313,7 +334,7 @@ pub fn routes(r: &mut Router) {
                 a.parent().unwrap_or(Path::new("/")),
                 if stem.is_empty() { "Archive" } else { &stem },
             );
-            extract(&a, &dest).await?;
+            let (_, dest) = extract(&a, &dest).await?;
             let dest_rel = rel_of(&folder.path, &dest);
             crate::scanner::scan_folder(&ctx, folder.id, &dest_rel).await;
             ok_json(&json!({ "folderId": folder.id.to_string(), "dir": dest_rel }))
@@ -366,7 +387,7 @@ pub fn routes(r: &mut Router) {
                         result.temp_folder = Some(zip_to_temp(&ctx, &src, &base).await?);
                     } else {
                         let dest = unique_path(&dest_dir, &library::strip_zip_ext(&base));
-                        extract(&src, &dest).await?;
+                        let (_, dest) = extract(&src, &dest).await?;
                         let rel = rel_of(&folder.path, &dest);
                         crate::scanner::scan_folder(&ctx, folder.id, &rel).await;
                         result.extracted_dir = Some(rel);
@@ -810,9 +831,18 @@ async fn save_edit(ctx: C, mut req: Req) -> ApiResult<axum::http::Response<axum:
         return Err(HttpError::new(400, "Empty body"));
     }
     let suffix = ctx.settings().edit_suffix;
-    let (folder, dest, exif) = if let Some(sid) = req.q("sourceId").filter(|s| !s.is_empty()) {
+    // where the copy goes: (dir, base name for "<base><suffix>.<fmt>" or a plain file name)
+    enum Target {
+        Edit(PathBuf, String),
+        Named(PathBuf, String),
+    }
+    let (folder, target, exif) = if let Some(sid) = req.q("sourceId").filter(|s| !s.is_empty()) {
         let src = super::util::media_row(&ctx, sid)?;
         let (folder, a) = media_abs(&ctx, &src)?;
+        if folder.temp != 0 {
+            // a zip session's files are deleted when it expires, and the copy with them
+            return Err(HttpError::new(409, "Keep the temporary folder before saving edits"));
+        }
         let base = if src.ext.is_empty() {
             src.name.clone()
         } else {
@@ -822,24 +852,16 @@ async fn save_edit(ctx: C, mut req: Req) -> ApiResult<axum::http::Response<axum:
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_default();
-        let dest = unique_edit_path(&dir, &base, &suffix, &fmt);
         let exif = exif_from(&a).await;
-        (folder, dest, exif)
+        (folder, Target::Edit(dir, base), exif)
     } else {
         let (folder, abs) = folder_path(&ctx, req.q("folderId").unwrap_or(""), req.qs("dir"))?;
         tokio::fs::create_dir_all(&abs).await?;
-        let dest = unique_path(
-            &abs,
-            &format!(
-                "{}.{fmt}",
-                sanitize_name(
-                    req.q("name")
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or("PeekAround")
-                )
-            ),
+        let name = format!(
+            "{}.{fmt}",
+            sanitize_name(req.q("name").filter(|s| !s.is_empty()).unwrap_or("PeekAround"))
         );
-        (folder, dest, None)
+        (folder, Target::Named(abs, name), None)
     };
     let q = quality as u8;
     let fmt2 = fmt.clone();
@@ -875,9 +897,25 @@ async fn save_edit(ctx: C, mut req: Req) -> ApiResult<axum::http::Response<axum:
     .await
     .map_err(HttpError::internal)?
     .map_err(|e| HttpError::new(500, e))?;
-    let tmp = PathBuf::from(format!("{}.part", dest.display()));
+    let dir = match &target {
+        Target::Edit(d, _) | Target::Named(d, _) => d.clone(),
+    };
+    let tmp = dir.join(format!(".peekaround-edit.{}.part", hex::encode(rand::random::<[u8; 4]>())));
     tokio::fs::write(&tmp, &data).await?;
-    tokio::fs::rename(&tmp, &dest).await?;
+    let (t2, ext) = (tmp.clone(), fmt.clone());
+    let published = tokio::task::spawn_blocking(move || match &target {
+        Target::Edit(d, base) => crate::paths::publish_edit(&t2, d, base, &suffix, &ext),
+        Target::Named(d, name) => crate::paths::publish_unique(&t2, d, name),
+    })
+    .await
+    .map_err(HttpError::internal)?;
+    let dest = match published {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = tokio::fs::remove_file(&tmp).await;
+            return Err(e.into());
+        }
+    };
     let rel = rel_of(&folder.path, &dest);
     let id = crate::scanner::upsert_file(&ctx, folder.id, &rel).await;
     ok_json(&json!({ "item": loc(&folder, &rel), "id": id.map(|i| i.to_string()) }))
