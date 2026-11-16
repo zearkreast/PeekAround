@@ -106,6 +106,8 @@ export global HubState {
     callback close-temp(string);
     callback open-quick(string);
     callback open-tool(string);
+    // "Trash · 12" when the server keeps a folder trash and it holds something, else ""
+    in property <string> trash-label;
 }
 
 export global AlbumsState {
@@ -247,4 +249,40 @@ export global FontsState {
     in-out property <float> size: 40;
     callback browse();
     callback delete(/* id */ string, /* "Family Sub" */ string);
+}
+
+// one trashed file (pages/trash.rs)
+export struct TrashRow {
+    id: string,
+    name: string,
+    // "Library · Folder/sub"
+    place: string,
+    // "30 days" left before the purge
+    left: string,
+    // at most 3 days left
+    soon: bool,
+    video: bool,
+    selected: bool,
+    has-image: bool,
+    image: image,
+}
+
+export struct TrashGroup {
+    title: string,
+    count: int,
+    // index of the first row of this group in TrashState.rows
+    start: int,
+}
+
+export global TrashState {
+    in property <bool> loading: true;
+    in property <[TrashRow]> rows;
+    in property <[TrashGroup]> groups;
+    in property <string> subtitle;
+    in property <int> selected;
+    callback toggle(/* index */ int);
+    callback clear-selection();
+    callback restore-selected();
+    callback delete-selected();
+    callback empty();
 }

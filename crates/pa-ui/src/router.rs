@@ -39,6 +39,8 @@ pub enum Route {
     Slideshow,
     /// `/collage`
     Collage,
+    /// `/trash`
+    Trash,
     /// `/explore/map[?place=…][?focus=<id>&lat=&lon=]` (focus: id, lat, lon as given)
     ExploreMap {
         /// place key filter ("" = everything)
@@ -62,6 +64,7 @@ impl Route {
             Page::Fonts => Route::Fonts,
             Page::Slideshow => Route::Slideshow,
             Page::Collage => Route::Collage,
+            Page::Trash => Route::Trash,
             // pages with parameters are reached through `AppInner::go` only
             Page::Album | Page::Lib | Page::Folder => Route::Library,
             Page::ExploreResult | Page::ExplorePlaces | Page::ExploreDups | Page::ExploreMap => {
@@ -83,6 +86,7 @@ impl Route {
             Route::Fonts => Page::Fonts,
             Route::Slideshow => Page::Slideshow,
             Route::Collage => Page::Collage,
+            Route::Trash => Page::Trash,
             Route::Album(_) => Page::Album,
             Route::Lib(_) => Page::Lib,
             Route::Folder(..) => Page::Folder,
@@ -113,6 +117,7 @@ impl Route {
             ("fonts", None) => Route::Fonts,
             ("slideshow", None) => Route::Slideshow,
             ("collage", None) => Route::Collage,
+            ("trash", None) => Route::Trash,
             ("search", Some(q)) => Route::Search(q),
             ("album", Some(id)) => Route::Album(id),
             ("library", Some(id)) => Route::Lib(id),

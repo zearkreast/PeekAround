@@ -11,6 +11,7 @@ import { PlaceholderPage } from "pages/placeholder.slint";
 // library hub, albums, album, library / folder pages, dialogs
 import { HubPage } from "pages/hub.slint";
 import { FontsPage } from "pages/fonts.slint";
+import { TrashPage } from "pages/trash.slint";
 import { SlideBuilderPage, SlideBuilder, SlideRow, MusicRow } from "slideshow/builder.slint";
 import { MediaPickerDialog, MediaPickerState, MediaDirRow, MediaTileRow } from "components/media_picker.slint";
 import { SlidePlayerOverlay, SlidePlayer } from "slideshow/player.slint";
@@ -21,7 +22,7 @@ import { TextLayers } from "editor/text.slint";
 import { CollagePage, CollageState } from "collage/collage.slint";
 import { AlbumsPage, AlbumPage } from "pages/albums.slint";
 import { LibraryPage } from "pages/library.slint";
-import { HubState, AlbumsState, AlbumState, LibState, FontsState } from "pages/state.slint";
+import { HubState, AlbumsState, AlbumState, LibState, FontsState, TrashState } from "pages/state.slint";
 import { PIcons } from "pages/icons.slint";
 import { DialogLayer, Dlg } from "dialogs/dialogs.slint";
 import { JobsState, UploadPanel } from "shell/jobs.slint";
@@ -46,7 +47,7 @@ export { Theme, Motion, I18n, Shell, GridState, PrefsState, Page, Conn }
 export { TileData, HeaderData, TileKind, TileDeco } from "pages/grid.slint";
 export { ToastData, ToastKind } from "components/overlays.slint";
 export { ViewerState, VIcons, ActionState, GridInput, DragState }
-export { HubState, AlbumsState, AlbumState, LibState, PIcons, Dlg, JobsState, FontsState }
+export { HubState, AlbumsState, AlbumState, LibState, PIcons, Dlg, JobsState, FontsState, TrashState }
 export { FontFaceRow, FontFamilyCard, BundledFont } from "pages/state.slint";
 export { SlideBuilder, SlidePlayer, SlideRow, MusicRow, MediaDirRow, MediaTileRow, StageFrame, SlideVis, MediaPickerState }
 export { Chrome } from "globals.slint";
@@ -109,6 +110,7 @@ export component AppWindow inherits Window {
         : Shell.page == Page.explore-dups ? I18n.t("insights.dup.title", I18n.rev)
         : Shell.page == Page.explore-map ? MapState.title
         : Shell.page == Page.fonts ? I18n.t("fonts.title", I18n.rev)
+        : Shell.page == Page.trash ? I18n.t("trash.title", I18n.rev)
         : Shell.page == Page.slideshow ? I18n.t("nav.slideshow", I18n.rev)
         : Shell.page == Page.collage ? I18n.t("nav.collage", I18n.rev)
         : I18n.t("settings.title", I18n.rev);
@@ -232,6 +234,9 @@ export component AppWindow inherits Window {
                     }
                     if Shell.page == Page.fonts: PageFrame {
                         FontsPage { window-width: root.width; }
+                    }
+                    if Shell.page == Page.trash: PageFrame {
+                        TrashPage { window-width: root.width; }
                     }
                     if Shell.page == Page.slideshow: PageFrame {
                         SlideBuilderPage { window-width: root.width; }

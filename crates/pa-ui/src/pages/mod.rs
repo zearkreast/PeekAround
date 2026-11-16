@@ -23,6 +23,7 @@ pub(crate) mod hub;
 pub(crate) mod jobs;
 pub(crate) mod library;
 pub(crate) mod settings;
+pub(crate) mod trash;
 
 thread_local! {
     static APP: RefCell<Weak<AppInner>> = const { RefCell::new(Weak::new()) };
@@ -185,6 +186,7 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     settings::install(app);
     jobs::install(app);
     fonts::install(app);
+    trash::wire(app);
     // first data
     hub::load_libraries(app);
     albums::load_albums(app);
@@ -205,12 +207,14 @@ pub(crate) fn enter(app: &Rc<AppInner>, route: &Route) {
         Route::Library => {
             hub::load_libraries(app);
             albums::load_albums(app);
+            trash::load_hub_label(app);
         }
         Route::Albums => albums::load_albums(app),
         Route::Album(id) => albums::enter_album(app, id),
         Route::Lib(_) | Route::Folder(..) => library::enter(app),
         Route::Settings => settings::enter(app),
         Route::Fonts => fonts::enter(app),
+        Route::Trash => trash::enter(app),
         _ => {}
     }
 }

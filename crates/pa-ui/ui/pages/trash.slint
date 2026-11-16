@@ -1,0 +1,214 @@
+// Trash page: files deleted into the library folders' .peekaround-trash, grouped by day, with
+// restore / delete for good / empty. Entries go after 30 days (server purge).
+
+import { Theme, Motion, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "icons.slint";
+import { Shell, Page } from "../globals.slint";
+import { TrashState, TrashRow } from "state.slint";
+import { Cols, GridPos, PageTitle } from "parts.slint";
+import { Button, ButtonVariant, ButtonSize, IconButton } from "../components/button.slint";
+import { Spinner, EmptyState } from "../components/feedback.slint";
+import { ScrollPage } from "scroll.slint";
+
+component TrashTile inherits Rectangle {
+    in property <TrashRow> item;
+    callback clicked();
+    border-radius: Theme.tile-radius;
+    clip: true;
+    background: Theme.tile-bg;
+    if root.item.has-image: Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.item.image;
+        image-fit: cover;
+        opacity: 0.88;
+    }
+    if !root.item.has-image: Image {
+        source: root.item.video ? Icons.film : Icons.image;
+        colorize: Theme.text-faint;
+        width: 32px;
+        height: 32px;
+    }
+    // name on hover, days left always
+    Rectangle {
+        y: parent.height - self.height;
+        height: 40px;
+        background: @linear-gradient(180deg, transparent 0%, #00000099 100%);
+        visible: ta.has-hover;
+        Text {
+            x: 10px;
+            width: parent.width - 20px;
+            text: root.item.name;
+            font-size: 12px;
+            color: #ffffff;
+            overflow: elide;
+            vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        x: 8px;
+        y: 8px;
+        width: lt.preferred-width + 16px;
+        height: 22px;
+        border-radius: 11px;
+        background: #09090dcc;
+        visible: !ta.has-hover;
+        lt := Text {
+            text: root.item.left;
+            font-size: 11.5px;
+            font-weight: 500;
+            color: root.item.soon ? Theme.danger : #f5f5f7;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+    if root.item.selected: Rectangle {
+        border-radius: Theme.tile-radius;
+        border-width: 3px;
+        border-color: Theme.accent;
+        Rectangle {
+            x: parent.width - 30px;
+            y: 8px;
+            width: 22px;
+            height: 22px;
+            border-radius: 11px;
+            background: Theme.accent;
+            Image { source: Icons.check; colorize: #ffffff; width: 14px; height: 14px; }
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component TrashPage inherits Rectangle {
+    in property <length> window-width;
+    property <length> pad: root.window-width >= 640px ? 28px : 12px;
+    property <length> cw: Math.min(root.width - 2 * pad - 12px, 1500px);
+    property <length> cx: (root.width - 12px - cw) / 2;
+    property <int> cols: Cols.of(root.window-width, 3, 4, 5, 6, 7, 8);
+    property <length> tw: GridPos.cell(root.cw, cols, 6px);
+
+    ScrollPage {
+        width: root.width;
+        height: root.height;
+        content-height: col.preferred-height + 24px + 112px;
+        col := VerticalLayout {
+            x: root.cx;
+            y: 24px;
+            width: root.cw;
+            spacing: 20px;
+            alignment: start;
+
+            HorizontalLayout {
+                spacing: 16px;
+                PageTitle {
+                    horizontal-stretch: 1;
+                    padding-left: 4px;
+                    text: I18n.t("trash.title", I18n.rev);
+                    icon: Icons.trash-2;
+                    has-icon: true;
+                    sub: TrashState.subtitle;
+                }
+                if TrashState.rows.length > 0 && !Shell.readonly: VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: I18n.t("trash.empty", I18n.rev);
+                        icon: Icons.trash-2;
+                        has-icon: true;
+                        variant: ButtonVariant.danger;
+                        size: ButtonSize.sm;
+                        clicked => { TrashState.empty(); }
+                    }
+                }
+            }
+
+            if TrashState.selected > 0: Rectangle {
+                height: 52px;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: Theme.border;
+                background: Theme.bg-elev-2;
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 8px;
+                    spacing: 8px;
+                    Text {
+                        text: I18n.t1("trash.selected", "n", TrashState.selected, I18n.rev);
+                        font-size: 14px;
+                        font-weight: 500;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: I18n.t("trash.restore", I18n.rev);
+                            icon: PIcons.rotate-ccw;
+                            has-icon: true;
+                            variant: ButtonVariant.primary;
+                            size: ButtonSize.sm;
+                            enabled: !Shell.readonly;
+                            clicked => { TrashState.restore-selected(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: I18n.t("trash.deleteForGood", I18n.rev);
+                            size: ButtonSize.sm;
+                            enabled: !Shell.readonly;
+                            clicked => { TrashState.delete-selected(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: Icons.x;
+                            label: I18n.t("sel.clear", I18n.rev);
+                            clicked => { TrashState.clear-selection(); }
+                        }
+                    }
+                }
+            }
+
+            if TrashState.loading: HorizontalLayout {
+                alignment: center;
+                padding-top: 48px;
+                Spinner { }
+            }
+
+            if !TrashState.loading && TrashState.rows.length == 0: EmptyState {
+                icon: Icons.trash-2;
+                title: I18n.t("trash.emptyTitle", I18n.rev);
+                body: I18n.t("trash.emptyBody", I18n.rev);
+            }
+
+            for g in TrashState.groups: VerticalLayout {
+                spacing: 10px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    padding-left: 4px;
+                    Text { text: g.title; font-size: 15px; font-weight: 600; color: Theme.text; }
+                    Text { text: g.count; font-size: 13px; color: Theme.text-faint; vertical-alignment: center; }
+                }
+                Rectangle {
+                    height: GridPos.rows(g.count, root.cols) * (root.tw + 6px) - 6px;
+                    for r[i] in TrashState.rows: TrashTile {
+                        visible: i >= g.start && i < g.start + g.count;
+                        x: GridPos.x(i - g.start, root.cols, root.tw, 6px);
+                        y: GridPos.y(i - g.start, root.cols, root.tw, 6px);
+                        width: root.tw;
+                        height: root.tw;
+                        item: r;
+                        clicked => { TrashState.toggle(i); }
+                    }
+                }
+            }
+        }
+    }
+}

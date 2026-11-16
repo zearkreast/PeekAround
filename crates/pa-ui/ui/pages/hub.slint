@@ -50,7 +50,7 @@ export component HubPage inherits Rectangle {
 
             // quick collections
             Rectangle {
-                height: GridPos.rows(4, root.qcols) * 66px - 10px;
+                height: GridPos.rows(HubState.trash-label != "" ? 5 : 4, root.qcols) * 66px - 10px;
                 QuickTile {
                     x: GridPos.x(0, root.qcols, root.qw, 10px); y: GridPos.y(0, root.qcols, 56px, 10px); width: root.qw;
                     icon: Icons.heart; label: I18n.t("nav.favorites", I18n.rev); tint: Theme.accent-2;
@@ -70,6 +70,11 @@ export component HubPage inherits Rectangle {
                     x: GridPos.x(3, root.qcols, root.qw, 10px); y: GridPos.y(3, root.qcols, 56px, 10px); width: root.qw;
                     icon: PIcons.copy; label: I18n.t("lib2.hub.duplicates", I18n.rev); tint: #f97316;
                     clicked => { HubState.open-quick("duplicates"); }
+                }
+                if HubState.trash-label != "": QuickTile {
+                    x: GridPos.x(4, root.qcols, root.qw, 10px); y: GridPos.y(4, root.qcols, 56px, 10px); width: root.qw;
+                    icon: Icons.trash-2; label: HubState.trash-label; tint: Theme.danger;
+                    clicked => { HubState.open-quick("trash"); }
                 }
             }
 

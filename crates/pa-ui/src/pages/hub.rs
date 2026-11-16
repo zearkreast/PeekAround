@@ -389,7 +389,10 @@ pub(crate) fn install(app: &Rc<AppInner>) {
         if let Some(a) = w.upgrade() {
             match what.as_str() {
                 "favorites" => a.go(Route::Favorites, true),
-                // no deep links into Explore's sections (recent / places / duplicates) yet
+                "recent" => a.go(Route::ExploreResult("recent".into(), String::new()), true),
+                "places" => a.go(Route::ExplorePlaces, true),
+                "duplicates" => a.go(Route::ExploreDuplicates, true),
+                "trash" => a.go(Route::Trash, true),
                 _ => a.go(Route::Explore, true),
             }
         }
