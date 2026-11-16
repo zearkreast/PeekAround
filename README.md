@@ -123,11 +123,12 @@ ya da `docker/docker-compose.yml` içindeki klasör yollarını düzenleyip `doc
 | `PEEK_BROWSE_ROOTS` | `/media` | "Klasör ekle" gezgininin gösterebileceği dizinler |
 | `PEEK_PORT` | `8080` | Port |
 | `TZ` | yok | Saat dilimi (örneğin `Europe/Istanbul`); ilk açılışta "ev saat dilimi" olur |
+| `PEEK_PASSWORD` | yok | Ayarlanırsa tarayıcı ve uygulamalar giriş ister; eşleşmiş telefonlar kendi anahtarıyla bağlanır |
 | `PEEK_ALLOWED_HOSTS` | yok | Alan adıyla erişiyorsan (örneğin ters vekil arkasında `foto.ornek.com`) virgülle ekle; `*` denetimi kapatır |
 | `PEEK_ALLOWED_ORIGINS` | yok | API'yi çağırabilecek ek tarayıcı kökenleri |
 | `PEEK_TRUSTED_PROXIES` | yok | Ters vekilin IP adresleri (örneğin `127.0.0.1`); bunlardan gelen isteklerde istemci adresi `X-Forwarded-For`'dan okunur, istek sınırı kişi başına işler |
 
-> Kimlik doğrulama yoktur: PeekAround'u yalnızca güvendiğin ağlarda çalıştır ya da önüne şifreli bir ters vekil (reverse proxy) koy. Sunucuya erişebilen herkes MEGA hesabına giriş ve çıkış da yapabilir.
+> `PEEK_PASSWORD` verilmezse kimlik doğrulama yoktur: o durumda PeekAround'u yalnızca güvendiğin ağlarda çalıştır ya da önüne şifreli bir ters vekil (reverse proxy) koy. Parola tek bir paylaşılan paroladır; internete açarken yine HTTPS kullan.
 > Tarayıcı tabanlı saldırılara karşı korunur: bilinmeyen alan adları (DNS rebinding), başka sitelerden gelen yazma istekleri (CSRF) ve aşırı istekler reddedilir. `.local`, `.lan`, IP adresleri ve tek kelimelik ağ adları (örneğin `nas`) her zaman çalışır.
 
 İmajı kendin derlemek için `docker build -f docker/Dockerfile -t peekaround .` komutunu kullan. Arayüzün derlemesi çok bellek ister: Docker'a 8 GB ayrılmışken derleme yarıda kaldı. Hazır imajı kullanmak daha kolaydır.

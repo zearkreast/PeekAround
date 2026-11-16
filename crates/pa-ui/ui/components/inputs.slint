@@ -10,6 +10,7 @@ export component TextField inherits Rectangle {
     in property <image> icon;
     in property <bool> has-icon;
     in property <bool> enabled: true;
+    in property <bool> password;
     out property <bool> focused: input.has-focus;
     callback accepted(string);
     callback edited(string);
@@ -44,6 +45,7 @@ export component TextField inherits Rectangle {
         font-size: 14px;
         vertical-alignment: center;
         single-line: true;
+        input-type: root.password ? InputType.password : InputType.text;
         selection-background-color: Theme.accent.with-alpha(0.45);
         selection-foreground-color: Theme.text;
         accepted => { root.accepted(self.text); }

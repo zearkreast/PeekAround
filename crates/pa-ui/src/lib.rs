@@ -47,6 +47,7 @@ pub mod map_math;
 
 mod api;
 mod app;
+mod login;
 mod pages;
 mod router;
 mod slideshow;

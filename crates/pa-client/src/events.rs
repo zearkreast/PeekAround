@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::{encode_seg, Client};
+use crate::Client;
 
 /// Connection state of the events socket (the web UI's `ConnectionState`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,21 +79,15 @@ impl Client {
     /// [`Client::events`] on a given runtime.
     pub fn events_on(&self, rt: &tokio::runtime::Handle) -> Events {
         let (tx, rx) = mpsc::unbounded_channel();
-        let mut url = self.events_url();
-        if let Some(a) = self.device_auth() {
-            url = format!(
-                "{url}?pdev={}&ptok={}",
-                encode_seg(&a.device_id),
-                encode_seg(&a.token)
-            );
-        }
-        let task = rt.spawn(run(url, tx));
+        // read per attempt: signing in while the socket retries takes effect on the next one
+        let c = self.clone();
+        let task = rt.spawn(run(move || c.events_url_auth(), tx));
         Events { rx, task }
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-async fn run(url: String, tx: mpsc::UnboundedSender<ClientEvent>) {
+async fn run(url_of: impl Fn() -> String + Send + 'static, tx: mpsc::UnboundedSender<ClientEvent>) {
     let mut retry: u32 = 0;
     let mut state = None;
     let set = |s: ConnectionState, state: &mut Option<ConnectionState>| {
@@ -104,6 +98,7 @@ async fn run(url: String, tx: mpsc::UnboundedSender<ClientEvent>) {
     };
     set(ConnectionState::Connecting, &mut state);
     loop {
+        let url = url_of();
         match tokio_tungstenite::connect_async(url.as_str()).await {
             Ok((mut ws, _)) => {
                 retry = 0;

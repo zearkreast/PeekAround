@@ -1,0 +1,115 @@
+// First start without any library: what PeekAround does and the ways to add photos.
+
+import { Theme, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { PIcons } from "icons.slint";
+import { Shell, Page } from "../globals.slint";
+import { HubState } from "state.slint";
+
+component Choice inherits Rectangle {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> body;
+    in property <bool> primary;
+    callback clicked();
+    height: lay.preferred-height;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: root.primary ? Theme.accent : ta.has-hover ? Theme.border-strong : Theme.border;
+    background: root.primary ? Theme.accent.with-alpha(0.12) : ta.has-hover ? Theme.surface-2 : Theme.surface;
+    lay := VerticalLayout {
+        padding: 20px;
+        spacing: 10px;
+        HorizontalLayout { alignment: start; Image { source: root.icon; colorize: root.primary ? Theme.accent : Theme.text-dim; width: 22px; height: 22px; } }
+        Text { text: root.title; font-size: 16px; font-weight: 600; color: Theme.text; wrap: word-wrap; }
+        Text { text: root.body; font-size: 13px; color: Theme.text-dim; wrap: word-wrap; }
+    }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+export component Welcome inherits Rectangle {
+    property <bool> wide: root.width >= 760px;
+    property <length> cw: Math.min(root.width - 32px, 1000px);
+    lay := VerticalLayout {
+        x: (root.width - root.cw) / 2;
+        width: root.cw;
+        padding-top: 48px;
+        spacing: 28px;
+        alignment: start;
+        VerticalLayout {
+            spacing: 10px;
+            HorizontalLayout { alignment: center; Image { source: Icons.logo; width: 52px; height: 52px; } }
+            Text {
+                text: I18n.t("welcome.title", I18n.rev);
+                horizontal-alignment: center;
+                font-family: Theme.font-display;
+                font-size: root.wide ? 40px : 28px;
+                font-weight: 700;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: I18n.t("welcome.body", I18n.rev);
+                horizontal-alignment: center;
+                font-size: 16px;
+                color: Theme.text-dim;
+                wrap: word-wrap;
+            }
+        }
+        if root.wide: HorizontalLayout {
+            spacing: 14px;
+            property <length> third: (root.cw - 28px) / 3;
+            Choice {
+                width: parent.third;
+                primary: true;
+                icon: Icons.folder;
+                title: I18n.t("welcome.folder", I18n.rev);
+                body: I18n.t("welcome.folderBody", I18n.rev);
+                clicked => { HubState.add-library(); }
+            }
+            Choice {
+                width: parent.third;
+                icon: PIcons.smartphone;
+                title: I18n.t("welcome.phone", I18n.rev);
+                body: I18n.t("welcome.phoneBody", I18n.rev);
+                clicked => { Shell.settings-section = "network"; Shell.navigate(Page.settings); }
+            }
+            Choice {
+                width: parent.third;
+                icon: PIcons.cloud;
+                title: I18n.t("welcome.mega", I18n.rev);
+                body: I18n.t("welcome.megaBody", I18n.rev);
+                clicked => { HubState.add-mega(); }
+            }
+        }
+        if !root.wide: VerticalLayout {
+            spacing: 12px;
+            Choice {
+                primary: true;
+                icon: Icons.folder;
+                title: I18n.t("welcome.folder", I18n.rev);
+                body: I18n.t("welcome.folderBody", I18n.rev);
+                clicked => { HubState.add-library(); }
+            }
+            Choice {
+                icon: PIcons.smartphone;
+                title: I18n.t("welcome.phone", I18n.rev);
+                body: I18n.t("welcome.phoneBody", I18n.rev);
+                clicked => { Shell.settings-section = "network"; Shell.navigate(Page.settings); }
+            }
+            Choice {
+                icon: PIcons.cloud;
+                title: I18n.t("welcome.mega", I18n.rev);
+                body: I18n.t("welcome.megaBody", I18n.rev);
+                clicked => { HubState.add-mega(); }
+            }
+        }
+        Text {
+            text: I18n.t("welcome.hint", I18n.rev);
+            horizontal-alignment: center;
+            font-size: 13px;
+            color: Theme.text-faint;
+            wrap: word-wrap;
+        }
+    }
+}

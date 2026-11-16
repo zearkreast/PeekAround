@@ -488,6 +488,7 @@ mod tests {
             .collect(),
             slide_duration: 7.0,
             slide_transition: "zoom".into(),
+            sessions: Default::default(),
             slideshow: Default::default(),
         };
         assert_eq!(p, want);

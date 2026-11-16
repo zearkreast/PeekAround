@@ -2,7 +2,8 @@
 
 import { Theme, Motion, I18n } from "theme.slint";
 import { Icons } from "icons.slint";
-import { Shell, GridState, PrefsState, Page, Conn } from "globals.slint";
+import { Shell, GridState, PrefsState, Page, Conn, Login } from "globals.slint";
+import { LoginScreen } from "shell/login.slint";
 import { NavRail, BottomNav } from "shell/nav-rail.slint";
 import { TopBar } from "shell/top-bar.slint";
 import { PhotosPage } from "pages/photos.slint";
@@ -43,7 +44,7 @@ import { MapPage } from "map/map.slint";
 import { MapState, MiniMapState } from "map/state.slint";
 
 // re-exported so Rust can reach the globals / types
-export { Theme, Motion, I18n, Shell, GridState, PrefsState, Page, Conn }
+export { Theme, Motion, I18n, Shell, GridState, PrefsState, Page, Conn, Login }
 export { TileData, HeaderData, TileKind, TileDeco } from "pages/grid.slint";
 export { ToastData, ToastKind } from "components/overlays.slint";
 export { ViewerState, VIcons, ActionState, GridInput, DragState }
@@ -326,6 +327,7 @@ export component AppWindow inherits Window {
         y: root.height - self.height - 20px - root.bottom-h;
     }
     DialogLayer { }
+    if Shell.need-login: LoginScreen { width: root.width; height: root.height; }
 
     Toaster {
         width: Math.min(420px, root.width - 32px);

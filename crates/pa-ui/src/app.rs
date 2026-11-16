@@ -315,6 +315,9 @@ impl AppInner {
 
     /// error toast
     pub(crate) fn error_toast(self: &Rc<Self>, msg: &str) {
+        if self.window.global::<Shell>().get_need_login() || crate::api::handling_unsupported() {
+            return;
+        }
         self.toast(ToastKind::Error, &self.t("common.error"), msg);
     }
 
@@ -643,26 +646,13 @@ pub fn run_with(
         }
     });
 
-    // server info (read-only flag, label)
-    let w = Rc::downgrade(&app);
-    rt.spawn_then(backend.info(), move |r| {
-        let Some(a) = w.upgrade() else { return };
-        match r {
-            Ok(info) => {
-                let shell = a.window.global::<Shell>();
-                shell.set_readonly(info.caps.readonly);
-                shell.set_scanning(info.scanning);
-                shell.set_scan_walking(true);
-                shell.set_scan_text(a.t("native.scanWalking").into());
-            }
-            Err(e) => {
-                a.toast(ToastKind::Error, &a.t("common.error"), &e.message);
-            }
-        }
-    });
+    // server info (read-only flag, label); a server with a password asks to sign in first
+    crate::login::restore(&app);
+    load_info(&app);
 
     // hub / albums / library pages / dialogs / settings callbacks
     crate::pages::install(&app);
+    crate::login::install(&app);
     // viewer, selection / actions, drag & drop, fast scroller
     crate::actions_ui::install(&app);
     // explore pages, memory player, map, mini map
@@ -738,4 +728,25 @@ fn view_options_of(p: &Prefs) -> ViewOptions {
             _ => None,
         },
     }
+}
+
+/// `GET /api/info` → read-only flag, scan state; 401 → sign-in screen
+pub(crate) fn load_info(app: &Rc<AppInner>) {
+    let w = Rc::downgrade(app);
+    app.rt.spawn_then(app.backend.info(), move |r| {
+        let Some(a) = w.upgrade() else { return };
+        match r {
+            Ok(info) => {
+                let shell = a.window.global::<Shell>();
+                shell.set_readonly(info.caps.readonly);
+                shell.set_scanning(info.scanning);
+                shell.set_scan_walking(true);
+                shell.set_scan_text(a.t("native.scanWalking").into());
+            }
+            Err(e) if e.status == 401 => crate::login::show(&a),
+            Err(e) => {
+                a.toast(ToastKind::Error, &a.t("common.error"), &e.message);
+            }
+        }
+    });
 }

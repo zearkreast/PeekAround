@@ -8,6 +8,15 @@ import { TileData, HeaderData } from "pages/grid.slint";
 export enum Page { photos, explore, favorites, albums, library, settings, search, album, lib, folder, explore-result, explore-places, explore-dups, explore-map, fonts, slideshow, collage, trash }
 export enum Conn { connecting, online, offline }
 
+// sign-in of a server with a password (src/login.rs)
+export global Login {
+    in property <bool> busy;
+    in property <string> error;
+    // the server this window talks to (shown under the title)
+    in property <string> server;
+    callback submit(/* password */ string, /* remember */ bool);
+}
+
 export global Shell {
     in-out property <Page> page: Page.photos;
     // bumps on every navigation (page transitions replay even for the same page, e.g. a new search)
@@ -20,6 +29,8 @@ export global Shell {
     in property <bool> scan-walking;
     in property <string> server-label;
     in property <bool> readonly;
+    // the server asks for a password: the sign-in screen covers the app
+    in property <bool> need-login;
     // the Android app (or PA_PHONE=1): phone layout below 720px, back key
     in property <bool> phone;
     // the browser build: its window is a tab of any size, so it lays out like a phone when narrow

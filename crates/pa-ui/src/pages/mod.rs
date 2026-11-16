@@ -193,6 +193,13 @@ pub(crate) fn install(app: &Rc<AppInner>) {
     jobs::load(app);
 }
 
+/// After signing in: the data every screen loaded at start.
+pub(crate) fn reload_all(app: &Rc<AppInner>) {
+    hub::load_libraries(app);
+    albums::load_albums(app);
+    jobs::load(app);
+}
+
 /// a route was entered
 pub(crate) fn enter(app: &Rc<AppInner>, route: &Route) {
     app.pages.epoch.set(app.pages.epoch.get() + 1);

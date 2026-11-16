@@ -36,6 +36,16 @@ pub fn qs(pairs: &[(&str, &str)]) -> String {
     }
 }
 
+thread_local! {
+    /// set while a caller handles a 501 ("this backend has no such route", e.g. the demo)
+    static UNSUPPORTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The answer being handled is a 501: a missing feature of this backend, not an error to show.
+pub(crate) fn handling_unsupported() -> bool {
+    UNSUPPORTED.with(|u| u.get())
+}
+
 /// Call a route; `then` runs on the UI thread with the decoded answer.
 pub(crate) fn call<T: DeserializeOwned + Send + 'static>(
     app: &Rc<AppInner>,
@@ -56,7 +66,15 @@ pub(crate) fn call<T: DeserializeOwned + Send + 'static>(
         },
         move |r| {
             if let Some(a) = weak.upgrade() {
+                // signed out (server with a password): the sign-in screen; the caller still gets the
+                // error (its loading state ends), error toasts stay quiet behind the screen
+                if matches!(&r, Err(e) if e.status == 401) {
+                    crate::login::show(&a);
+                }
+                let unsupported = matches!(&r, Err(e) if e.status == 501);
+                UNSUPPORTED.with(|u| u.set(unsupported));
                 then(&a, r);
+                UNSUPPORTED.with(|u| u.set(false));
             }
         },
     );

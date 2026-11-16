@@ -172,6 +172,9 @@ impl Explore {
                         );
                     }
                 }
+                Err(e) if e.status == 501 => {
+                    *me.error.borrow_mut() = crate::i18n::t(me.lang(), "native.unavailable")
+                }
                 Err(e) => *me.error.borrow_mut() = e.message,
             }
             me.on_data();

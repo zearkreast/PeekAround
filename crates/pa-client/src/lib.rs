@@ -111,6 +111,8 @@ struct Inner {
     base: String,
     http: reqwest::Client,
     auth: RwLock<Option<DeviceAuth>>,
+    /// sign-in session of a server with a password (used when there is no device auth)
+    session: RwLock<Option<String>>,
 }
 
 /// PeekAround API client.
@@ -152,6 +154,7 @@ impl Client {
                 base,
                 http,
                 auth: RwLock::new(None),
+                session: RwLock::new(None),
             }),
         })
     }
@@ -172,6 +175,28 @@ impl Client {
         self.inner.auth.read().unwrap().clone()
     }
 
+    /// Use (or drop) a sign-in session token (`POST /api/auth/login`) for every request, media
+    /// URL and the events socket.
+    pub fn set_session(&self, token: Option<String>) {
+        *self.inner.session.write().unwrap() = token.filter(|t| !t.is_empty());
+    }
+
+    /// Current sign-in session token.
+    pub fn session(&self) -> Option<String> {
+        self.inner.session.read().unwrap().clone()
+    }
+
+    /// `?pdev=&ptok=` or `?psess=` for consumers that cannot send headers ("" without credentials)
+    fn auth_query(&self) -> String {
+        if let Some(a) = &*self.inner.auth.read().unwrap() {
+            return format!("pdev={}&ptok={}", encode_seg(&a.device_id), encode_seg(&a.token));
+        }
+        match &*self.inner.session.read().unwrap() {
+            Some(t) => format!("psess={}", encode_seg(t)),
+            None => String::new(),
+        }
+    }
+
     fn url(&self, p: &str) -> String {
         format!("{}{}", self.inner.base, p)
     }
@@ -179,17 +204,12 @@ impl Client {
     /// Media URL + `pdev`/`ptok` when paired (`<img>`-style consumers cannot send headers).
     fn murl(&self, p: &str) -> String {
         let u = self.url(p);
-        match &*self.inner.auth.read().unwrap() {
-            None => u,
-            Some(a) => {
-                let sep = if u.contains('?') { '&' } else { '?' };
-                format!(
-                    "{u}{sep}pdev={}&ptok={}",
-                    encode_seg(&a.device_id),
-                    encode_seg(&a.token)
-                )
-            }
+        let q = self.auth_query();
+        if q.is_empty() {
+            return u;
         }
+        let sep = if u.contains('?') { '&' } else { '?' };
+        format!("{u}{sep}{q}")
     }
 
     fn request(&self, method: reqwest::Method, p: &str) -> reqwest::RequestBuilder {
@@ -198,6 +218,8 @@ impl Client {
             rb = rb
                 .header("Authorization", format!("Bearer {}", a.token))
                 .header("X-Peek-Device", a.device_id.clone());
+        } else if let Some(t) = &*self.inner.session.read().unwrap() {
+            rb = rb.header("Authorization", format!("Bearer {t}"));
         }
         rb
     }
@@ -695,6 +717,8 @@ impl Client {
             rb = rb
                 .header("Authorization", format!("Bearer {}", a.token))
                 .header("X-Peek-Device", a.device_id.clone());
+        } else if let Some(t) = &*self.inner.session.read().unwrap() {
+            rb = rb.header("Authorization", format!("Bearer {t}"));
         }
         self.send(rb)
             .await?
@@ -771,6 +795,16 @@ impl Client {
         let mut qs = Qs::new();
         qs.str("ids", &ids.join(",")).opt("name", name);
         self.murl(&format!("/api/download{qs}"))
+    }
+
+    /// [`Client::events_url`] with the current credentials in the query
+    pub fn events_url_auth(&self) -> String {
+        let q = self.auth_query();
+        if q.is_empty() {
+            self.events_url()
+        } else {
+            format!("{}?{q}", self.events_url())
+        }
     }
 
     /// `ws://…/api/events` (or `wss://`)

@@ -1,0 +1,70 @@
+// Sign-in screen of a server with a password (PEEK_PASSWORD): over everything until signed in.
+
+import { Theme, I18n } from "../theme.slint";
+import { Icons } from "../icons.slint";
+import { Login } from "../globals.slint";
+import { Button, ButtonVariant, ButtonSize } from "../components/button.slint";
+import { TextField, Checkbox } from "../components/inputs.slint";
+
+export component LoginScreen inherits Rectangle {
+    background: Theme.bg;
+    property <bool> remember: true;
+    // swallow clicks meant for the app below
+    TouchArea { }
+    card := Rectangle {
+        width: Math.min(380px, root.width - 32px);
+        height: lay.preferred-height;
+        x: (root.width - self.width) / 2;
+        y: Math.max(24px, (root.height - self.height) / 2);
+    lay := VerticalLayout {
+        width: parent.width;
+        spacing: 18px;
+        HorizontalLayout { alignment: start; Image { source: Icons.logo; width: 48px; height: 48px; } }
+        VerticalLayout {
+            spacing: 6px;
+            Text {
+                text: I18n.t("login.title", I18n.rev);
+                font-family: Theme.font-display;
+                font-size: 30px;
+                font-weight: 700;
+                color: Theme.text;
+            }
+            Text {
+                text: Login.server != "" ? Login.server + " · " + I18n.t("login.body", I18n.rev) : I18n.t("login.body", I18n.rev);
+                font-size: 14px;
+                color: Theme.text-dim;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            spacing: 6px;
+            Text { text: I18n.t("login.password", I18n.rev); font-size: 13px; color: Theme.text-dim; }
+            pw := TextField {
+                height: 44px;
+                password: true;
+                enabled: !Login.busy;
+                accepted(t) => { Login.submit(t, root.remember); }
+            }
+        }
+        Checkbox {
+            label: I18n.t("login.remember", I18n.rev);
+            checked <=> root.remember;
+        }
+        if Login.error != "": Text {
+            text: Login.error;
+            font-size: 13px;
+            color: Theme.danger;
+            wrap: word-wrap;
+        }
+        Button {
+            text: I18n.t("login.submit", I18n.rev);
+            variant: ButtonVariant.primary;
+            size: ButtonSize.lg;
+            loading: Login.busy;
+            enabled: !Login.busy && pw.text != "";
+            clicked => { Login.submit(pw.text, root.remember); }
+        }
+    }
+    }
+    init => { pw.focus-input(); }
+}

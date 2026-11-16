@@ -98,6 +98,9 @@ pub struct Prefs {
     pub slide_duration: f64,
     /// slideshow: transition
     pub slide_transition: String,
+    /// sign-in token per server (servers with PEEK_PASSWORD), keyed by the backend label
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub sessions: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for Prefs {
@@ -143,6 +146,7 @@ impl Default for Prefs {
             library_view: Default::default(),
             slide_duration: 4.0,
             slide_transition: "fade".into(),
+            sessions: Default::default(),
         }
     }
 }

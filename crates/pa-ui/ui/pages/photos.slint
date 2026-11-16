@@ -9,6 +9,8 @@ import { Skeleton, EmptyState, Spinner } from "../components/feedback.slint";
 import { ExploreState } from "explore/state.slint";
 import { EIcons } from "explore/icons.slint";
 import { Carousel, SectionLink, StripCard } from "explore/cards.slint";
+import { Welcome } from "welcome.slint";
+import { HubState } from "state.slint";
 
 export component PhotosPage inherits Rectangle {
     in property <image> title-icon: Icons.images;
@@ -89,7 +91,13 @@ export component PhotosPage inherits Rectangle {
         }
     }
 
-    if !GridState.loading && GridState.total == 0: VerticalLayout {
+    // first start: no library yet
+    property <bool> welcome: Shell.page == Page.photos && HubState.loaded && HubState.libraries.length == 0 && !Shell.readonly && GridState.error == "";
+    if !GridState.loading && GridState.total == 0 && root.welcome: Welcome {
+        y: root.head-h;
+        height: root.height - root.head-h;
+    }
+    if !GridState.loading && GridState.total == 0 && !root.welcome: VerticalLayout {
         y: root.head-h;
         height: root.height - root.head-h;
         alignment: start;

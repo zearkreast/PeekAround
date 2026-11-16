@@ -138,6 +138,9 @@ pub trait Backend: Shared + 'static {
         })
     }
 
+    /// Sign-in session for servers with a password (`POST /api/auth/login`); None signs out.
+    fn set_session(&self, _token: Option<String>) {}
+
     /// Absolute URL of a server path (downloads, links); None without an HTTP server.
     fn url(&self, _path: &str) -> Option<String> {
         None
@@ -257,6 +260,9 @@ fn berr(e: pa_client::Error) -> BackendError {
 impl Backend for HttpBackend {
     fn ops(&self) -> Option<&dyn crate::actions_ops::MediaOps> {
         Some(self)
+    }
+    fn set_session(&self, token: Option<String>) {
+        self.client.set_session(token);
     }
     fn label(&self) -> String {
         self.client.base().to_string()
