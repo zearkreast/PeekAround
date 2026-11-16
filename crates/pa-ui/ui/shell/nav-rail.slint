@@ -3,7 +3,6 @@
 import { Theme, Motion, I18n } from "../theme.slint";
 import { Icons } from "../icons.slint";
 import { Shell, Page, Conn } from "../globals.slint";
-import { ProgressRing } from "../components/feedback.slint";
 import { TooltipBubble } from "../components/button.slint";
 import { DragState } from "../grid/input.slint";
 import { DropTarget } from "../grid/dnd.slint";
@@ -16,6 +15,8 @@ component RailItem inherits Rectangle {
     in property <string> label;
     in property <bool> active;
     callback clicked();
+    // a touch leaves the pointer "hovering" where it tapped: no hover look on a phone
+    property <bool> hover: ta.has-hover && !Shell.phone;
     height: 62px;
     // the active pill is drawn by the rail (it slides between items); this is the hover one
     Rectangle {
@@ -23,24 +24,25 @@ component RailItem inherits Rectangle {
         width: 56px;
         height: 32px;
         border-radius: 16px;
-        background: ta.has-hover && !root.active ? Theme.surface-2 : transparent;
+        background: root.hover && !root.active ? Theme.surface-2 : transparent;
         animate background { duration: Motion.fast; }
     }
     Image {
         y: 12px;
         source: root.active ? root.icon-active : root.icon;
-        colorize: root.active ? Theme.accent : ta.has-hover ? Theme.text : Theme.text-dim;
+        colorize: root.active ? Theme.accent : root.hover ? Theme.text : Theme.text-dim;
         width: 20px;
         height: 20px;
         animate colorize { duration: Motion.fast; }
     }
     Text {
         y: 42px;
-        width: parent.width - 8px;
+        // six tabs share a phone's width: "Fotoğraflar" must still fit
+        width: parent.width - (Shell.compact ? 2px : 8px);
         text: root.label;
-        font-size: 11.5px;
+        font-size: Shell.compact ? 10.5px : 11.5px;
         font-weight: 500;
-        color: root.active || ta.has-hover ? Theme.text : Theme.text-dim;
+        color: root.active || root.hover ? Theme.text : Theme.text-dim;
         horizontal-alignment: center;
         overflow: elide;
         animate color { duration: Motion.fast; }
@@ -222,22 +224,6 @@ export component NavRail inherits Rectangle {
                     x: parent.width + 8px;
                     text: I18n.t("nav.offline", I18n.rev);
                     show: ota.has-hover;
-                }
-            }
-        }
-        if Shell.scanning: HorizontalLayout {
-            alignment: center;
-            padding-top: 4px;
-            padding-bottom: 4px;
-            Rectangle {
-                width: 22px;
-                height: 22px;
-                ProgressRing { value: Shell.scan-progress; size: 22px; stroke: 2.5px; }
-                sta := TouchArea { }
-                TooltipBubble {
-                    x: parent.width + 8px;
-                    text: Shell.scan-text;
-                    show: sta.has-hover;
                 }
             }
         }

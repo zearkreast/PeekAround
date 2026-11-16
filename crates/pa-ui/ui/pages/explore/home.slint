@@ -41,17 +41,23 @@ component CalendarCard inherits Rectangle {
                 }
                 yta := TouchArea { mouse-cursor: pointer; clicked => { ExploreState.cal-pick(y.year); } }
             }
-            Rectangle { horizontal-stretch: 1; }
             Text {
+                horizontal-stretch: 1;
                 text: ExploreState.cal-total;
                 font-size: 12px;
                 color: Theme.text-faint;
                 vertical-alignment: center;
+                horizontal-alignment: right;
+                overflow: elide;
+                min-width: 0px;
             }
         }
-        Rectangle {
+        // a year is wider than a phone: it scrolls inside the card, the latest weeks in view
+        Flickable {
             height: 16px + 4px + 7 * root.step - 3px;
-            clip: false;
+            content-width: Math.max(self.width, ExploreState.cal-cols * root.step - 3px);
+            content-height: self.height;
+            content-x: Math.min(0px, self.width - self.content-width);
             // month labels: left = column × (cell + gap)
             for m in ExploreState.cal-months: Text {
                 x: m.col * root.step;
@@ -197,6 +203,7 @@ export component ExplorePage inherits Rectangle {
     property <bool> ready: !ExploreState.loading && !ExploreState.empty;
 
     fl := Flickable {
+        content-width: self.width;
         width: root.width;
         height: root.height;
         content-height: col.preferred-height + 24px + 112px;

@@ -360,6 +360,7 @@ export component TextProps inherits Rectangle {
                 background: Theme.bg-elev;
                 clip: true;
                 Flickable {
+                    content-width: self.width;
                     content-height: root.fonts.length * 36px + 8px;
                     for f[i] in root.fonts: Rectangle {
                         x: 4px;

@@ -116,6 +116,7 @@ export component MediaPickerDialog inherits Rectangle {
                     property <length> tw: (self.width - 12px - (self.cols - 1) * 6px) / self.cols;
                     if MediaPickerState.loading: Spinner { size: 24px; }
                     fl := Flickable {
+                        content-width: self.width;
                         visible: !MediaPickerState.loading;
                         content-height: list.preferred-height;
                         list := VerticalLayout {

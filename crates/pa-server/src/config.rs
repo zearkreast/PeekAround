@@ -91,6 +91,8 @@ pub struct ServerOptions {
     pub hooks: Option<Arc<dyn DesktopHooks>>,
     /// version reported by /api/info
     pub version: String,
+    /// a phone: one background worker and few decode slots, whatever the indexing intensity
+    pub light: bool,
 }
 
 impl ServerOptions {
@@ -114,6 +116,7 @@ impl ServerOptions {
             logger: false,
             hooks: None,
             version: "1.3.2".into(),
+            light: false,
         }
     }
 }
@@ -137,6 +140,7 @@ pub struct ResolvedConfig {
     pub logger: bool,
     pub hooks: Option<Arc<dyn DesktopHooks>>,
     pub version: String,
+    pub light: bool,
     pub cache_dir: PathBuf,
     pub thumb_dir: PathBuf,
     pub temp_dir: PathBuf,
@@ -177,6 +181,7 @@ impl ResolvedConfig {
             logger: o.logger,
             hooks: o.hooks.clone(),
             version: o.version.clone(),
+            light: o.light,
             thumb_dir: cache_dir.join("thumbs"),
             temp_dir: data_dir.join("temp"),
             font_dir: data_dir.join("fonts"),

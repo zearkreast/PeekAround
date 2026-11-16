@@ -964,6 +964,7 @@ export component CollagePage inherits Rectangle {
                     ToolTab { icon: EIcons.type; text: I18n.t("collage.tab.text", I18n.rev); selected: CollageState.tab == "text"; clicked => { CollageState.set-tab("text"); fs.focus(); } }
                 }
                 Flickable {
+                    content-width: self.width;
                     vertical-stretch: 1;
                     content-height: panel.preferred-height;
                     panel := VerticalLayout {

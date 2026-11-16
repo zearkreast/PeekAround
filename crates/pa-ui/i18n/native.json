@@ -15,7 +15,9 @@
     "native.lanScanApp": "Telefondaki PeekAround uygulamasıyla okut",
     "native.addressCopied": "Adres kopyalandı",
     "viewer.path": "Dosya yolu",
-    "native.pairTitle": "{name} bağlanmak istiyor"
+    "native.pairTitle": "{name} bağlanmak istiyor",
+    "native.scanWalking": "Klasörler taranıyor…",
+    "native.scanCount": "{done} / {total} işlendi"
   },
   "en": {
     "native.soon.title": "Coming soon",
@@ -32,6 +34,8 @@
     "settings.lanShareHint": "The PeekAround app on phones and tablets on the same network can connect to this computer. Browser access is only available with the Docker server.",
     "native.lanScanApp": "Scan it in the PeekAround app on your phone",
     "native.addressCopied": "Address copied",
-    "native.pairTitle": "{name} wants to connect"
+    "native.pairTitle": "{name} wants to connect",
+    "native.scanWalking": "Looking through your folders…",
+    "native.scanCount": "{done} / {total} done"
   }
 }

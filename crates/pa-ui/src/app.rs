@@ -386,6 +386,8 @@ impl AppInner {
                 ServerEvent::Hello { info } => {
                     shell.set_readonly(info.caps.readonly);
                     shell.set_scanning(info.scanning);
+                    shell.set_scan_walking(true);
+                    shell.set_scan_text(self.t("native.scanWalking").into());
                 }
                 ServerEvent::Media { reason, .. } => {
                     self.grid.0.borrow_mut().on_media_event(reason)
@@ -395,20 +397,23 @@ impl AppInner {
                     done,
                     total,
                 } => {
-                    shell.set_scanning(scanning && total > 0);
+                    shell.set_scanning(scanning);
+                    shell.set_scan_walking(total <= 0);
                     shell.set_scan_progress(if total > 0 {
-                        done as f32 / total as f32
+                        done.min(total) as f32 / total as f32
                     } else {
                         0.0
                     });
-                    let (d, t) = (
-                        i18n::format_count(self.lang(), done),
-                        i18n::format_count(self.lang(), total),
-                    );
-                    shell.set_scan_text(
-                        i18n::tv(self.lang(), "nav.scanning", &[("done", &d), ("total", &t)])
-                            .into(),
-                    );
+                    let text = if total > 0 {
+                        let (d, t) = (
+                            i18n::format_count(self.lang(), done.min(total)),
+                            i18n::format_count(self.lang(), total),
+                        );
+                        i18n::tv(self.lang(), "native.scanCount", &[("done", &d), ("total", &t)])
+                    } else {
+                        self.t("native.scanWalking")
+                    };
+                    shell.set_scan_text(text.into());
                     if !scanning {
                         self.grid.0.borrow_mut().on_media_event(None);
                     }
@@ -646,6 +651,8 @@ pub fn run_with(
                 let shell = a.window.global::<Shell>();
                 shell.set_readonly(info.caps.readonly);
                 shell.set_scanning(info.scanning);
+                shell.set_scan_walking(true);
+                shell.set_scan_text(a.t("native.scanWalking").into());
             }
             Err(e) => {
                 a.toast(ToastKind::Error, &a.t("common.error"), &e.message);

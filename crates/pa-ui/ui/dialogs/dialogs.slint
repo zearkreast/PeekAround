@@ -12,6 +12,7 @@ import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from ".
 import { TextField, Switch, Checkbox, Segmented, SegOption, ColorSwatches } from "../components/inputs.slint";
 import { Select, SelectOption } from "../components/overlays.slint";
 import { Spinner, Kbd } from "../components/feedback.slint";
+import { WrapText } from "../components/wrap-text.slint";
 
 export struct PickRowData {
     key: string,
@@ -173,7 +174,7 @@ component Field inherits VerticalLayout {
     spacing: 6px;
     Text { text: root.label; font-size: 13px; font-weight: 500; color: Theme.text-dim; }
     @children
-    if root.hint != "": Text { text: root.hint; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+    if root.hint != "": WrapText { text: root.hint; font-size: 12px; color: Theme.text-faint; }
 }
 
 component TriBox inherits Rectangle {
@@ -223,7 +224,7 @@ component HowCard inherits Rectangle {
                 bt := Text { text: root.badge; font-size: 10px; font-weight: 600; color: Theme.ok; }
             }
         }
-        Text { text: root.hint; font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+        WrapText { text: root.hint; font-size: 12px; color: Theme.text-faint; }
     }
     ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
 }
@@ -386,7 +387,7 @@ component ExclusionsDialog inherits Dialog {
     VerticalLayout {
         spacing: 16px;
         padding-bottom: 8px;
-        Text { text: I18n.t("lib2.ex.body", I18n.rev); font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
+        WrapText { text: I18n.t("lib2.ex.body", I18n.rev); font-size: 14px; color: Theme.text-dim; }
         Field {
             label: I18n.t("lib2.ex.patterns", I18n.rev);
             hint: I18n.t("lib2.ex.patternsHint", I18n.rev);
@@ -470,7 +471,7 @@ component ExclusionsDialog inherits Dialog {
                 VerticalLayout {
                     horizontal-stretch: 1;
                     Text { text: I18n.t("lib2.ex.hidden", I18n.rev); font-size: 14px; font-weight: 500; color: Theme.text; }
-                    Text { text: Dlg.ex-hidden < 0 ? I18n.t("lib2.ex.hiddenDefault", I18n.rev) : I18n.t("lib2.ex.hiddenHint", I18n.rev); font-size: 12px; color: Theme.text-dim; wrap: word-wrap; }
+                    WrapText { text: Dlg.ex-hidden < 0 ? I18n.t("lib2.ex.hiddenDefault", I18n.rev) : I18n.t("lib2.ex.hiddenHint", I18n.rev); font-size: 12px; color: Theme.text-dim; }
                 }
                 if Dlg.ex-hidden >= 0: VerticalLayout {
                     alignment: center;
@@ -503,7 +504,7 @@ component MegaDialog inherits Dialog {
         padding-bottom: 12px;
         if Dlg.mega-stage != "tree": VerticalLayout {
             spacing: 12px;
-            Text { text: Dlg.mega-intro; font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
+            WrapText { text: Dlg.mega-intro; font-size: 14px; color: Theme.text-dim; }
             HorizontalLayout {
                 spacing: 8px;
                 mu := TextField {
@@ -543,7 +544,7 @@ component MegaDialog inherits Dialog {
                     padding: 16px;
                     spacing: 12px;
                     Image { source: Icons.triangle-alert; colorize: Theme.danger; width: 16px; height: 16px; }
-                    Text { text: Dlg.mega-error; font-size: 14px; color: Theme.danger; wrap: word-wrap; horizontal-stretch: 1; }
+                    WrapText { text: Dlg.mega-error; font-size: 14px; color: Theme.danger; horizontal-stretch: 1; }
                     if Dlg.mega-retry: Text {
                         text: I18n.t("common.retry", I18n.rev);
                         font-size: 14px;
@@ -553,7 +554,7 @@ component MegaDialog inherits Dialog {
                     }
                 }
             }
-            Text { text: I18n.t("remote.pasteHint", I18n.rev); font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+            WrapText { text: I18n.t("remote.pasteHint", I18n.rev); font-size: 12px; color: Theme.text-faint; }
         }
         if Dlg.mega-stage == "tree": VerticalLayout {
             spacing: 16px;
@@ -683,6 +684,7 @@ component MegaDialog inherits Dialog {
                             Rectangle { y: parent.height - 1px; height: 1px; background: Theme.border; }
                         }
                         Flickable {
+                            content-width: self.width;
                             height: Math.min(300px, Dlg.mega-tree.length * 40px + 8px + (Dlg.mega-more-rows ? 30px : 0px));
                             content-height: Dlg.mega-tree.length * 40px + 8px + (Dlg.mega-more-rows ? 30px : 0px);
                             VerticalLayout {
@@ -744,7 +746,7 @@ component MegaDialog inherits Dialog {
                         value <=> Dlg.mega-mode;
                     }
                 }
-                Text { text: Dlg.mega-mode == "extract" ? I18n.t("remote.mode.extractHint", I18n.rev) : I18n.t("remote.mode.tempHint", I18n.rev); font-size: 12px; color: Theme.text-faint; wrap: word-wrap; }
+                WrapText { text: Dlg.mega-mode == "extract" ? I18n.t("remote.mode.extractHint", I18n.rev) : I18n.t("remote.mode.tempHint", I18n.rev); font-size: 12px; color: Theme.text-faint; }
                 if Dlg.mega-mode == "extract": Rectangle {
                     height: 48px;
                     border-radius: 16px;
@@ -839,10 +841,10 @@ component PairDialog inherits Dialog {
             }
         }
         Rectangle { height: 16px; }
-        Text { text: I18n.t1("native.pairTitle", "name", Dlg.pair-name, I18n.rev); font-family: Theme.font-display; font-size: 20px; font-weight: 600; color: Theme.text; horizontal-alignment: center; wrap: word-wrap; }
+        WrapText { text: I18n.t1("native.pairTitle", "name", Dlg.pair-name, I18n.rev); font-family: Theme.font-display; font-size: 20px; font-weight: 600; color: Theme.text; horizontal-alignment: center; }
         if Dlg.pair-model != "": Text { text: Dlg.pair-model; font-size: 14px; color: Theme.text-faint; horizontal-alignment: center; }
         Rectangle { height: 12px; }
-        Text { text: I18n.t("devices.pair.body", I18n.rev); font-size: 14px; color: Theme.text-dim; horizontal-alignment: center; wrap: word-wrap; }
+        WrapText { text: I18n.t("devices.pair.body", I18n.rev); font-size: 14px; color: Theme.text-dim; horizontal-alignment: center; }
         Rectangle { height: 20px; }
         if Dlg.pair-digits.length > 0: HorizontalLayout {
             alignment: center;
@@ -864,7 +866,7 @@ component PairDialog inherits Dialog {
             }
         }
         Rectangle { height: 16px; }
-        Text { text: I18n.t("devices.pair.hint", I18n.rev); font-size: 12px; color: Theme.text-faint; horizontal-alignment: center; wrap: word-wrap; }
+        WrapText { text: I18n.t("devices.pair.hint", I18n.rev); font-size: 12px; color: Theme.text-faint; horizontal-alignment: center; }
         Rectangle { height: 24px; }
         HorizontalLayout {
             spacing: 10px;
@@ -922,7 +924,7 @@ component Choice inherits Rectangle {
             spacing: 2px;
             alignment: center;
             Text { text: root.title; font-size: 15px; font-weight: 500; color: Theme.text; }
-            Text { text: root.hint; font-size: 13px; color: Theme.text-dim; wrap: word-wrap; }
+            WrapText { text: root.hint; font-size: 13px; color: Theme.text-dim; }
         }
     }
     ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
@@ -951,7 +953,7 @@ component ZipDialog inherits Dialog {
         }
         Rectangle { height: 12px; }
         Text { text: I18n.t("zip.title", I18n.rev); font-family: Theme.font-display; font-size: 20px; font-weight: 600; color: Theme.text; horizontal-alignment: center; }
-        Text { text: Dlg.zip-text; font-size: 14px; color: Theme.text-dim; horizontal-alignment: center; wrap: word-wrap; }
+        WrapText { text: Dlg.zip-text; font-size: 14px; color: Theme.text-dim; horizontal-alignment: center; }
         Rectangle { height: 16px; }
         VerticalLayout {
             spacing: 10px;
@@ -999,7 +1001,7 @@ component LinkDialog inherits Dialog {
     VerticalLayout {
         spacing: 10px;
         padding-bottom: 12px;
-        Text { text: Dlg.link-text; font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
+        WrapText { text: Dlg.link-text; font-size: 14px; color: Theme.text-dim; }
         Rectangle { height: 6px; }
         Choice {
             primary: true;
@@ -1023,6 +1025,7 @@ component ShortcutsDialog inherits Dialog {
     panel-width: 720px;
     close => { Dlg.close(); }
     Flickable {
+        content-width: self.width;
         height: Math.min(560px, sl.preferred-height);
         content-height: sl.preferred-height;
         sl := VerticalLayout {
@@ -1059,7 +1062,7 @@ component ConfirmDialog inherits Dialog {
     busy: Dlg.busy;
     close => { Dlg.close-top(); }
     confirm => { Dlg.confirm-top(); }
-    if Dlg.c-body != "": Text { text: Dlg.c-body; font-size: 14px; color: Theme.text-dim; wrap: word-wrap; }
+    if Dlg.c-body != "": WrapText { text: Dlg.c-body; font-size: 14px; color: Theme.text-dim; }
 }
 
 component PromptDialog inherits Dialog {
@@ -1146,6 +1149,7 @@ component PickerDialog inherits Dialog {
             clip: true;
             if Dlg.pick-loading: Spinner { }
             if !Dlg.pick-loading: Flickable {
+                content-width: self.width;
                 content-height: Dlg.pick-rows.length * 42px + 68px;
                 VerticalLayout {
                     padding: 4px;

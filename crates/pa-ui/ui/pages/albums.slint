@@ -173,6 +173,8 @@ export component AlbumPage inherits Rectangle {
     property <length> menu-y;
 
     grid := MediaGrid {
+
+        compact: Shell.compact;
         width: root.width;
         height: root.height;
         tiles: GridState.tiles;

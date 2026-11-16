@@ -91,6 +91,8 @@ export component ResultPage inherits Rectangle {
         + (EResultState.hint != "" ? 96px : 0px);
 
     if !EResultState.missing: MediaGrid {
+
+        compact: Shell.compact;
         width: root.width;
         height: root.height;
         tiles: GridState.tiles;
@@ -259,6 +261,7 @@ export component PlacesPage inherits Rectangle {
     property <length> ch: root.w + 48px;
 
     fl := Flickable {
+        content-width: self.width;
         width: root.width;
         height: root.height;
         content-height: col.preferred-height + 20px + 112px;
@@ -428,6 +431,7 @@ export component DuplicatesPage inherits Rectangle {
     property <length> cx: (root.width - 12px - cw) / 2;
 
     fl := Flickable {
+        content-width: self.width;
         width: root.width;
         height: root.height;
         content-height: col.preferred-height + 20px + 112px;

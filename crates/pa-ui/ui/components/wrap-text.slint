@@ -1,0 +1,32 @@
+import { Theme } from "../theme.slint";
+
+
+// Word-wrapped text with the right height inside an `if` / `for` layout. Slint 1.18 measures a
+// wrapped Text there as if it were as wide as the enclosing layout before its padding, so cards
+// came out a line or two short and the text spilled out of them.
+export component WrapText {
+    in property <string> text;
+    in property <length> font-size: 14px;
+    in property <int> font-weight: 400;
+    // empty: the window default
+    in property <string> font-family;
+    in property <color> color: Theme.text;
+    in property <length> letter-spacing;
+    in property <TextHorizontalAlignment> horizontal-alignment: left;
+    in property <TextVerticalAlignment> vertical-alignment: top;
+    min-width: 0px;
+    preferred-width: t.preferred-width;
+    height: t.preferred-height;
+    t := Text {
+        width: parent.width;
+        text: root.text;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        font-family: root.font-family;
+        color: root.color;
+        letter-spacing: root.letter-spacing;
+        horizontal-alignment: root.horizontal-alignment;
+        vertical-alignment: root.vertical-alignment;
+        wrap: word-wrap;
+    }
+}

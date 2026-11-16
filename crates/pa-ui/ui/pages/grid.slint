@@ -289,7 +289,9 @@ export component MediaGrid inherits Rectangle {
     // height of the built-in title row when the page adds more under it (Photos memories row)
     in property <length> title-height: root.header-height;
     // `max-w-[1800px] px-7` of the gallery page
-    in property <length> side-padding: 28px;
+    // the phone layout (Shell.compact; globals.slint imports this file)
+    in property <bool> compact;
+    in property <length> side-padding: root.compact ? 12px : 28px;
     in property <length> content-max-width: 1800px;
     in-out property <length> scroll-y;
     out property <length> grid-width: Math.min(root.width - 2 * root.side-padding - 12px, root.content-max-width);
@@ -360,13 +362,15 @@ export component MediaGrid inherits Rectangle {
                     text: root.subtitle;
                     font-size: 14px;
                     color: Theme.text-dim;
+                    overflow: elide;
                 }
             }
             if root.action-label != "": VerticalLayout {
                 alignment: end;
                 padding-bottom: 6px;
                 Button {
-                    text: root.action-label;
+                    // a phone has no room for the label beside the counts
+                    text: root.compact ? "" : root.action-label;
                     icon: root.action-icon;
                     has-icon: true;
                     size: ButtonSize.sm;

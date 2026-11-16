@@ -42,6 +42,8 @@ export component ScrollPage inherits Rectangle {
     in-out property <length> scroll-y <=> fl.content-y;
     out property <length> visible-height: fl.height;
     fl := Flickable {
+        // vertical only: a wide child must not make the page pan sideways
+        content-width: self.width;
         width: root.width;
         height: root.height;
         content-height: root.content-height;

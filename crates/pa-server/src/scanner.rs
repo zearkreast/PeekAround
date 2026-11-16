@@ -1004,8 +1004,35 @@ fn folder_of(ctx: &Ctx, id: i64) -> Option<FolderRow> {
     library::folder_row(ctx, id).ok()
 }
 
+/// How often the meta pass reports new metadata. Every report makes the UI reload the grid, which
+/// re-sorts as capture dates arrive: a big first scan reports rarely so the device stays usable.
+fn meta_report_every(pending: i64) -> Duration {
+    match pending {
+        p if p > 2000 => Duration::from_secs(20),
+        p if p > 300 => Duration::from_secs(8),
+        _ => Duration::from_secs(3),
+    }
+}
+
 async fn meta_loop(ctx: &C) {
-    *ctx.scanner.progress.lock() = (0, pending_count(ctx));
+    let pending = pending_count(ctx);
+    *ctx.scanner.progress.lock() = (0, pending);
+    let every = meta_report_every(pending);
+    let touched: Arc<Mutex<HashMap<i64, indexmap::IndexSet<String>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    let report = |ctx: &C| {
+        let t = std::mem::take(&mut *touched.lock());
+        if t.is_empty() {
+            return;
+        }
+        for (fid, dirs) in t {
+            for d in dirs {
+                ctx.events.media_changed(&fid.to_string(), &d, MediaReason::Meta);
+            }
+        }
+        ctx.explore.invalidate(ctx, true);
+    };
+    let mut last_report = Instant::now();
     loop {
         if ctx.scanner.stopped() {
             break;
@@ -1022,48 +1049,62 @@ async fn meta_loop(ctx: &C) {
             break;
         }
         let c0 = ctx.clone();
-        each(ctx, rows, move || c0.scanner.stopped(), |ctx: C, r: MediaRow| async move {
-            if ctx.scanner.stopped() {
-                return;
-            }
-            let Some(folder) = folder_of(&ctx, r.folder_id) else { return };
-            let a = abs(&folder, &r.dir, &r.name);
-            let done = {
-                let ctx = ctx.clone();
-                let (fid, dir) = (r.folder_id.to_string(), r.dir.clone());
-                move || {
-                    ctx.events.media_changed(&fid, &dir, MediaReason::Meta);
-                    ctx.scanner.progress.lock().0 += 1;
-                    emit_scan(&ctx, false);
+        let touched2 = touched.clone();
+        each(ctx, rows, move || c0.scanner.stopped(), move |ctx: C, r: MediaRow| {
+            let touched = touched2.clone();
+            async move {
+                if ctx.scanner.stopped() {
+                    return;
                 }
-            };
-            match extract_meta(&ctx, &a, &r, false).await {
-                Ok(m) => {
-                    if ctx.scanner.stopped() {
-                        return;
+                let Some(folder) = folder_of(&ctx, r.folder_id) else { return };
+                let a = abs(&folder, &r.dir, &r.name);
+                let done = {
+                    let ctx = ctx.clone();
+                    let (fid, dir) = (r.folder_id, r.dir.clone());
+                    move || {
+                        touched.lock().entry(fid).or_default().insert(dir);
+                        ctx.scanner.progress.lock().0 += 1;
+                        emit_scan(&ctx, false);
                     }
-                    let g = group_columns(&ctx, &r, &m);
-                    let mut ps = p![m.width, m.height, m.duration, crate::routes::util::playback_str(m.playback), m.extra.as_ref().and_then(|e| serde_json::to_string(e).ok()), pa_meta::META_V];
-                    ps.extend(group_params(&g));
-                    ps.extend(p![r.id, r.size, r.mtime]);
-                    let sql = format!("UPDATE media SET width = ?, height = ?, duration = ?, playback = ?, extra = ?, meta_state = 1, meta_v = ?, {} WHERE id = ? AND {UNCHANGED}", pa_meta::GROUP_SET_SQL);
-                    write(&ctx, Box::new(move |c| c.prepare_cached(&sql)?.execute(rusqlite::params_from_iter(ps)).map(|_| ())), Some(Box::new(done)));
-                }
-                Err(_) => {
-                    let ps = p![pa_meta::META_V, r.id, r.size, r.mtime];
-                    write(
-                        &ctx,
-                        Box::new(move |c| c.prepare_cached(&format!("UPDATE media SET meta_state = 2, meta_v = ? WHERE id = ? AND {UNCHANGED}"))?.execute(rusqlite::params_from_iter(ps)).map(|_| ())),
-                        Some(Box::new(done)),
-                    );
+                };
+                match extract_meta(&ctx, &a, &r, false).await {
+                    Ok(m) => {
+                        if ctx.scanner.stopped() {
+                            return;
+                        }
+                        let g = group_columns(&ctx, &r, &m);
+                        let mut ps = p![m.width, m.height, m.duration, crate::routes::util::playback_str(m.playback), m.extra.as_ref().and_then(|e| serde_json::to_string(e).ok()), pa_meta::META_V];
+                        ps.extend(group_params(&g));
+                        ps.extend(p![r.id, r.size, r.mtime]);
+                        let sql = format!("UPDATE media SET width = ?, height = ?, duration = ?, playback = ?, extra = ?, meta_state = 1, meta_v = ?, {} WHERE id = ? AND {UNCHANGED}", pa_meta::GROUP_SET_SQL);
+                        write(&ctx, Box::new(move |c| c.prepare_cached(&sql)?.execute(rusqlite::params_from_iter(ps)).map(|_| ())), Some(Box::new(done)));
+                    }
+                    Err(_) => {
+                        let ps = p![pa_meta::META_V, r.id, r.size, r.mtime];
+                        write(
+                            &ctx,
+                            Box::new(move |c| c.prepare_cached(&format!("UPDATE media SET meta_state = 2, meta_v = ? WHERE id = ? AND {UNCHANGED}"))?.execute(rusqlite::params_from_iter(ps)).map(|_| ())),
+                            Some(Box::new(done)),
+                        );
+                    }
                 }
             }
         })
         .await;
         flush_writes(ctx);
-        ctx.explore.invalidate(ctx, true);
+        // folders walked meanwhile add work: the total follows
+        {
+            let left = pending_count(ctx);
+            let mut p = ctx.scanner.progress.lock();
+            p.1 = p.0 + left;
+        }
+        if last_report.elapsed() >= every {
+            report(ctx);
+            last_report = Instant::now();
+        }
     }
     flush_writes(ctx);
+    report(ctx);
     ctx.scanner.meta_running.store(false, Ordering::SeqCst);
     kick_thumbs(ctx);
     kick_enrich(ctx);

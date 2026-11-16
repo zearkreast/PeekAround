@@ -662,10 +662,10 @@ export component DuplicatesCard inherits CardBox {
             VerticalLayout {
                 alignment: center;
                 spacing: 1px;
-                Text { text: root.d.title; font-size: 15px; font-weight: 600; color: Theme.text; }
-                Text { text: root.d.sub; font-size: 13px; color: Theme.text-dim; }
-                if root.d.big != "": Text { text: root.d.big; font-size: 13px; font-weight: 500; color: Theme.accent; }
-                if root.d.extra != "": Text { text: root.d.extra; font-size: 11.5px; color: Theme.text-faint; }
+                Text { text: root.d.title; font-size: 15px; font-weight: 600; color: Theme.text; overflow: elide; }
+                Text { text: root.d.sub; font-size: 13px; color: Theme.text-dim; overflow: elide; }
+                if root.d.big != "": Text { text: root.d.big; font-size: 13px; font-weight: 500; color: Theme.accent; overflow: elide; }
+                if root.d.extra != "": Text { text: root.d.extra; font-size: 11.5px; color: Theme.text-faint; overflow: elide; }
             }
         }
     }

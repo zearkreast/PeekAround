@@ -7,6 +7,7 @@ import { PIcons } from "icons.slint";
 import { LibIcons, LibCardData, AlbumCardData, RowData, FolderCardData, RootCardData, ArchiveData, RemoteBannerData } from "state.slint";
 import { Button, ButtonVariant, ButtonSize, IconButton, IconButtonSize } from "../components/button.slint";
 import { Spinner, ProgressRing } from "../components/feedback.slint";
+import { Shell } from "../globals.slint";
 
 // columns for a window width, like tailwind's sm / md / lg / xl / 2xl breakpoints (viewport px)
 export global Cols {
@@ -398,7 +399,7 @@ export component ListRow inherits Rectangle {
     callback close();
     min-height: 60px;
     border-radius: 16px;
-    background: ta.pressed ? Theme.surface-2 : ta.has-hover ? Theme.surface : transparent;
+    background: ta.pressed ? Theme.surface-2 : ta.has-hover && !Shell.phone ? Theme.surface : transparent;
     animate background { duration: Motion.fast; }
     ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
     HorizontalLayout {

@@ -700,6 +700,7 @@ export component SlideBuilderPage inherits Rectangle {
                 if SlideBuilder.music-loading: HorizontalLayout { alignment: center; padding: 30px; Spinner { size: 24px; } }
                 if !SlideBuilder.music-loading && SlideBuilder.music.length == 0: Text { text: I18n.t("slide.noMusic", I18n.rev); font-size: 13px; color: Theme.text-faint; horizontal-alignment: center; }
                 Flickable {
+                    content-width: self.width;
                     vertical-stretch: 1;
                     content-height: list.preferred-height;
                     list := VerticalLayout {

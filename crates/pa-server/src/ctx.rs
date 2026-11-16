@@ -100,7 +100,10 @@ impl Ctx {
         let cpus = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(2);
-        let lim = intensity_limits(s.index_intensity, cpus, self.cfg.desktop());
+        let mut lim = intensity_limits(s.index_intensity, cpus, self.cfg.desktop());
+        if self.cfg.light {
+            lim = light_limits(lim, s.index_intensity);
+        }
         self.thumbs.set_quality(match s.thumb_quality {
             pa_core::ThumbQuality::Low => pa_media::ThumbQuality::Low,
             pa_core::ThumbQuality::Normal => pa_media::ThumbQuality::Normal,
@@ -128,6 +131,24 @@ pub fn intensity_limits(
         pa_core::ThumbQuality::High => pa_media::IndexIntensity::High,
     };
     pa_media::intensity_limits(ii, cpus, desktop)
+}
+
+/// A phone shares its memory with the UI and gets killed when a scan decodes many large photos at
+/// once: few decode slots, one background item at a time (two on High) with a short pause between.
+pub fn light_limits(
+    l: pa_media::IntensityLimits,
+    i: pa_core::IndexIntensity,
+) -> pa_media::IntensityLimits {
+    let workers = if i == pa_core::ThumbQuality::High { 2 } else { 1 };
+    let max = l.max.min(3);
+    pa_media::IntensityLimits {
+        max,
+        low_max: l.low_max.min(workers).min(max),
+        workers: l.workers.min(workers),
+        gap_ms: l.gap_ms.max(30),
+        vips_threads: 1,
+        ffmpeg_threads: 1,
+    }
 }
 
 /// ffmpeg input options for GPU decoding
@@ -176,4 +197,20 @@ fn settings_of(m: &Map<String, Value>) -> pa_core::Settings {
 /// number of a settings value as f64 (`tempSessionHours` may be fractional)
 pub fn setting_f64(m: &Map<String, Value>, k: &str) -> Option<f64> {
     m.get(k).and_then(Value::as_f64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pa_core::ThumbQuality as I;
+
+    #[test]
+    fn light_limits_cap_a_phone() {
+        for i in [I::Low, I::Normal, I::High] {
+            let l = light_limits(intensity_limits(i, 8, true), i);
+            assert!(l.max <= 3 && l.low_max <= l.max, "{i:?}: {l:?}");
+            assert_eq!(l.workers, if i == I::High { 2 } else { 1 }, "{i:?}");
+            assert!(l.gap_ms >= 30 && l.ffmpeg_threads == 1, "{i:?}: {l:?}");
+        }
+    }
 }

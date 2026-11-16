@@ -1,4 +1,4 @@
-// Spinner, ProgressRing, ProgressBar, Badge, Card, Skeleton (shimmer), EmptyState, Kbd
+// Spinner, ProgressRing, ProgressBar, ScanBar, Badge, Card, Skeleton (shimmer), EmptyState, Kbd
 
 import { Theme, Motion } from "../theme.slint";
 import { Icons } from "../icons.slint";
@@ -76,6 +76,93 @@ export component ProgressBar inherits Rectangle {
         height: parent.height;
         border-radius: 3px;
         background: @linear-gradient(120deg, Theme.accent 0%, Theme.accent-2 100%);
+    }
+}
+
+// indexing status under the top bar: a pill with the count and a bar; a tap shrinks it to a line
+export component ScanBar inherits Rectangle {
+    in property <float> value;
+    // no total yet: the folders are still being walked
+    in property <bool> indeterminate;
+    in property <string> text;
+    in-out property <bool> minimized;
+    property <float> v: Math.clamp(value, 0, 1);
+    property <string> pct: Math.floor(v * 100) + "%";
+    // a moving segment while the total is unknown
+    property <float> run: Math.mod(animation-tick() / 1.4s, 1);
+    height: minimized ? 3px : 44px;
+    animate height { duration: Motion.normal; easing: ease-out; }
+
+    if root.minimized: Rectangle {
+        width: parent.width;
+        height: 3px;
+        y: 0;
+        background: Theme.surface-3;
+        clip: true;
+        Rectangle {
+            x: root.indeterminate ? (parent.width * 1.3 * root.run - parent.width * 0.3) : 0;
+            width: root.indeterminate ? parent.width * 0.3 : parent.width * root.v;
+            height: parent.height;
+            background: @linear-gradient(90deg, Theme.accent 0%, Theme.accent-2 100%);
+        }
+    }
+    if !root.minimized: Rectangle {
+        width: Math.min(parent.width - 32px, 380px);
+        height: 36px;
+        y: 8px;
+        border-radius: 18px;
+        background: Theme.glass;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 16px;
+        drop-shadow-color: Theme.shadow;
+        drop-shadow-offset-y: 4px;
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 10px;
+            alignment: stretch;
+            Spinner { size: 14px; fg: Theme.accent; }
+            Text {
+                text: root.text;
+                color: Theme.text;
+                font-size: 12px;
+                font-weight: 500;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 0;
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                min-width: 40px;
+                Rectangle {
+                    y: (parent.height - self.height) / 2;
+                    width: parent.width;
+                    height: 6px;
+                    border-radius: 3px;
+                    background: Theme.surface-3;
+                    clip: true;
+                    Rectangle {
+                        x: root.indeterminate ? (parent.width * 1.3 * root.run - parent.width * 0.3) : 0;
+                        width: root.indeterminate ? parent.width * 0.3 : parent.width * root.v;
+                        height: parent.height;
+                        border-radius: 3px;
+                        background: @linear-gradient(90deg, Theme.accent 0%, Theme.accent-2 100%);
+                    }
+                }
+            }
+            if !root.indeterminate: Text {
+                text: root.pct;
+                color: Theme.text-dim;
+                font-size: 12px;
+                font-weight: 600;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+            }
+        }
+    }
+    TouchArea {
+        clicked => { root.minimized = !root.minimized; }
     }
 }
 

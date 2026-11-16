@@ -941,6 +941,7 @@ export component EditorOverlay inherits Rectangle {
                         ToolTab { icon: EIcons.brush; text: I18n.t("photo.tab.draw", I18n.rev); selected: EditorState.tab == "draw"; clicked => { EditorState.set-tab("draw"); fs.focus(); } }
                     }
                     Flickable {
+                        content-width: self.width;
                         vertical-stretch: 1;
                         content-height: panel.preferred-height;
                         panel := VerticalLayout {

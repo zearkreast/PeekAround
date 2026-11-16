@@ -212,6 +212,7 @@ async fn start_local_server(
         o.roots = default_roots(&platform::storage_root());
     }
     o.mdns = false;
+    o.light = true;
     o.version = VERSION.to_string();
     o.ffmpeg_path = Some(match ffmpeg {
         Some(p) => p.to_string_lossy().into_owned(),

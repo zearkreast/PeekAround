@@ -396,6 +396,7 @@ export component ActionLayer inherits Rectangle {
                 clip: true;
                 if ActionState.picker-loading: Spinner { }
                 Flickable {
+                    content-width: self.width;
                     pl := VerticalLayout {
                         padding: 4px;
                         for r in ActionState.picker-rows: PickerRowView {

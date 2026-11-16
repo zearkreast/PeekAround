@@ -26,6 +26,7 @@ import { PIcons } from "pages/icons.slint";
 import { DialogLayer, Dlg } from "dialogs/dialogs.slint";
 import { JobsState, UploadPanel } from "shell/jobs.slint";
 import { Toaster } from "components/overlays.slint";
+import { ScanBar } from "components/feedback.slint";
 // viewer overlay, selection bar / context menu / action dialogs / drag & drop
 import { ViewerOverlay } from "viewer/viewer.slint";
 import { ViewerState } from "viewer/state.slint";
@@ -114,8 +115,14 @@ export component AppWindow inherits Window {
     property <bool> grid-page: Shell.page == Page.photos || Shell.page == Page.favorites || Shell.page == Page.search
         || Shell.page == Page.album || Shell.page == Page.lib || Shell.page == Page.folder;
 
+    // Android draws the app under the status and navigation bars
+    property <length> safe-top: root.safe-area-insets.top;
+    property <length> safe-bottom: root.safe-area-insets.bottom;
     property <length> rail: Shell.compact ? 0px : Theme.rail-w;
-    property <length> bottom-h: Shell.compact ? 64px : 0px;
+    // the scan bar stays shrunk for the rest of the session once tapped
+    property <bool> scan-minimized;
+    property <length> scan-h: !Shell.scanning ? 0px : root.scan-minimized ? 3px : 44px;
+    property <length> bottom-h: Shell.compact ? 64px + root.safe-bottom : 0px;
 
     // keyboard: Ctrl+K / '/' focus the search, Alt+← back
     fs := FocusScope {
@@ -155,7 +162,15 @@ export component AppWindow inherits Window {
             reject
         }
 
+        // behind the status bar
+        Rectangle {
+            height: root.safe-top;
+            y: 0;
+            background: Theme.topbar;
+        }
         HorizontalLayout {
+            padding-top: root.safe-top;
+            padding-bottom: Shell.compact ? 0px : root.safe-bottom;
             // (above the page: its drop flyout overlaps it)
             if !Shell.compact: NavRail { z: 10; }
             Rectangle {
@@ -164,8 +179,9 @@ export component AppWindow inherits Window {
                 content := Rectangle {
                     // not drawn under an opaque viewer (every frame of a video would redraw the grid)
                     visible: !root.viewer-covers;
-                    y: Theme.topbar-h;
-                    height: parent.height - Theme.topbar-h - root.bottom-h;
+                    y: Theme.topbar-h + root.scan-h;
+                    height: parent.height - self.y - root.bottom-h;
+                    animate y { duration: Motion.normal; easing: ease-out; }
                     clip: true;
                     if Shell.page == Page.photos: PageFrame {
                         PhotosPage { slideshow => { root.slideshow(); } }
@@ -237,6 +253,15 @@ export component AppWindow inherits Window {
                     title: root.page-title;
                     view-controls: root.grid-page;
                 }
+                if Shell.scanning: ScanBar {
+                    visible: !root.viewer-covers;
+                    y: Theme.topbar-h;
+                    width: parent.width;
+                    value: Shell.scan-progress;
+                    indeterminate: Shell.scan-walking;
+                    text: Shell.scan-text;
+                    minimized <=> root.scan-minimized;
+                }
                 if Shell.compact: BottomNav {
                     visible: !root.viewer-covers;
                     y: parent.height - self.height;
@@ -255,28 +280,38 @@ export component AppWindow inherits Window {
     if Shell.page == Page.explore-map && MapState.fullscreen: MapPage {
         visible: !root.viewer-covers;
         x: 0;
-        y: 0;
+        y: root.safe-top;
         width: root.width;
-        height: root.height;
+        height: root.height - root.safe-top - root.safe-bottom;
         window-width: root.width;
     }
     // the viewer's background is opaque once it has opened (and is not being dragged / closed)
     property <bool> viewer-covers: ViewerState.open && ViewerState.appear >= 0.999 && !ViewerState.closing
         && ViewerState.dismiss-y == 0;
-    if ViewerState.open: ViewerOverlay { }
+    // full-window layers stay clear of the status and navigation bars too
+    if ViewerState.open: ViewerOverlay {
+        y: root.safe-top;
+        height: root.height - root.safe-top - root.safe-bottom;
+    }
     // the memory player (above the viewer)
     if PlayerState.open: MemoryPlayer {
+        y: root.safe-top;
         width: root.width;
-        height: root.height;
+        height: root.height - root.safe-top - root.safe-bottom;
     }
-    if SlidePlayer.open: SlidePlayerOverlay { }
+    if SlidePlayer.open: SlidePlayerOverlay {
+        y: root.safe-top;
+        height: root.height - root.safe-top - root.safe-bottom;
+    }
     if EditorState.open: EditorOverlay {
+        y: root.safe-top;
         width: root.width;
-        height: root.height;
+        height: root.height - root.safe-top - root.safe-bottom;
     }
     if VideoEditorState.open: VideoEditorOverlay {
+        y: root.safe-top;
         width: root.width;
-        height: root.height;
+        height: root.height - root.safe-top - root.safe-bottom;
     }
     if MediaPickerState.open: MediaPickerDialog { }
     ActionLayer { }

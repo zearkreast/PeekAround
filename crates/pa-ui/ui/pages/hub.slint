@@ -30,6 +30,7 @@ export component HubPage inherits Rectangle {
     property <length> ow: GridPos.cell(root.cw, ocols, 4px);
 
     fl := Flickable {
+        content-width: self.width;
         width: root.width;
         height: root.height;
         content-height: col.preferred-height + 24px + 112px;
@@ -204,6 +205,7 @@ export component HubPage inherits Rectangle {
                         x: GridPos.x(i, root.dcols, root.dw, 4px);
                         y: GridPos.y(i, root.dcols, 60px, 4px);
                         width: root.dw;
+                        height: 60px;
                         opacity: d.online ? 1 : 0.6;
                         icon: PIcons.smartphone;
                         title: d.title;
@@ -225,6 +227,7 @@ export component HubPage inherits Rectangle {
                         x: GridPos.x(i, root.dcols, root.dw, 4px);
                         y: GridPos.y(i, root.dcols, 60px, 4px);
                         width: root.dw;
+                        height: 60px;
                         icon: PIcons.clock-3;
                         icon-color: Theme.warn;
                         title: f.title;
@@ -244,17 +247,17 @@ export component HubPage inherits Rectangle {
                 Rectangle {
                     height: GridPos.rows(3, root.ocols) * 64px;
                     ListRow {
-                        x: GridPos.x(0, root.ocols, root.ow, 4px); y: GridPos.y(0, root.ocols, 60px, 4px); width: root.ow;
+                        x: GridPos.x(0, root.ocols, root.ow, 4px); y: GridPos.y(0, root.ocols, 60px, 4px); width: root.ow; height: 60px;
                         icon: PIcons.layout-grid; title: I18n.t("nav.collage", I18n.rev);
                         clicked => { HubState.open-tool("collage"); }
                     }
                     ListRow {
-                        x: GridPos.x(1, root.ocols, root.ow, 4px); y: GridPos.y(1, root.ocols, 60px, 4px); width: root.ow;
+                        x: GridPos.x(1, root.ocols, root.ow, 4px); y: GridPos.y(1, root.ocols, 60px, 4px); width: root.ow; height: 60px;
                         icon: PIcons.presentation; title: I18n.t("nav.slideshow", I18n.rev);
                         clicked => { HubState.open-tool("slideshow"); }
                     }
                     ListRow {
-                        x: GridPos.x(2, root.ocols, root.ow, 4px); y: GridPos.y(2, root.ocols, 60px, 4px); width: root.ow;
+                        x: GridPos.x(2, root.ocols, root.ow, 4px); y: GridPos.y(2, root.ocols, 60px, 4px); width: root.ow; height: 60px;
                         icon: PIcons.type; title: I18n.t("nav.fonts", I18n.rev);
                         clicked => { HubState.open-tool("fonts"); }
                     }

@@ -197,6 +197,8 @@ export component LibraryPage inherits Rectangle {
     property <string> menu-name;
 
     grid := MediaGrid {
+
+        compact: Shell.compact;
         width: root.width;
         height: root.height;
         tiles: GridState.tiles;

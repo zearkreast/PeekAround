@@ -176,6 +176,7 @@ export component UploadPanel inherits Rectangle {
         }
         if root.expanded: Rectangle { height: 1px; background: Theme.border; }
         if root.expanded: Flickable {
+            content-width: self.width;
             height: Math.min(256px, JobsState.uploads.length * 44px + 16px);
             content-height: JobsState.uploads.length * 44px + 16px;
             VerticalLayout {

@@ -1104,6 +1104,7 @@ component Timeline inherits VerticalLayout {
     }
     // text layer lanes
     if VideoEditorState.bars.length > 0: Flickable {
+        content-width: self.width;
         height: Math.min(92px, VideoEditorState.bars.length * 28px) + 8px;
         content-height: VideoEditorState.bars.length * 28px + 8px;
         for b[i] in VideoEditorState.bars: Rectangle {
@@ -1326,6 +1327,7 @@ export component VideoEditorOverlay inherits Rectangle {
                     }
                     Rectangle { height: 1px; background: Theme.border; }
                     Flickable {
+                        content-width: self.width;
                         vertical-stretch: 1;
                         content-height: panel.preferred-height;
                         panel := VerticalLayout {
