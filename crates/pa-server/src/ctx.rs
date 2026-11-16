@@ -46,6 +46,8 @@ pub struct Ctx {
     pub rekick: std::sync::atomic::AtomicBool,
     /// the zone of this process (EXIF wall clocks of the info panel)
     pub local_tz: String,
+    /// sign-in sessions (PEEK_PASSWORD)
+    pub sessions: crate::auth::Sessions,
 }
 
 /// shared handle

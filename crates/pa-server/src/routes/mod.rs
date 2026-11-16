@@ -24,6 +24,7 @@ pub fn router() -> Router {
     misc::routes(&mut r);
     files::routes(&mut r);
     trash::routes(&mut r);
+    crate::auth::routes(&mut r);
     r
 }
 

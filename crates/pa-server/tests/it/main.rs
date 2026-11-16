@@ -29,4 +29,5 @@ mod emoji_dirs;
 mod no_clobber;
 mod trash;
 mod offline;
+mod auth;
 mod skeleton_bench;

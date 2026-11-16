@@ -23,6 +23,7 @@
 // tuples of maps / callbacks are spelled out where they are used (watcher, scanner write queue)
 #![allow(clippy::type_complexity)]
 
+pub mod auth;
 pub mod config;
 mod country_names;
 pub mod ctx;
@@ -246,6 +247,7 @@ impl Server {
                 meta_memo: Mutex::new(None),
                 rekick: std::sync::atomic::AtomicBool::new(false),
                 local_tz: db::system_time_zone(),
+                sessions: Default::default(),
             }
         });
         let _ = ctx
@@ -644,6 +646,9 @@ async fn dispatch(app: Arc<App>, req: Request<Body>, mut conn: ConnInfo) -> Resp
         let handler = route.handler.clone();
         let scope = route.scope;
         let r: error::ApiResult<Response<Body>> = async {
+            if auth::required(ctx) && !auth::open_path(&pattern) && !auth::authorized(ctx, &req) {
+                return Err(error::HttpError::new(401, "Login required"));
+            }
             if ctx.cfg.readonly && !readonly_allows(&method, &pattern) {
                 routes::util::require_writable(ctx)?;
             }
