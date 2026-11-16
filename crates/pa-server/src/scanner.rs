@@ -1217,7 +1217,7 @@ pub fn indexing(ctx: &Ctx) -> pa_core::Progress {
 }
 
 /// Once per database: rows dated by their mtime whose name may hold a date go back to the
-/// enrichment queue (dates in file names were not read before).
+/// enrichment queue.
 pub fn recheck_name_dates(ctx: &C) {
     if ctx.db.get_setting("nameDates").is_some() {
         return;
