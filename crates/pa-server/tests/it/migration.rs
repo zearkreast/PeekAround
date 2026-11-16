@@ -364,13 +364,8 @@ async fn upgrading_a_1_1_data_dir() {
             .unwrap();
         };
         let st = |n: &str| std::fs::metadata(lib.join(n)).unwrap();
-        let ms = |m: std::fs::Metadata| {
-            m.modified()
-                .unwrap()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as i64
-        };
+        // rounded like the scanner, or a rescan sees a 1 ms change and rewrites mtime
+        let ms = |m: std::fs::Metadata| pa_server::scanner::mtime_ms(&m);
         ins(
             1,
             "one.jpg",
