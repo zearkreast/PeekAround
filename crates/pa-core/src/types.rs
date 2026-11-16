@@ -220,6 +220,10 @@ pub struct FolderRef {
         with = "js::double_option"
     )]
     pub remote: Option<Option<RemoteFolderInfo>>,
+    /// a local folder that cannot be read right now (unmounted drive, offline share); its rows are
+    /// kept and scanning waits until it is back
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub offline: bool,
 }
 
 /// A library.

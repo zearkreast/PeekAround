@@ -1,7 +1,7 @@
 //! Libraries, folders, temp sessions (mirrors `library.ts`).
 
 use crate::bail;
-use crate::ctx::Ctx;
+use crate::ctx::{Ctx, C};
 use crate::db::{query_all, FolderRow};
 use crate::error::{ApiResult, HttpError};
 use crate::events::now_ms;
@@ -110,6 +110,45 @@ pub fn folder_ref(ctx: &Ctx, r: &FolderRow, counts: Option<&HashMap<i64, i64>>) 
         } else {
             None
         }),
+        offline: is_offline(r),
+    }
+}
+
+/// A local library folder that cannot be listed right now.
+pub fn is_offline(r: &FolderRow) -> bool {
+    r.temp == 0 && !r.is_device() && !r.is_remote() && std::fs::read_dir(&r.path).is_err()
+}
+
+static OFFLINE: std::sync::Mutex<Option<std::collections::HashSet<i64>>> = std::sync::Mutex::new(None);
+
+/// Notice folders going offline or coming back: a folder that is back is rescanned and watched
+/// again (its watcher could not start while it was gone). Clients refetch the libraries on change.
+pub async fn check_offline(ctx: &C) {
+    let rows = ctx
+        .db
+        .all("SELECT * FROM folders WHERE temp = 0", p![], FolderRow::from_row)
+        .unwrap_or_default();
+    let mut back = Vec::new();
+    let mut changed = false;
+    {
+        let mut g = OFFLINE.lock().unwrap_or_else(|e| e.into_inner());
+        let set = g.get_or_insert_with(Default::default);
+        for r in &rows {
+            let off = is_offline(r);
+            if off && set.insert(r.id) {
+                changed = true;
+            } else if !off && set.remove(&r.id) {
+                changed = true;
+                back.push(r.id);
+            }
+        }
+    }
+    for id in back {
+        crate::scanner::scan_folder(ctx, id, "").await;
+    }
+    if changed {
+        crate::watcher::sync(ctx);
+        ctx.events.emit(ServerEvent::Folders { status: None });
     }
 }
 

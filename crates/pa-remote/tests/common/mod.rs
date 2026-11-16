@@ -397,6 +397,7 @@ impl RemoteStore for Lib {
             media_count,
             device: None,
             remote,
+            offline: false,
         })
     }
     fn media_at(&self, folder_path: &str, dir: &str, name: &str) -> Option<RemoteMedia> {

@@ -288,6 +288,7 @@ impl DeviceStore for Mem {
                     online: l.online,
                 }),
                 remote: None,
+                offline: false,
             })
             .collect()
     }
