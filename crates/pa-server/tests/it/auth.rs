@@ -17,6 +17,9 @@ async fn password_gates_the_api() {
 
     assert_eq!(get(&srv, "/api/info").await.status, 401);
     assert_eq!(get(&srv, "/api/browse?folderId=1").await.status, 401);
+    // phone management is not part of the open device plane
+    assert_eq!(send(&srv, "POST", "/api/devices/x/approve", json!({})).await.status, 401);
+    assert_eq!(send(&srv, "DELETE", "/api/devices/x", json!({})).await.status, 401);
     let a = get_ok(&srv, "/api/auth").await;
     assert_eq!((a["required"].as_bool(), a["ok"].as_bool()), (Some(true), Some(false)));
 

@@ -84,11 +84,15 @@ pub fn required(ctx: &C) -> bool {
 }
 
 /// Paths that work without a session: the web UI's files (it has to show the login), the login
-/// itself, the healthcheck, and phone pairing / the device data plane (they authenticate as devices).
+/// itself, the healthcheck, and the phones' socket and data plane (they authenticate as devices).
+/// Approving, rejecting and forgetting phones stay behind the gate: an open approve would let
+/// anyone pair a phone of their own and get in with it.
 pub fn open_path(path: &str) -> bool {
     !path.starts_with("/api/")
         || path.starts_with("/api/auth")
-        || path.starts_with("/api/devices/")
+        || path == "/api/devices/connect"
+        || path.starts_with("/api/devices/pull/")
+        || path.starts_with("/api/devices/reply/")
 }
 
 /// The session token of a request: `Authorization: Bearer`, `?psess=` (WebSocket, media URLs of
@@ -213,5 +217,7 @@ mod tests {
         assert_eq!(token_of(&h, Some("psess=q")).as_deref(), Some("hd"));
         assert!(open_path("/") && open_path("/assets/app.wasm") && open_path("/api/auth/login"));
         assert!(!open_path("/api/info") && !open_path("/api/events") && !open_path("/api/browse"));
+        assert!(open_path("/api/devices/connect") && open_path("/api/devices/pull/:token"));
+        assert!(!open_path("/api/devices/:id/approve") && !open_path("/api/devices/:id"));
     }
 }
