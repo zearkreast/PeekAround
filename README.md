@@ -125,6 +125,7 @@ ya da `docker/docker-compose.yml` içindeki klasör yollarını düzenleyip `doc
 | `TZ` | yok | Saat dilimi (örneğin `Europe/Istanbul`); ilk açılışta "ev saat dilimi" olur |
 | `PEEK_ALLOWED_HOSTS` | yok | Alan adıyla erişiyorsan (örneğin ters vekil arkasında `foto.ornek.com`) virgülle ekle; `*` denetimi kapatır |
 | `PEEK_ALLOWED_ORIGINS` | yok | API'yi çağırabilecek ek tarayıcı kökenleri |
+| `PEEK_TRUSTED_PROXIES` | yok | Ters vekilin IP adresleri (örneğin `127.0.0.1`); bunlardan gelen isteklerde istemci adresi `X-Forwarded-For`'dan okunur, istek sınırı kişi başına işler |
 
 > Kimlik doğrulama yoktur: PeekAround'u yalnızca güvendiğin ağlarda çalıştır ya da önüne şifreli bir ters vekil (reverse proxy) koy. Sunucuya erişebilen herkes MEGA hesabına giriş ve çıkış da yapabilir.
 > Tarayıcı tabanlı saldırılara karşı korunur: bilinmeyen alan adları (DNS rebinding), başka sitelerden gelen yazma istekleri (CSRF) ve aşırı istekler reddedilir. `.local`, `.lan`, IP adresleri ve tek kelimelik ağ adları (örneğin `nas`) her zaman çalışır.

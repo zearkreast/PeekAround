@@ -210,6 +210,28 @@ pub fn unique_path(dir: &Path, name: &str) -> PathBuf {
     candidate
 }
 
+/// Room kept free on the disk after a write (database, thumbnails, the OS).
+pub const SPACE_MARGIN: u64 = 64 * 1024 * 1024;
+
+/// Free bytes on the file system of `p` (its nearest existing ancestor); None when unknown.
+pub fn available_space(p: &Path) -> Option<u64> {
+    let mut d = p;
+    loop {
+        if d.exists() {
+            return fs2::available_space(d).ok();
+        }
+        d = d.parent()?;
+    }
+}
+
+/// Refuse a write of `need` bytes into `dir` that would fill the disk (507).
+pub fn ensure_space(dir: &Path, need: u64) -> ApiResult<()> {
+    match available_space(dir) {
+        Some(free) if need.saturating_add(SPACE_MARGIN) > free => Err(HttpError::new(507, "Not enough disk space")),
+        _ => Ok(()),
+    }
+}
+
 /// Both paths name the same file (case-only renames on case-insensitive file systems).
 pub fn same_file(a: &Path, b: &Path) -> bool {
     #[cfg(unix)]

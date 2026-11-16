@@ -25,6 +25,8 @@ pub struct SecurityOptions {
     pub allowed_hosts: Vec<String>,
     /// extra browser origins allowed to call the API (env PEEK_ALLOWED_ORIGINS)
     pub allowed_origins: Vec<String>,
+    /// reverse proxies whose X-Forwarded-For names the client (env PEEK_TRUSTED_PROXIES, IPs)
+    pub trusted_proxies: Vec<String>,
 }
 
 fn split_list(v: Option<String>) -> Vec<String> {
@@ -41,6 +43,7 @@ impl SecurityOptions {
         SecurityOptions {
             allowed_hosts: split_list(std::env::var("PEEK_ALLOWED_HOSTS").ok()),
             allowed_origins: split_list(std::env::var("PEEK_ALLOWED_ORIGINS").ok()),
+            trusted_proxies: split_list(std::env::var("PEEK_TRUSTED_PROXIES").ok()),
         }
     }
 }

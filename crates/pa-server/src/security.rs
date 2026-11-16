@@ -183,6 +183,10 @@ impl RateLimiter {
         let mut m = self.stores.lock();
         if m.len() > 20_000 {
             m.retain(|_, e| now.duration_since(e.start) < WINDOW);
+            // a burst from many addresses within one window: start over rather than grow
+            if m.len() > 200_000 {
+                m.clear();
+            }
         }
         let e = m.entry(key).or_insert(Entry {
             current: 0,
@@ -205,6 +209,29 @@ impl RateLimiter {
     }
 }
 
+/// The client behind trusted reverse proxies: X-Forwarded-For read from the right, skipping the
+/// proxies themselves. A peer that is not a trusted proxy is the client, whatever the header says.
+pub fn client_ip(peer: IpAddr, forwarded_for: Option<&str>, trusted: &[String]) -> IpAddr {
+    let is_trusted = |ip: &IpAddr| trusted.iter().any(|t| t.parse::<IpAddr>().is_ok_and(|t| t == *ip));
+    if !is_trusted(&peer) {
+        return peer;
+    }
+    let Some(xff) = forwarded_for else { return peer };
+    let mut client = peer;
+    for hop in xff.rsplit(',') {
+        match hop.trim().parse::<IpAddr>() {
+            Ok(ip) => {
+                client = ip;
+                if !is_trusted(&ip) {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    client
+}
+
 /// Equal without an early exit (secrets compared against request headers).
 pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
@@ -213,6 +240,20 @@ pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn forwarded_clients() {
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        let proxies = vec!["127.0.0.1".to_string(), "10.0.0.2".to_string()];
+        // a direct client cannot pick its own address
+        assert_eq!(client_ip(ip("192.168.1.9"), Some("1.2.3.4"), &proxies), ip("192.168.1.9"));
+        // through the proxy: the rightmost untrusted hop
+        assert_eq!(client_ip(ip("127.0.0.1"), Some("6.6.6.6, 1.2.3.4"), &proxies), ip("1.2.3.4"));
+        assert_eq!(client_ip(ip("127.0.0.1"), Some("1.2.3.4, 10.0.0.2"), &proxies), ip("1.2.3.4"));
+        assert_eq!(client_ip(ip("127.0.0.1"), None, &proxies), ip("127.0.0.1"));
+        // no trusted proxies configured: never read the header
+        assert_eq!(client_ip(ip("127.0.0.1"), Some("1.2.3.4"), &[]), ip("127.0.0.1"));
+    }
 
     #[test]
     fn hosts() {

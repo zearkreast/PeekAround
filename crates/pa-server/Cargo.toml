@@ -13,6 +13,7 @@ default = ["heif"]
 heif = ["pa-media/heif"]
 
 [dependencies]
+fs2 = "0.4"
 pa-core = { path = "../pa-core" }
 pa-meta = { path = "../pa-meta" }
 pa-media = { path = "../pa-media", default-features = false, features = ["svg"] }

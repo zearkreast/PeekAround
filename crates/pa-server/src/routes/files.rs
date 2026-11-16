@@ -183,6 +183,9 @@ async fn upload(ctx: C, mut req: Req) -> ApiResult<axum::http::Response<axum::bo
         "{fname}.{}.part",
         hex::encode(rand::random::<[u8; 4]>())
     ));
+    if let Some(len) = req.header("content-length").and_then(|l| l.trim().parse::<u64>().ok()) {
+        crate::paths::ensure_space(&parent, len)?;
+    }
     let r: ApiResult<PathBuf> = async {
         write_body(&mut req, &part, limit).await?;
         let mtime = req.q("mtime").map(pa_core::js::number).unwrap_or(f64::NAN);

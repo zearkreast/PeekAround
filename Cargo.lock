@@ -5025,6 +5025,7 @@ dependencies = [
  "bytes",
  "crc32fast",
  "flate2",
+ "fs2",
  "futures-util",
  "gethostname",
  "hex",

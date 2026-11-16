@@ -184,6 +184,10 @@ fn skip_rel(rel: &str) -> bool {
 pub fn extract_zip(file: &Path, dest: &Path, max_bytes: u64) -> std::io::Result<ExtractResult> {
     let mut f = std::fs::File::open(file)?;
     let entries = read_central(&mut f)?;
+    let total: u64 = entries.iter().map(|e| e.usize_).sum();
+    if crate::paths::available_space(dest).is_some_and(|free| total.saturating_add(crate::paths::SPACE_MARGIN) > free) {
+        return Err(err("Not enough disk space"));
+    }
     std::fs::create_dir_all(dest)?;
     let root = crate::paths::resolve(dest);
     let mut result = ExtractResult::default();

@@ -527,9 +527,13 @@ fn add_header(r: &mut Response<Body>, k: &'static str, v: &str) {
     }
 }
 
-async fn dispatch(app: Arc<App>, req: Request<Body>, conn: ConnInfo) -> Response<Body> {
+async fn dispatch(app: Arc<App>, req: Request<Body>, mut conn: ConnInfo) -> Response<Body> {
     let ctx = &app.ctx;
     let (parts, body) = req.into_parts();
+    if !ctx.security.trusted_proxies.is_empty() {
+        let xff = parts.headers.get("x-forwarded-for").and_then(|v| v.to_str().ok());
+        conn.ip = security::client_ip(conn.ip, xff, &ctx.security.trusted_proxies);
+    }
     let hv = |n: &str| {
         parts
             .headers

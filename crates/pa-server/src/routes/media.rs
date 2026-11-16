@@ -460,6 +460,9 @@ fn is_offline(e: &str) -> bool {
     e.contains("unavailable") || e.contains("offline")
 }
 
+/// Live transcodes at once: each is a libx264 encoder, more would starve the machine.
+static TRANSCODES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+
 async fn stream(ctx: C, req: Req) -> ApiResult<Response<Body>> {
     let r = media_row(&ctx, req.param("id"))?;
     if r.kind != "video" {
@@ -515,6 +518,12 @@ async fn stream(ctx: C, req: Req) -> ApiResult<Response<Body>> {
     ] {
         args.push(a.into());
     }
+    // a seek drops the previous stream a moment later: wait a little for its slot
+    let permit = tokio::time::timeout(std::time::Duration::from_secs(10), TRANSCODES.acquire())
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .ok_or_else(|| HttpError::new(503, "Too many videos are being converted"))?;
     let mut child = ctx.ffmpeg.spawn(&args).map_err(HttpError::internal)?;
     let stdout = child
         .stdout
@@ -527,14 +536,14 @@ async fn stream(ctx: C, req: Req) -> ApiResult<Response<Body>> {
             let _ = tokio::io::copy(&mut e, &mut sink).await;
         });
     }
-    // the child is killed when the response body (and with it this guard) is dropped
-    struct Kill(tokio::process::Child);
+    // the child is killed and its slot freed when the response body (and this guard) is dropped
+    struct Kill(tokio::process::Child, #[allow(dead_code)] tokio::sync::SemaphorePermit<'static>);
     impl Drop for Kill {
         fn drop(&mut self) {
             let _ = self.0.start_kill();
         }
     }
-    let guard = Kill(child);
+    let guard = Kill(child, permit);
     let s = tokio_util::io::ReaderStream::new(stdout);
     let s = futures_util::StreamExt::map(s, move |c| {
         let _ = &guard;
