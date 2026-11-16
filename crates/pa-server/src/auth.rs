@@ -179,7 +179,9 @@ pub fn routes(r: &mut Router) {
             );
             Ok(resp)
         }),
-    );
+    )
+    // passwords of any sensible length (thousands of characters); a bigger body is refused (413)
+    .body_limit = Some(64 * 1024);
     r.add(
         "POST",
         "/api/auth/logout",
