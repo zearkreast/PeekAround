@@ -148,19 +148,21 @@ export component Select inherits Rectangle {
         x: 0;
         y: root.height + 6px;
         width: Math.max(root.width, 180px);
+        height: list.height;
         close-policy: close-on-click-outside;
-        PopoverPanel {
+        list := PopoverPanel {
             y: 0;
             width: parent.width;
             for o in root.options: MenuItem {
                 text: o.label;
                 checked: o.value == root.value;
                 clicked => {
-                    popup.close();
+                    // close() last: it destroys this item, and nothing after it in the handler runs
                     if root.value != o.value {
                         root.value = o.value;
                         root.changed-value(o.value);
                     }
+                    popup.close();
                 }
             }
         }

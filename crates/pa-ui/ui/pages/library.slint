@@ -510,28 +510,29 @@ export component LibraryPage inherits Rectangle {
         x: root.lmenu-x - 240px;
         y: root.lmenu-y + 6px;
         width: 240px;
+        height: lib-menu-panel.height;
         close-policy: close-on-click-outside;
-        PopoverPanel {
+        lib-menu-panel := PopoverPanel {
             width: parent.width;
             MenuItem {
                 text: I18n.t("lib2.edit", I18n.rev);
                 icon: PIcons.pencil;
                 has-icon: true;
-                clicked => { lib-menu.close(); LibState.edit(); }
+                clicked => { LibState.edit(); lib-menu.close(); }
             }
             MenuItem {
                 text: I18n.t("lib2.exclusions", I18n.rev);
                 icon: PIcons.list-filter;
                 has-icon: true;
                 hint: LibState.exclusions > 0 ? I18n.t1("lib2.excluded", "n", LibState.exclusions, I18n.rev) : "";
-                clicked => { lib-menu.close(); LibState.exclusions-dialog(); }
+                clicked => { LibState.exclusions-dialog(); lib-menu.close(); }
             }
             if LibState.cover-picked: MenuSep { }
             if LibState.cover-picked: MenuItem {
                 text: I18n.t("lib2.resetCover", I18n.rev);
                 icon: PIcons.image-off;
                 has-icon: true;
-                clicked => { lib-menu.close(); LibState.reset-cover(); }
+                clicked => { LibState.reset-cover(); lib-menu.close(); }
             }
         }
     }
@@ -540,12 +541,13 @@ export component LibraryPage inherits Rectangle {
         x: root.menu-x - 220px;
         y: root.menu-y + 4px;
         width: 220px;
+        height: sort-menu-panel.height;
         close-policy: close-on-click-outside;
-        PopoverPanel {
+        sort-menu-panel := PopoverPanel {
             width: parent.width;
-            MenuItem { text: I18n.t("lib2.folders.byName", I18n.rev); icon: PIcons.arrow-down-wide-narrow; has-icon: true; checked: LibState.folder-sort == "name"; clicked => { sort-menu.close(); LibState.set-folder-sort("name"); } }
-            MenuItem { text: I18n.t("lib2.folders.byDate", I18n.rev); icon: PIcons.calendar-range; has-icon: true; checked: LibState.folder-sort == "date"; clicked => { sort-menu.close(); LibState.set-folder-sort("date"); } }
-            MenuItem { text: I18n.t("lib2.folders.byCount", I18n.rev); icon: PIcons.list-filter; has-icon: true; checked: LibState.folder-sort == "count"; clicked => { sort-menu.close(); LibState.set-folder-sort("count"); } }
+            MenuItem { text: I18n.t("lib2.folders.byName", I18n.rev); icon: PIcons.arrow-down-wide-narrow; has-icon: true; checked: LibState.folder-sort == "name"; clicked => { LibState.set-folder-sort("name"); sort-menu.close(); } }
+            MenuItem { text: I18n.t("lib2.folders.byDate", I18n.rev); icon: PIcons.calendar-range; has-icon: true; checked: LibState.folder-sort == "date"; clicked => { LibState.set-folder-sort("date"); sort-menu.close(); } }
+            MenuItem { text: I18n.t("lib2.folders.byCount", I18n.rev); icon: PIcons.list-filter; has-icon: true; checked: LibState.folder-sort == "count"; clicked => { LibState.set-folder-sort("count"); sort-menu.close(); } }
         }
     }
 
@@ -553,19 +555,20 @@ export component LibraryPage inherits Rectangle {
         x: Math.min(root.menu-x, root.width - 250px);
         y: Math.min(root.menu-y, root.height - 280px);
         width: 240px;
+        height: folder-menu-panel.height;
         close-policy: close-on-click-outside;
-        PopoverPanel {
+        folder-menu-panel := PopoverPanel {
             width: parent.width;
-            MenuItem { text: I18n.t("gallery.slideshowHere", I18n.rev); icon: PIcons.presentation; has-icon: true; clicked => { folder-menu.close(); LibState.folder-action("slideshow", root.menu-dir); } }
-            MenuItem { text: I18n.t("gallery.downloadFolder", I18n.rev); icon: PIcons.download; has-icon: true; clicked => { folder-menu.close(); LibState.folder-action("download", root.menu-dir); } }
+            MenuItem { text: I18n.t("gallery.slideshowHere", I18n.rev); icon: PIcons.presentation; has-icon: true; clicked => { LibState.folder-action("slideshow", root.menu-dir); folder-menu.close(); } }
+            MenuItem { text: I18n.t("gallery.downloadFolder", I18n.rev); icon: PIcons.download; has-icon: true; clicked => { LibState.folder-action("download", root.menu-dir); folder-menu.close(); } }
             if LibState.device && LibState.writable && LibState.device-online: MenuItem {
                 text: I18n.t("devices.copyToPc", I18n.rev); icon: PIcons.hard-drive-download; has-icon: true;
-                clicked => { folder-menu.close(); LibState.folder-action("copy-to-pc", root.menu-dir); }
+                clicked => { LibState.folder-action("copy-to-pc", root.menu-dir); folder-menu.close(); }
             }
             if LibState.writable && !LibState.device: MenuSep { }
-            if LibState.writable && !LibState.device: MenuItem { text: I18n.t("common.rename", I18n.rev); icon: PIcons.pencil; has-icon: true; clicked => { folder-menu.close(); LibState.folder-action("rename", root.menu-dir); } }
-            if LibState.writable && !LibState.device: MenuItem { text: I18n.t("sel.move", I18n.rev); icon: PIcons.folder-input; has-icon: true; clicked => { folder-menu.close(); LibState.folder-action("move", root.menu-dir); } }
-            if LibState.writable && !LibState.device: MenuItem { text: I18n.t("common.delete", I18n.rev); icon: PIcons.trash-2; has-icon: true; danger: true; clicked => { folder-menu.close(); LibState.folder-action("delete", root.menu-dir); } }
+            if LibState.writable && !LibState.device: MenuItem { text: I18n.t("common.rename", I18n.rev); icon: PIcons.pencil; has-icon: true; clicked => { LibState.folder-action("rename", root.menu-dir); folder-menu.close(); } }
+            if LibState.writable && !LibState.device: MenuItem { text: I18n.t("sel.move", I18n.rev); icon: PIcons.folder-input; has-icon: true; clicked => { LibState.folder-action("move", root.menu-dir); folder-menu.close(); } }
+            if LibState.writable && !LibState.device: MenuItem { text: I18n.t("common.delete", I18n.rev); icon: PIcons.trash-2; has-icon: true; danger: true; clicked => { LibState.folder-action("delete", root.menu-dir); folder-menu.close(); } }
         }
     }
 }

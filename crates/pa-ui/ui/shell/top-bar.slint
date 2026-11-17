@@ -185,8 +185,9 @@ export component TopBar inherits Rectangle {
         x: root.width - 288px - 16px;
         y: root.height - 4px;
         width: 288px;
+        height: view-popup-panel.height;
         close-policy: close-on-click-outside;
-        PopoverPanel {
+        view-popup-panel := PopoverPanel {
             y: 0;
             width: parent.width;
             if Chrome.view-kind: MenuLabel { text: I18n.t("gallery.filter", I18n.rev).to-uppercase(); }
@@ -284,8 +285,9 @@ export component TopBar inherits Rectangle {
         x: root.width - 320px - 16px;
         y: root.height - 4px;
         width: 320px;
+        height: jobs-popup-panel.height;
         close-policy: close-on-click-outside;
-        PopoverPanel {
+        jobs-popup-panel := PopoverPanel {
             y: 0;
             width: parent.width;
             Flickable {
@@ -301,15 +303,16 @@ export component TopBar inherits Rectangle {
         x: root.width - 220px - 16px;
         y: root.height - 4px;
         width: 220px;
+        height: add-popup-panel.height;
         close-policy: close-on-click-outside;
-        PopoverPanel {
+        add-popup-panel := PopoverPanel {
             y: 0;
             width: parent.width;
-            MenuItem { text: I18n.t("gallery.upload", I18n.rev); icon: Icons.upload; has-icon: true; clicked => { add-popup.close(); Chrome.add("upload"); } }
-            MenuItem { text: I18n.t("gallery.uploadFolder", I18n.rev); icon: Icons.folder-up; has-icon: true; clicked => { add-popup.close(); Chrome.add("upload-folder"); } }
-            MenuItem { text: I18n.t("remote.addFromLink", I18n.rev); icon: PIcons.cloud; has-icon: true; clicked => { add-popup.close(); Chrome.add("mega"); } }
+            MenuItem { text: I18n.t("gallery.upload", I18n.rev); icon: Icons.upload; has-icon: true; clicked => { Chrome.add("upload"); add-popup.close(); } }
+            MenuItem { text: I18n.t("gallery.uploadFolder", I18n.rev); icon: Icons.folder-up; has-icon: true; clicked => { Chrome.add("upload-folder"); add-popup.close(); } }
+            MenuItem { text: I18n.t("remote.addFromLink", I18n.rev); icon: PIcons.cloud; has-icon: true; clicked => { Chrome.add("mega"); add-popup.close(); } }
             MenuSep { }
-            MenuItem { text: I18n.t("gallery.newFolder", I18n.rev); icon: Icons.folder-plus; has-icon: true; clicked => { add-popup.close(); Chrome.add("new-folder"); } }
+            MenuItem { text: I18n.t("gallery.newFolder", I18n.rev); icon: Icons.folder-plus; has-icon: true; clicked => { Chrome.add("new-folder"); add-popup.close(); } }
         }
     }
 }

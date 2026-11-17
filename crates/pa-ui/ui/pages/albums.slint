@@ -254,8 +254,9 @@ export component AlbumPage inherits Rectangle {
         x: root.menu-x - 240px;
         y: root.menu-y + 6px;
         width: 240px;
+        height: menu-panel.height;
         close-policy: close-on-click-outside;
-        PopoverPanel {
+        menu-panel := PopoverPanel {
             width: parent.width;
             MenuLabel { text: I18n.t("album.order", I18n.rev).to-uppercase(); }
             MenuItem {
@@ -263,35 +264,35 @@ export component AlbumPage inherits Rectangle {
                 icon: PIcons.arrow-down-wide-narrow;
                 has-icon: true;
                 checked: AlbumState.order == "desc";
-                clicked => { menu.close(); AlbumState.set-order("desc"); }
+                clicked => { AlbumState.set-order("desc"); menu.close(); }
             }
             MenuItem {
                 text: I18n.t("album.order.asc", I18n.rev);
                 icon: PIcons.arrow-up-narrow-wide;
                 has-icon: true;
                 checked: AlbumState.order == "asc";
-                clicked => { menu.close(); AlbumState.set-order("asc"); }
+                clicked => { AlbumState.set-order("asc"); menu.close(); }
             }
             MenuItem {
                 text: I18n.t("album.order.custom", I18n.rev);
                 icon: PIcons.grip-vertical;
                 has-icon: true;
                 checked: AlbumState.order == "custom";
-                clicked => { menu.close(); AlbumState.set-order("custom"); }
+                clicked => { AlbumState.set-order("custom"); menu.close(); }
             }
             MenuSep { }
             if AlbumState.cover-picked: MenuItem {
                 text: I18n.t("lib2.resetCover", I18n.rev);
                 icon: PIcons.image-off;
                 has-icon: true;
-                clicked => { menu.close(); AlbumState.reset-cover(); }
+                clicked => { AlbumState.reset-cover(); menu.close(); }
             }
             MenuItem {
                 text: I18n.t("album.delete", I18n.rev);
                 icon: PIcons.trash-2;
                 has-icon: true;
                 danger: true;
-                clicked => { menu.close(); AlbumState.delete(); }
+                clicked => { AlbumState.delete(); menu.close(); }
             }
         }
     }
