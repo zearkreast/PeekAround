@@ -47,6 +47,8 @@ pub mod map_math;
 
 mod api;
 mod app;
+#[cfg(test)]
+mod ui_lint;
 mod login;
 mod pages;
 mod router;
